@@ -14,24 +14,26 @@ import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
 import type { DraftStore } from "../integrations/inkbox/draft-store";
 import type { BrowserClient } from "../integrations/browser/client";
 import { FakeBrowserClient } from "../integrations/browser/fake-client";
-import { createBrowserClientFromSession } from "../integrations/browser/real-client";
+import { createBrowserClientFromSession, createPublicBrowserClient } from "../integrations/browser/real-client";
 import type { FormFillingClient } from "../integrations/browser/form-client";
 import { RealFormFillingClient } from "../integrations/browser/real-form-client";
 import { createBrowserListFormFieldsTool } from "../tools/browser-list-form-fields";
 import { createBrowserFillFormPreviewTool } from "../tools/browser-fill-form-preview";
 import { createBrowserSubmitFormTool } from "../tools/browser-submit-form";
+import { createReadJobBoardPageTool } from "../tools/read-job-board-page";
 import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
 import { dispatcherPack } from "../packs/dispatcher/pack";
 import { careerAdvisorPack } from "../packs/career-advisor/pack";
 import { aiResearchPack } from "../packs/ai-research/pack";
+import { jobSearchPack } from "../packs/job-search/pack";
 
 /**
  * Packs enabled by default. A future CLI flag or config file can change
  * which Packs load without touching the engine — this list is the only
  * place that currently decides.
  */
-const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack];
+const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack];
 
 /** Agents the Dispatcher should never route a goal to: itself, and utility agents with no real conversational job (ADR 0008). */
 const NOT_DISPATCHABLE = new Set(["dispatcher", "inkbox-send", "demo"]);
@@ -75,6 +77,7 @@ export function loadDefaultConfig(
   inkboxClient: InkboxClient = createDefaultInkboxClient(),
   browserClient: BrowserClient = createDefaultBrowserClient("sermo"),
   formFillingClient: FormFillingClient = new RealFormFillingClient(),
+  jobBoardClient: BrowserClient = createPublicBrowserClient("job-boards"),
 ): Registry {
   const registry = new Registry();
 
@@ -90,6 +93,7 @@ export function loadDefaultConfig(
   registry.registerTool(createBrowserListFormFieldsTool(formFillingClient));
   registry.registerTool(createBrowserFillFormPreviewTool(formFillingClient));
   registry.registerTool(createBrowserSubmitFormTool(formFillingClient));
+  registry.registerTool(createReadJobBoardPageTool(jobBoardClient));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);

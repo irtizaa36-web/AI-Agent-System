@@ -117,13 +117,13 @@ test("runCli status reports agent/provider/tool/pack counts and names", async ()
 
   assert.equal(code, 0);
   const output = stdout.join("\n");
-  assert.match(output, /Agents:\s+7 \(default, demo, inkbox-send, personal-admin, dispatcher, career-advisor, case-report-writer\)/);
+  assert.match(output, /Agents:\s+8 \(default, demo, inkbox-send, personal-admin, dispatcher, career-advisor, case-report-writer, job-search-agent\)/);
   assert.match(output, /Providers:\s+2 \(claude, fake\)/);
   assert.match(
     output,
-    /Tools:\s+9 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email, read-web-page, browser-list-form-fields, browser-fill-form-preview, browser-submit-form\)/,
+    /Tools:\s+10 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email, read-web-page, browser-list-form-fields, browser-fill-form-preview, browser-submit-form, read-job-board-page\)/,
   );
-  assert.match(output, /Packs:\s+5 \(core-demo, personal-assistant, dispatcher, career-advisor, ai-research\)/);
+  assert.match(output, /Packs:\s+6 \(core-demo, personal-assistant, dispatcher, career-advisor, ai-research, job-search\)/);
   assert.match(output, /Tests:\s+\S/);
   assert.match(output, /Git:\s+\S/);
   assert.match(output, /Capabilities currently available:/);

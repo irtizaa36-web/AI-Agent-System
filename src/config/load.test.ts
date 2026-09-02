@@ -16,13 +16,14 @@ test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' 
   assert.equal(registry.getTool("browser-list-form-fields").name, "browser-list-form-fields");
   assert.equal(registry.getTool("browser-fill-form-preview").requiresApproval, false);
   assert.equal(registry.getTool("browser-submit-form").requiresApproval, true);
+  assert.equal(registry.getTool("read-job-board-page").name, "read-job-board-page");
 
   const names = registry
     .listAgents()
     .map((agent) => agent.name)
     .sort();
-  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "demo", "dispatcher", "inkbox-send", "personal-admin"]);
-  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant", "dispatcher", "career-advisor", "ai-research"]);
+  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "demo", "dispatcher", "inkbox-send", "job-search-agent", "personal-admin"]);
+  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant", "dispatcher", "career-advisor", "ai-research", "job-search"]);
 });
 
 test("dispatchableAgents excludes the dispatcher itself and utility/demo agents, keeping only agents with a description", () => {
@@ -30,5 +31,5 @@ test("dispatchableAgents excludes the dispatcher itself and utility/demo agents,
   const names = dispatchableAgents(registry)
     .map((a) => a.name)
     .sort();
-  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "personal-admin"]);
+  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "job-search-agent", "personal-admin"]);
 });
