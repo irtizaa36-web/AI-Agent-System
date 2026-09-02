@@ -1,5 +1,7 @@
 import { parseArgs } from "node:util";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { createTask } from "../core/task";
 import { runToCompletion } from "../core/orchestrator";
 import { loadDefaultConfig } from "../config/load";
@@ -12,6 +14,8 @@ export interface CliDeps {
   readonly store: RunStore;
   readonly stdout: (line: string) => void;
   readonly stderr: (line: string) => void;
+  /** Working directory `status` checks Git/build state against. Defaults to process.cwd() in `main`. */
+  readonly cwd: string;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -20,11 +24,68 @@ function printUsage(stdout: (line: string) => void): void {
       "Usage:",
       '  orchestrator run --task "<instructions>" [--agent <name>]   Run a task through an agent',
       "  orchestrator list-agents                                    List configured agents",
+      "  orchestrator status                                         Show a snapshot of the project",
       "  orchestrator help                                           Show this message",
       "",
       'Try it with no API key: orchestrator run --task "say hello" --agent demo',
     ].join("\n"),
   );
+}
+
+/** Pulls the pass/fail summary out of `node --test`'s own report. Pure — no I/O — so it's testable without a real test run. */
+export function parseTestSummary(output: string): string | undefined {
+  const total = output.match(/^ℹ tests (\d+)$/m)?.[1];
+  const pass = output.match(/^ℹ pass (\d+)$/m)?.[1];
+  const fail = output.match(/^ℹ fail (\d+)$/m)?.[1];
+  if (!total || !pass || !fail) return undefined;
+  return fail === "0" ? `${pass}/${total} passing` : `${pass}/${total} passing, ${fail} failing`;
+}
+
+/** Best-effort: actually runs the compiled test suite if it's been built, rather than guessing. */
+export function getTestStatus(cwd: string): string {
+  const distDir = join(cwd, "dist");
+  if (!existsSync(distDir)) {
+    return "not built yet (run `npm run build` or `npm test`)";
+  }
+
+  const result = spawnSync(process.execPath, ["--test", distDir], { cwd, encoding: "utf-8" });
+  const summary = parseTestSummary(`${result.stdout ?? ""}\n${result.stderr ?? ""}`);
+  return summary ?? "unable to determine (run `npm test` manually)";
+}
+
+/** Best-effort: reports whether the Git working tree has uncommitted changes. */
+export function getGitStatus(cwd: string): string {
+  const result = spawnSync("git", ["status", "--porcelain"], { cwd, encoding: "utf-8" });
+  if (result.status !== 0) {
+    return "unknown (not a Git repository, or git is unavailable)";
+  }
+  const changedFiles = result.stdout.split("\n").filter((line) => line.trim().length > 0);
+  return changedFiles.length === 0 ? "clean" : `${changedFiles.length} file(s) with uncommitted changes`;
+}
+
+function statusCommand(deps: CliDeps): number {
+  const agents = deps.registry.listAgents();
+  const providers = deps.registry.listProviders();
+  const tools = deps.registry.listTools();
+  const packs = deps.registry.listPacks();
+
+  deps.stdout("AI-Agent-System status");
+  deps.stdout("-----------------------");
+  deps.stdout(`Agents:    ${agents.length} (${agents.map((a) => a.name).join(", ") || "none"})`);
+  deps.stdout(`Providers: ${providers.length} (${providers.map((p) => p.name).join(", ") || "none"})`);
+  deps.stdout(`Tools:     ${tools.length} (${tools.map((t) => t.name).join(", ") || "none"})`);
+  deps.stdout(`Packs:     ${packs.length} (${packs.join(", ") || "none"})`);
+  deps.stdout(`Tests:     ${getTestStatus(deps.cwd)}`);
+  deps.stdout(`Git:       ${getGitStatus(deps.cwd)}`);
+  deps.stdout("");
+  deps.stdout("Capabilities currently available:");
+  for (const agent of agents) {
+    deps.stdout(
+      `  - Run "${agent.name}" (provider: ${agent.providerName}, tools: ${agent.toolNames.join(", ") || "none"})`,
+    );
+  }
+
+  return 0;
 }
 
 async function runTaskCommand(args: readonly string[], deps: CliDeps): Promise<number> {
@@ -103,17 +164,23 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return runTaskCommand(rest, deps);
   }
 
+  if (command === "status") {
+    return statusCommand(deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
 
 async function main(): Promise<void> {
   const registry = loadDefaultConfig();
-  const store = new JsonFileRunStore(join(process.cwd(), ".orchestrator", "runs"));
+  const cwd = process.cwd();
+  const store = new JsonFileRunStore(join(cwd, ".orchestrator", "runs"));
 
   const exitCode = await runCli(process.argv.slice(2), {
     registry,
     store,
+    cwd,
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });

@@ -28,6 +28,7 @@ export function loadDefaultConfig(): Registry {
   registry.registerTool(readFileTool);
 
   for (const pack of ENABLED_PACKS) {
+    registry.registerPack(pack.name);
     pack.register(registry);
   }
 

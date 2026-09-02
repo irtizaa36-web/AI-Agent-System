@@ -20,6 +20,7 @@ export class Registry {
   private readonly agents = new Map<string, AgentDefinition>();
   private readonly providers = new Map<string, ModelProvider>();
   private readonly tools = new Map<string, Tool>();
+  private readonly packs = new Set<string>();
 
   registerAgent(agent: AgentDefinition): void {
     this.agents.set(agent.name, agent);
@@ -41,12 +42,29 @@ export class Registry {
     return lookup(this.providers, name, "provider");
   }
 
+  listProviders(): readonly ModelProvider[] {
+    return [...this.providers.values()];
+  }
+
   registerTool(tool: Tool): void {
     this.tools.set(tool.name, tool);
   }
 
   getTool(name: string): Tool {
     return lookup(this.tools, name, "tool");
+  }
+
+  listTools(): readonly Tool[] {
+    return [...this.tools.values()];
+  }
+
+  /** Records that a Pack has loaded, purely for reporting (e.g. the CLI's `status` command). */
+  registerPack(name: string): void {
+    this.packs.add(name);
+  }
+
+  listPacks(): readonly string[] {
+    return [...this.packs];
   }
 
   /** Builds the Tool lookup map an Agent's Run needs, from its declared tool names. */

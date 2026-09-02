@@ -47,3 +47,22 @@ test("Registry.getProvider resolves a registered provider by its own name", () =
 
   assert.equal(registry.getProvider(provider.name), provider);
 });
+
+test("Registry.listProviders and listTools report everything registered", () => {
+  const registry = new Registry();
+  registry.registerProvider(createEchoProvider());
+  registry.registerTool(readFileTool);
+
+  assert.equal(registry.listProviders().length, 1);
+  assert.equal(registry.listTools().length, 1);
+  assert.equal(registry.listTools()[0], readFileTool);
+});
+
+test("Registry.registerPack and listPacks track loaded packs without duplicates", () => {
+  const registry = new Registry();
+  registry.registerPack("core-demo");
+  registry.registerPack("core-demo");
+  registry.registerPack("ai-research");
+
+  assert.deepEqual(registry.listPacks(), ["core-demo", "ai-research"]);
+});

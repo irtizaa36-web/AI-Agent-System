@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runCli } from "./index";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runCli, parseTestSummary, getGitStatus, getTestStatus } from "./index";
 import { loadDefaultConfig } from "../config/load";
 import { InMemoryRunStore } from "../store/run-store";
 import type { CliDeps } from "./index";
@@ -12,6 +16,7 @@ function captureOutput(): { stdout: string[]; stderr: string[]; deps: Omit<CliDe
     stdout,
     stderr,
     deps: {
+      cwd: process.cwd(),
       stdout: (line) => stdout.push(line),
       stderr: (line) => stderr.push(line),
     },
@@ -95,5 +100,65 @@ test("runCli run --agent default fails clearly when no API key is configured", a
     assert.match(stderr.join("\n"), /ANTHROPIC_API_KEY is not set/);
   } finally {
     if (originalKey !== undefined) process.env["ANTHROPIC_API_KEY"] = originalKey;
+  }
+});
+
+test("runCli status reports agent/provider/tool/pack counts and names", async () => {
+  const { stdout, deps } = captureOutput();
+  const code = await runCli(["status"], { ...deps, registry: loadDefaultConfig(), store: new InMemoryRunStore() });
+
+  assert.equal(code, 0);
+  const output = stdout.join("\n");
+  assert.match(output, /Agents:\s+2 \(default, demo\)/);
+  assert.match(output, /Providers:\s+2 \(claude, fake\)/);
+  assert.match(output, /Tools:\s+1 \(read-file\)/);
+  assert.match(output, /Packs:\s+1 \(core-demo\)/);
+  assert.match(output, /Tests:\s+\S/);
+  assert.match(output, /Git:\s+\S/);
+  assert.match(output, /Capabilities currently available:/);
+  assert.match(output, /Run "demo" \(provider: fake, tools: none\)/);
+});
+
+test("parseTestSummary extracts pass/fail counts from node's test runner summary", () => {
+  const output = "some lines\nℹ tests 33\nℹ suites 0\nℹ pass 33\nℹ fail 0\nℹ cancelled 0\n";
+  assert.equal(parseTestSummary(output), "33/33 passing");
+});
+
+test("parseTestSummary reports failures when present", () => {
+  assert.equal(parseTestSummary("ℹ tests 5\nℹ pass 3\nℹ fail 2\n"), "3/5 passing, 2 failing");
+});
+
+test("parseTestSummary returns undefined for output it doesn't recognize", () => {
+  assert.equal(parseTestSummary("garbage"), undefined);
+});
+
+test("getGitStatus reports clean, then reports uncommitted changes, for a real temp repo", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "orchestrator-cli-git-"));
+  try {
+    execFileSync("git", ["init", "--quiet"], { cwd: dir });
+    assert.equal(getGitStatus(dir), "clean");
+
+    await writeFile(join(dir, "new-file.txt"), "hello", "utf-8");
+    assert.match(getGitStatus(dir), /1 file\(s\) with uncommitted changes/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("getGitStatus reports unknown for a directory that isn't a Git repository", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "orchestrator-cli-nogit-"));
+  try {
+    assert.match(getGitStatus(dir), /unknown/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("getTestStatus reports not-built when the target directory has no dist/", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "orchestrator-cli-nodist-"));
+  try {
+    assert.match(getTestStatus(dir), /not built yet/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });
