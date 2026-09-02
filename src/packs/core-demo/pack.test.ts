@@ -12,7 +12,8 @@ test("coreDemoPack registers the default and demo agents", () => {
     .listAgents()
     .map((agent) => agent.name)
     .sort();
-  assert.deepEqual(names, ["default", "demo"]);
+  assert.deepEqual(names, ["default", "demo", "inkbox-send"]);
   assert.equal(registry.getAgent("default").providerName, "claude");
   assert.equal(registry.getAgent("demo").providerName, "fake");
+  assert.deepEqual(registry.getAgent("inkbox-send").toolNames, ["send-email"]);
 });

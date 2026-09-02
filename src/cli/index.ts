@@ -4,10 +4,14 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createTask } from "../core/task";
 import { runToCompletion } from "../core/orchestrator";
-import { loadDefaultConfig } from "../config/load";
+import { loadDefaultConfig, createDefaultInkboxClient } from "../config/load";
 import { JsonFileRunStore } from "../store/run-store";
+import { InMemoryForwardingLog } from "../integrations/inkbox/forwarding-log";
+import { runInkboxCommand } from "./inkbox-commands";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
+import type { InkboxClient } from "../integrations/inkbox/client";
+import type { ForwardingLog } from "../integrations/inkbox/forwarding-log";
 
 export interface CliDeps {
   readonly registry: Registry;
@@ -16,6 +20,10 @@ export interface CliDeps {
   readonly stderr: (line: string) => void;
   /** Working directory `status` checks Git/build state against. Defaults to process.cwd() in `main`. */
   readonly cwd: string;
+  /** The Inkbox client `inkbox` subcommands operate on directly — the same instance wired into the Registry's tools. */
+  readonly inkboxClient: InkboxClient;
+  /** Tracks which inbound messages have already been forwarded to the owner, so `inkbox check-replies` never double-forwards. */
+  readonly forwardingLog: ForwardingLog;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -25,7 +33,10 @@ function printUsage(stdout: (line: string) => void): void {
       '  orchestrator run --task "<instructions>" [--agent <name>]   Run a task through an agent',
       "  orchestrator list-agents                                    List configured agents",
       "  orchestrator status                                         Show a snapshot of the project",
+      "  orchestrator inkbox <subcommand>                            Draft-review-approve email flow (see below)",
       "  orchestrator help                                           Show this message",
+      "",
+      "inkbox subcommands: draft, review-draft, prepare-send, approve-send, check-replies, review-offer",
       "",
       'Try it with no API key: orchestrator run --task "say hello" --agent demo',
     ].join("\n"),
@@ -183,12 +194,17 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return statusCommand(deps);
   }
 
+  if (command === "inkbox") {
+    return runInkboxCommand(rest, deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
 
 async function main(): Promise<void> {
-  const registry = loadDefaultConfig();
+  const inkboxClient = createDefaultInkboxClient();
+  const registry = loadDefaultConfig(inkboxClient);
   const cwd = process.cwd();
   const store = new JsonFileRunStore(join(cwd, ".orchestrator", "runs"));
 
@@ -196,6 +212,8 @@ async function main(): Promise<void> {
     registry,
     store,
     cwd,
+    inkboxClient,
+    forwardingLog: new InMemoryForwardingLog(),
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });

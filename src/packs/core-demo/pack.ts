@@ -24,5 +24,17 @@ export const coreDemoPack: Pack = {
       systemPrompt: "You are a deterministic demo agent that echoes what it's told.",
       toolNames: [],
     });
+
+    // A utility agent, not a conversational one: it exists only so
+    // Runs driven directly by the CLI's `inkbox` commands (prepare-send,
+    // resume) have a real, registered AgentDefinition to look up
+    // toolNames/providerName from. Nothing calls its systemPrompt.
+    registry.registerAgent({
+      name: "inkbox-send",
+      providerName: "fake",
+      model: "n/a",
+      systemPrompt: "",
+      toolNames: ["send-email"],
+    });
   },
 };

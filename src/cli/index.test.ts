@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { runCli, parseTestSummary, getGitStatus, getTestStatus } from "./index";
 import { loadDefaultConfig } from "../config/load";
 import { InMemoryRunStore } from "../store/run-store";
+import { FakeInkboxClient } from "../integrations/inkbox/fake-client";
+import { InMemoryForwardingLog } from "../integrations/inkbox/forwarding-log";
 import type { CliDeps } from "./index";
 
 function captureOutput(): { stdout: string[]; stderr: string[]; deps: Omit<CliDeps, "registry" | "store"> } {
@@ -17,6 +19,8 @@ function captureOutput(): { stdout: string[]; stderr: string[]; deps: Omit<CliDe
     stderr,
     deps: {
       cwd: process.cwd(),
+      inkboxClient: new FakeInkboxClient(),
+      forwardingLog: new InMemoryForwardingLog(),
       stdout: (line) => stdout.push(line),
       stderr: (line) => stderr.push(line),
     },
@@ -109,9 +113,9 @@ test("runCli status reports agent/provider/tool/pack counts and names", async ()
 
   assert.equal(code, 0);
   const output = stdout.join("\n");
-  assert.match(output, /Agents:\s+3 \(default, demo, personal-admin\)/);
+  assert.match(output, /Agents:\s+4 \(default, demo, inkbox-send, personal-admin\)/);
   assert.match(output, /Providers:\s+2 \(claude, fake\)/);
-  assert.match(output, /Tools:\s+1 \(read-file\)/);
+  assert.match(output, /Tools:\s+5 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email\)/);
   assert.match(output, /Packs:\s+2 \(core-demo, personal-assistant\)/);
   assert.match(output, /Tests:\s+\S/);
   assert.match(output, /Git:\s+\S/);

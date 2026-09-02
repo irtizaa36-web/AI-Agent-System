@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Task } from "./task";
 import type { AgentDefinition } from "./agent";
 import { createSession, appendMessage } from "./session";
-import type { Run, Step } from "./run";
+import type { PendingAction, Run, Step } from "./run";
 import type { ModelProvider } from "../providers/provider";
 import type { Tool } from "../tools/tool";
 
@@ -87,6 +87,22 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
     };
   }
 
+  // A Tool marked requiresApproval never auto-executes (ADR 0004). If any
+  // requested call needs approval, the whole step pauses on the first one —
+  // the assistant's proposal is recorded, but nothing runs, until a human
+  // calls approveAndExecute with the exact same input.
+  const gatedCall = response.toolCalls.find((call) => deps.tools.get(call.toolName)?.requiresApproval);
+  if (gatedCall) {
+    const pendingAction: PendingAction = {
+      toolName: gatedCall.toolName,
+      toolCallId: gatedCall.id,
+      input: (gatedCall.input ?? {}) as Record<string, unknown>,
+      summary: `Agent "${agent.name}" wants to call "${gatedCall.toolName}"`,
+      requestedAt: new Date().toISOString(),
+    };
+    return { ...run, session, steps, status: "awaiting_approval", pendingAction };
+  }
+
   for (const call of response.toolCalls) {
     const tool = deps.tools.get(call.toolName);
     const content = tool
@@ -98,7 +114,7 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
   return { ...run, session, steps, status: "running" };
 }
 
-/** Starts a Run and advances it until it succeeds or fails. */
+/** Starts a Run and advances it until it succeeds, fails, or pauses. */
 export async function runToCompletion(
   task: Task,
   agent: AgentDefinition,
@@ -109,4 +125,86 @@ export async function runToCompletion(
     run = await advance(run, agent, deps);
   }
   return run;
+}
+
+/**
+ * Approves and executes a Run's pending gated action. Rejects — without
+ * touching the Run — unless `approvalInput` is deeply, exactly equal to
+ * `run.pendingAction.input`: a changed recipient, subject, body, or
+ * revision means the approval no longer matches what's pending, and must
+ * be re-reviewed rather than silently accepted.
+ */
+export async function approveAndExecute(
+  run: Run,
+  deps: Pick<RunDependencies, "tools">,
+  approvalInput: Record<string, unknown>,
+): Promise<Run> {
+  if (run.status !== "awaiting_approval" || !run.pendingAction) {
+    throw new Error(`Run "${run.id}" is not awaiting approval (status: ${run.status})`);
+  }
+  if (!deepEqual(run.pendingAction.input, approvalInput)) {
+    throw new Error(
+      `Approval does not match the pending action for run "${run.id}". The draft or recipients may have ` +
+        "changed since this was staged — review the current pending action and try again.",
+    );
+  }
+
+  const tool = deps.tools.get(run.pendingAction.toolName);
+  if (!tool) {
+    throw new Error(`Unknown tool "${run.pendingAction.toolName}" pending approval on run "${run.id}"`);
+  }
+
+  const content = String(await tool.execute(run.pendingAction.input));
+  const session = appendMessage(run.session, { role: "tool", content, toolCallId: run.pendingAction.toolCallId });
+  const threadId = extractThreadId(content);
+
+  return {
+    ...run,
+    session,
+    status: "waiting_for_response",
+    pendingAction: undefined,
+    ...(threadId ? { threadId } : {}),
+  };
+}
+
+/**
+ * Resumes a Run that was waiting for an external reply: appends the reply
+ * as a new message and continues the Step loop from there, same as
+ * runToCompletion does from the start.
+ */
+export async function resumeWithReply(run: Run, agent: AgentDefinition, deps: RunDependencies, replyContent: string): Promise<Run> {
+  if (run.status !== "waiting_for_response") {
+    throw new Error(`Run "${run.id}" is not waiting for a response (status: ${run.status})`);
+  }
+
+  let resumed: Run = {
+    ...run,
+    status: "running",
+    session: appendMessage(run.session, { role: "user", content: `External reply received:\n${replyContent}` }),
+  };
+  while (resumed.status === "running") {
+    resumed = await advance(resumed, agent, deps);
+  }
+  return resumed;
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(sortKeysDeep(a)) === JSON.stringify(sortKeysDeep(b));
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, v]) => [key, sortKeysDeep(v)]),
+    );
+  }
+  return value;
+}
+
+/** Tool results that record a thread id (our Inkbox tools do) encode it as `threadId:<value>` on its own line. */
+function extractThreadId(toolResultContent: string): string | undefined {
+  return toolResultContent.match(/^threadId:(\S+)$/m)?.[1];
 }

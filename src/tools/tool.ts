@@ -6,6 +6,13 @@ export interface ToolSpec {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
+  /**
+   * True for a Tool whose effects are consequential and hard to reverse
+   * (ADR 0004). The Orchestrator never executes such a call itself — it
+   * pauses the Run in `awaiting_approval` and waits for a human to approve
+   * the exact input via `approveAndExecute`.
+   */
+  readonly requiresApproval?: boolean;
 }
 
 /**

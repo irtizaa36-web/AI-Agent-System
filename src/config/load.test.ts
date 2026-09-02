@@ -8,11 +8,15 @@ test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' 
   assert.equal(registry.getProvider("claude").name, "claude");
   assert.equal(registry.getProvider("fake").name, "fake");
   assert.equal(registry.getTool("read-file").name, "read-file");
+  assert.equal(registry.getTool("inkbox-search-mail").name, "inkbox-search-mail");
+  assert.equal(registry.getTool("inkbox-read-thread").name, "inkbox-read-thread");
+  assert.equal(registry.getTool("inkbox-save-draft").name, "inkbox-save-draft");
+  assert.equal(registry.getTool("send-email").requiresApproval, true);
 
   const names = registry
     .listAgents()
     .map((agent) => agent.name)
     .sort();
-  assert.deepEqual(names, ["default", "demo", "personal-admin"]);
+  assert.deepEqual(names, ["default", "demo", "inkbox-send", "personal-admin"]);
   assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant"]);
 });
