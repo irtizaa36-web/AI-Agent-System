@@ -6,13 +6,16 @@ import { createTask } from "../core/task";
 import { runToCompletion } from "../core/orchestrator";
 import { loadDefaultConfig, createDefaultInkboxClient } from "../config/load";
 import { JsonFileRunStore } from "../store/run-store";
+import { JsonFileWorkflowStore } from "../store/workflow-store";
 import { JsonFileForwardingLog } from "../integrations/inkbox/forwarding-log";
 import { JsonFileMessageEventLog } from "../integrations/inkbox/message-event-log";
 import { JsonFileDraftStore } from "../integrations/inkbox/draft-store";
 import { runInkboxCommand } from "./inkbox-commands";
 import { runBrowserCommand } from "./browser-commands";
+import { runDispatchCommand } from "./dispatch-commands";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
+import type { WorkflowStore } from "../store/workflow-store";
 import type { InkboxClient } from "../integrations/inkbox/client";
 import type { ForwardingLog } from "../integrations/inkbox/forwarding-log";
 import type { MessageEventLog } from "../integrations/inkbox/message-event-log";
@@ -20,6 +23,8 @@ import type { MessageEventLog } from "../integrations/inkbox/message-event-log";
 export interface CliDeps {
   readonly registry: Registry;
   readonly store: RunStore;
+  /** Persists Workflow records for `orchestrator dispatch` (ADR 0008) — separate from RunStore, since a Workflow chains multiple Runs together. */
+  readonly workflowStore: WorkflowStore;
   readonly stdout: (line: string) => void;
   readonly stderr: (line: string) => void;
   /** Working directory `status` checks Git/build state against. Defaults to process.cwd() in `main`. */
@@ -41,6 +46,8 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator status                                         Show a snapshot of the project",
       "  orchestrator inkbox <subcommand>                            Draft-review-approve email flow (see below)",
       "  orchestrator browser login <site> <url>                     One-time human login, saves an authenticated session",
+      '  orchestrator dispatch run --task "<goal>"                   State a goal in plain English; the Dispatcher plans and runs it',
+      "  orchestrator dispatch status|approve|resume <id>            Check on, approve, or resume a paused workflow",
       "  orchestrator help                                           Show this message",
       "",
       "inkbox subcommands: draft, review-draft, prepare-send, approve-send, check-replies, review-offer, " +
@@ -210,6 +217,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return runBrowserCommand(rest, deps);
   }
 
+  if (command === "dispatch") {
+    return runDispatchCommand(rest, deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
@@ -219,10 +230,12 @@ async function main(): Promise<void> {
   const inkboxClient = createDefaultInkboxClient(new JsonFileDraftStore(join(cwd, ".orchestrator", "inkbox-drafts")));
   const registry = loadDefaultConfig(inkboxClient);
   const store = new JsonFileRunStore(join(cwd, ".orchestrator", "runs"));
+  const workflowStore = new JsonFileWorkflowStore(join(cwd, ".orchestrator", "workflows"));
 
   const exitCode = await runCli(process.argv.slice(2), {
     registry,
     store,
+    workflowStore,
     cwd,
     inkboxClient,
     forwardingLog: new JsonFileForwardingLog(join(cwd, ".orchestrator", "inkbox-forwarding")),

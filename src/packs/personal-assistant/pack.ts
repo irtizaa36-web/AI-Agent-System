@@ -62,6 +62,8 @@ export const personalAssistantPack: Pack = {
       model: "claude-sonnet-5",
       systemPrompt: PERSONAL_ADMIN_SYSTEM_PROMPT,
       toolNames: ["read-file", "inkbox-search-mail", "inkbox-read-thread", "inkbox-save-draft", "send-email", "read-web-page"],
+      description:
+        "Handles real-world administrative and customer-service tasks: returns/refunds, restaurant reservations, drafting and sending email, and reviewing content on a logged-in web page (e.g. picking good items from a feed). Never submits or sends anything without human approval.",
     });
   },
 };

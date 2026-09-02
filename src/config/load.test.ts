@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadDefaultConfig } from "./load";
+import { loadDefaultConfig, dispatchableAgents } from "./load";
 
 test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' agents", () => {
   const registry = loadDefaultConfig();
@@ -18,6 +18,14 @@ test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' 
     .listAgents()
     .map((agent) => agent.name)
     .sort();
-  assert.deepEqual(names, ["default", "demo", "inkbox-send", "personal-admin"]);
-  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant"]);
+  assert.deepEqual(names, ["default", "demo", "dispatcher", "inkbox-send", "personal-admin"]);
+  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant", "dispatcher"]);
+});
+
+test("dispatchableAgents excludes the dispatcher itself and utility/demo agents, keeping only agents with a description", () => {
+  const registry = loadDefaultConfig();
+  const names = dispatchableAgents(registry)
+    .map((a) => a.name)
+    .sort();
+  assert.deepEqual(names, ["default", "personal-admin"]);
 });

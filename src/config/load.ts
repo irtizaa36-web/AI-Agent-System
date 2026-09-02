@@ -17,13 +17,17 @@ import { FakeBrowserClient } from "../integrations/browser/fake-client";
 import { createBrowserClientFromSession } from "../integrations/browser/real-client";
 import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
+import { dispatcherPack } from "../packs/dispatcher/pack";
 
 /**
  * Packs enabled by default. A future CLI flag or config file can change
  * which Packs load without touching the engine — this list is the only
  * place that currently decides.
  */
-const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack];
+const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack];
+
+/** Agents the Dispatcher should never route a goal to: itself, and utility agents with no real conversational job (ADR 0008). */
+const NOT_DISPATCHABLE = new Set(["dispatcher", "inkbox-send", "demo"]);
 
 /**
  * Picks the real Inkbox client when INKBOX_API_KEY and INKBOX_MAILBOX_ADDRESS
@@ -82,4 +86,18 @@ export function loadDefaultConfig(
   }
 
   return registry;
+}
+
+/**
+ * The agents the Dispatcher is allowed to route a goal to (ADR 0008):
+ * every registered agent with a description, except itself and utility
+ * agents with no real conversational job. An agent with no description is
+ * silently excluded rather than shown with an empty one — it wasn't
+ * written with dispatching in mind.
+ */
+export function dispatchableAgents(registry: Registry): readonly { readonly name: string; readonly description: string }[] {
+  return registry
+    .listAgents()
+    .filter((agent) => agent.description && !NOT_DISPATCHABLE.has(agent.name))
+    .map((agent) => ({ name: agent.name, description: agent.description as string }));
 }

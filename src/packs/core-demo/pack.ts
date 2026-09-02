@@ -15,6 +15,7 @@ export const coreDemoPack: Pack = {
       model: "claude-sonnet-5",
       systemPrompt: "You are a helpful, concise assistant.",
       toolNames: ["read-file"],
+      description: "A general-purpose assistant for simple questions or file reads that don't fit any other agent.",
     });
 
     registry.registerAgent({
@@ -23,6 +24,7 @@ export const coreDemoPack: Pack = {
       model: "fake-echo-1",
       systemPrompt: "You are a deterministic demo agent that echoes what it's told.",
       toolNames: [],
+      description: "A deterministic, no-cost demo agent that just echoes what it's told — for testing, not real tasks.",
     });
 
     // A utility agent, not a conversational one: it exists only so
