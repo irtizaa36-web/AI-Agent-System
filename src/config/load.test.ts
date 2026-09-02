@@ -12,6 +12,7 @@ test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' 
   assert.equal(registry.getTool("inkbox-read-thread").name, "inkbox-read-thread");
   assert.equal(registry.getTool("inkbox-save-draft").name, "inkbox-save-draft");
   assert.equal(registry.getTool("send-email").requiresApproval, true);
+  assert.equal(registry.getTool("read-web-page").name, "read-web-page");
 
   const names = registry
     .listAgents()

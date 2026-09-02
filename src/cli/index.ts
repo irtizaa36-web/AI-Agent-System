@@ -10,6 +10,7 @@ import { JsonFileForwardingLog } from "../integrations/inkbox/forwarding-log";
 import { JsonFileMessageEventLog } from "../integrations/inkbox/message-event-log";
 import { JsonFileDraftStore } from "../integrations/inkbox/draft-store";
 import { runInkboxCommand } from "./inkbox-commands";
+import { runBrowserCommand } from "./browser-commands";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { InkboxClient } from "../integrations/inkbox/client";
@@ -39,6 +40,7 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator list-agents                                    List configured agents",
       "  orchestrator status                                         Show a snapshot of the project",
       "  orchestrator inkbox <subcommand>                            Draft-review-approve email flow (see below)",
+      "  orchestrator browser login <site> <url>                     One-time human login, saves an authenticated session",
       "  orchestrator help                                           Show this message",
       "",
       "inkbox subcommands: draft, review-draft, prepare-send, approve-send, check-replies, review-offer, " +
@@ -202,6 +204,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
 
   if (command === "inkbox") {
     return runInkboxCommand(rest, deps);
+  }
+
+  if (command === "browser") {
+    return runBrowserCommand(rest, deps);
   }
 
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);

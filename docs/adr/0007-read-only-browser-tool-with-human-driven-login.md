@@ -1,0 +1,15 @@
+---
+status: accepted
+---
+
+# A read-only browser Tool, authenticated by a human, never able to submit anything
+
+The first real use case for the "Web/browser" capability that PROJECT-BRAIN.md's Section 2 always anticipated but deliberately left unbuilt: an agent needs to read a logged-in page on a site (Sermo's survey feed) that has no API, so a Tool/Provider adapter is being added now that a real need justifies it (same reasoning as ADR 0005/0006), not before.
+
+**The port (`src/integrations/browser/client.ts`, `BrowserClient`) has exactly one method: `getPageText(url)`.** There is no `click`, `type`, `submit`, or `fill` method anywhere in the interface, the fake, or the real implementation. This is a structural choice, not a policy one: unlike `send-email` (ADR 0004), which is a real capability gated behind approval, browser *submission* is a capability that does not exist in this codebase at all yet. An agent using this Tool cannot complete or submit a form no matter what it is instructed to do, because the underlying port has no operation that could do so. When a real use case eventually needs it, adding write actions to this port should get the same ADR 0004 treatment (a separately-named, approval-gated Tool) — this ADR is explicitly not that.
+
+**Authentication is a one-time, human-driven action, never a credential the agent holds.** A new CLI command, `browser login <site> <url>`, opens a real, visible (non-headless) browser window and waits for a person to log in themselves — including any 2FA, CAPTCHA, or other step a script couldn't do anyway — then saves the authenticated session (cookies and local storage, via Playwright's `storageState`) to `.orchestrator/browser-sessions/<site>.json`, gitignored like every other local credential/session file in this project. No password is ever typed by, or stored for, the agent. `getPageText` fails with a clear message telling the human to run `browser login` first if no session file exists yet for that site. Sessions expire the way any web session does; re-running `browser login` is how a person refreshes one.
+
+**One new scoped dependency exception, alongside `@inkbox/sdk` (ADR 0006): `playwright`.** There is no documented way to render a JavaScript-heavy, authenticated page and extract its visible text using only Node built-ins. Scoped narrowly to `src/integrations/browser/real-client.ts` and `src/cli/browser-commands.ts`, loaded via a dynamic `import()` the same way `tunnel.ts` loads `@inkbox/sdk`, so `FakeBrowserClient`-only tests never need a browser binary installed. Running the real client for the first time requires the one-time `npx playwright install chromium` browser-binary download, separately from `npm install`.
+
+Whether reading a given site through an automated (if human-authenticated) session is itself compliant with that site's terms of service is a site-by-site judgment call for whoever runs `browser login` against it, not something this Tool can determine — it's the same category of judgment the user already exercises before ever approving a `send-email`.

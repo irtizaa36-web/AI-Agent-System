@@ -11,6 +11,8 @@ import { createInkboxSearchMailTool } from "../../tools/inkbox-search-mail";
 import { createInkboxReadThreadTool } from "../../tools/inkbox-read-thread";
 import { createInkboxSaveDraftTool } from "../../tools/inkbox-save-draft";
 import { createSendEmailTool } from "../../tools/send-email";
+import { createReadWebPageTool } from "../../tools/read-web-page";
+import { FakeBrowserClient } from "../../integrations/browser/fake-client";
 import type { Tool } from "../../tools/tool";
 
 function toolsFor(agentToolNames: readonly string[]): Map<string, Tool> {
@@ -21,6 +23,7 @@ function toolsFor(agentToolNames: readonly string[]): Map<string, Tool> {
     ["inkbox-read-thread", createInkboxReadThreadTool(client)],
     ["inkbox-save-draft", createInkboxSaveDraftTool(client)],
     ["send-email", createSendEmailTool(client)],
+    ["read-web-page", createReadWebPageTool(new FakeBrowserClient("sermo"))],
   ]);
   return new Map(agentToolNames.map((name) => [name, all.get(name) as Tool]));
 }
@@ -39,10 +42,13 @@ test("personalAssistantPack registers personal-admin with Claude, read-file, and
     "inkbox-read-thread",
     "inkbox-save-draft",
     "send-email",
+    "read-web-page",
   ]);
   assert.match(agent.systemPrompt, /Requires your approval/);
   assert.match(agent.systemPrompt, /never take real-world action yourself/i);
   assert.match(agent.systemPrompt, /send-email tool is never executed by you automatically/);
+  assert.match(agent.systemPrompt, /read-web-page tool/);
+  assert.match(agent.systemPrompt, /no way to click, type, submit a form/);
 });
 
 test("personal-admin runs a return task through to a Result via runToCompletion, using a fake provider", async () => {

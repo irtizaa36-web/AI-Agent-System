@@ -42,10 +42,10 @@ None of the following are built. This section exists so that current and future 
 
 Eventually, this system should be able to interact with:
 - **Computer/files** (partially true today — see the `read-file` tool in Section 3)
-- **Email**
+- **Email** (now real — see Section 3)
 - **Messaging/texts**
 - **Calendar**
-- **Web/browser**
+- **Web/browser** (partially true today — read-only, see Section 3; there is still no way for this system to click, type, or submit anything on a page)
 - **GitHub**
 - **Other external services**, as they become relevant
 
@@ -71,13 +71,17 @@ Plain-English explanations of every implemented piece, in `src/`:
 - **Agents** — currently there are exactly two, both examples/placeholders rather than real products (see Packs below): `default` (uses the real Claude model) and `demo` (uses a fake, scripted model for testing/demos that require no API key or cost).
 - **Packs** (`src/packs/`) — a "Pack" is a self-contained bundle of Agents (and, eventually, their own Tools) for one product or domain. Right now there is exactly one: `core-demo`, holding the two placeholder agents above. This is intentionally not a real product — it exists to prove the pattern works before any real domain content (IM Brain, A&I Research, etc.) is built on top of it.
 - **Model providers** (`src/providers/`) — the adapters that actually talk to an AI model vendor's API. There are two: `anthropic.ts` (talks to Claude's real API — requires an API key, which is deliberately not configured in this project) and `fake.ts` (a scripted, deterministic stand-in used for tests and for running the CLI demo without needing a real API key or spending any money).
-- **Tools** (`src/tools/`) — capabilities an AI agent can use mid-conversation to act on the world, beyond just talking. `read-file` reads a text file from disk. The rest are the email tools below. No other tool category (web browsing, calendar, GitHub, phone, etc.) exists yet.
+- **Tools** (`src/tools/`) — capabilities an AI agent can use mid-conversation to act on the world, beyond just talking. `read-file` reads a text file from disk. `read-web-page` reads a logged-in page's visible text (see the Browser integration below). The rest are the email tools below. No other tool category (calendar, GitHub, phone, etc.) exists yet.
 - **Inkbox email integration** (`src/integrations/inkbox/`) — the mailbox capability, now real, not just a placeholder:
   - `client.ts` defines the `InkboxClient` port (search/read/draft/send/forward); `fake-client.ts` is the deterministic in-memory stand-in tests use; `real-client.ts` is the production implementation, calling Inkbox's actual Mail API directly with `fetch` (no SDK dependency — see ADR 0006). Inkbox's real API has no server-side draft concept, so `draft-store.ts` keeps "draft" as a concept this project owns, persisted to disk (`JsonFileDraftStore`) so the draft → review → approve → send CLI flow survives across process restarts.
   - `webhook.ts` / `webhook-handler.ts` / `webhook-server.ts` implement a real-time webhook receiver at the fixed path `/inkbox/mail`: it verifies Inkbox's HMAC-signed headers, a timestamp-freshness window, request-id replay protection, and an optional bearer token (`INKBOX_WEBHOOK_AUTH_TOKEN`) before processing `message.received/sent/forwarded/delivered/bounced/failed` events. A received message is forwarded to `OWNER_FORWARD_EMAIL` at most once (`JsonFileForwardingLog` persists that across restarts) and can resume a matching `waiting_for_response` Run in real time; the other five event types are recorded to `JsonFileMessageEventLog` for audit history.
   - `tunnel.ts` opens the actual public tunnel connection (`*.inkboxwire.com` → this local receiver) via `@inkbox/sdk` — the one runtime dependency this project has, deliberately scoped to just this file (see ADR 0006).
   - The CLI's polling fallback (`orchestrator inkbox check-replies`) still exists and still works, alongside the new live receiver (`orchestrator inkbox serve-webhook`, with `orchestrator inkbox webhook-health` to confirm it's up).
   - None of this has been run against a real Inkbox mailbox or a real signing key — every test uses fakes, and real credentials are read only from environment variables at runtime.
+- **Browser integration** (`src/integrations/browser/`) — read-only web page access, deliberately built with no way to click, type, or submit anything (ADR 0007):
+  - `client.ts` defines the `BrowserClient` port with exactly one method, `getPageText(url)`; `fake-client.ts` is the fixture-based stand-in tests use; `real-client.ts` uses Playwright (this project's second scoped dependency exception, alongside `@inkbox/sdk` — see ADR 0006/0007) to render a page and read back its visible text.
+  - Authentication is a one-time, human-driven step: `orchestrator browser login <site> <url>` opens a real, visible browser window for a person to log in themselves (including any 2FA), then saves the session to `.orchestrator/browser-sessions/<site>.json`. The agent never sees or handles a password.
+  - The `read-web-page` Tool exposes this to any Agent; `personal-admin` has it. As of this writing it's wired to a session named `sermo`, for reading Sermo's survey feed — not yet exercised against a real, logged-in Sermo session.
 - **Registry** (`src/registry/`) — a simple lookup system: a place where Agents, Providers, and Tools are each registered under a name, so the system can find "the agent called X" or "the tool called Y" when it needs to.
 - **Config** (`src/config/load.ts`) — the "wiring" step that runs when the program starts: it registers the built-in Providers and Tools, then loads whichever Packs are currently enabled (today, just `core-demo`).
 - **Store** (`src/store/run-store.ts`) — where the history of a Run gets saved so it can be looked at later. There are two versions: one that only keeps history in memory (used for fast tests), and one that saves each Run as a JSON file on disk (used by the actual CLI, under a `.orchestrator/` folder that is not saved to Git).
@@ -120,7 +124,7 @@ Standing rules this project has committed to, most of them recorded formally in 
 - **Domain-specific logic belongs in Packs**, not in Core (ADR 0003).
 - **Model providers should remain replaceable.** Adding a new AI vendor should never require changing Core (ADR 0001).
 - **Prefer small, composable components** — deep, focused modules behind simple interfaces, rather than large, tangled ones.
-- **Avoid unnecessary dependencies and infrastructure.** The project has exactly one runtime dependency, `@inkbox/sdk`, scoped to the single file that opens the Inkbox tunnel connection because no documented alternative to it exists (ADR 0006); everything else, including the Inkbox Mail API client itself, still calls `fetch` directly with zero dependencies (ADR 0002).
+- **Avoid unnecessary dependencies and infrastructure.** The project has exactly two runtime dependencies, each scoped to the one narrow thing Node built-ins genuinely can't do: `@inkbox/sdk`, scoped to the single file that opens the Inkbox tunnel connection (ADR 0006), and `playwright`, scoped to the browser integration's real client and login command, for rendering and reading an authenticated page (ADR 0007). Everything else, including the Inkbox Mail API client itself, still calls `fetch` directly with zero dependencies (ADR 0002).
 - **Test important behavior.** All 33 pieces of behavior described above are covered by automated tests, not just claimed to work.
 - **Build infrastructure when a real use case requires it, not speculatively.** Several deferred items in Section 10 are deferred specifically because building them without a real use case to design against would mean guessing.
 - **Consequential capabilities must be split into safe read/draft operations and separate, gated send/execute/modify/delete operations** (e.g. a `draft-email` tool must be a different tool from `send-email`) (ADR 0004, Section 2).
@@ -201,7 +205,7 @@ For what's currently and intentionally *not* being built, see the list below.
 
 - A full multi-step **workflow engine** (chaining multiple agents/tasks together automatically).
 - **Human-in-the-loop infrastructure** (a way for a Run to pause and wait for a person's approval or input).
-- **Browser automation, SMS/phone automation, calendar integration, GitHub integration, or any other computer-control tools.** (Email is now the one exception — see the Inkbox email integration bullet in Section 3.)
+- **Any computer-control tool that can click, type, fill, or submit anything** — SMS/phone automation, calendar integration, GitHub integration, or writing to a web page. (Email and read-only browser page access are now exceptions — see the Inkbox email integration and Browser integration bullets in Section 3. Reading is not controlling.)
 - **EHR integration** of any kind.
 - **Deployment infrastructure** (servers, hosting, CI/CD pipelines, containers).
 - **Unnecessary databases or external services** — the project currently uses only local JSON files for storage.

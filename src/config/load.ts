@@ -7,10 +7,14 @@ import { createInkboxSearchMailTool } from "../tools/inkbox-search-mail";
 import { createInkboxReadThreadTool } from "../tools/inkbox-read-thread";
 import { createInkboxSaveDraftTool } from "../tools/inkbox-save-draft";
 import { createSendEmailTool } from "../tools/send-email";
+import { createReadWebPageTool } from "../tools/read-web-page";
 import type { InkboxClient } from "../integrations/inkbox/client";
 import { FakeInkboxClient } from "../integrations/inkbox/fake-client";
 import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
 import type { DraftStore } from "../integrations/inkbox/draft-store";
+import type { BrowserClient } from "../integrations/browser/client";
+import { FakeBrowserClient } from "../integrations/browser/fake-client";
+import { createBrowserClientFromSession } from "../integrations/browser/real-client";
 import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
 
@@ -36,6 +40,15 @@ export function createDefaultInkboxClient(draftStore?: DraftStore): InkboxClient
 }
 
 /**
+ * Picks the real, Playwright-backed browser client (ADR 0007) when a human
+ * has already run `browser login <siteName>` and saved a session, otherwise
+ * falls back to the in-memory fake — never a half-configured real client.
+ */
+export function createDefaultBrowserClient(siteName: string): BrowserClient {
+  return createBrowserClientFromSession(siteName) ?? new FakeBrowserClient(siteName);
+}
+
+/**
  * Builds the default Registry: engine-level Providers and Tools (available
  * to every Pack) plus whichever Packs are enabled. This function never
  * hardcodes a domain-specific Agent itself — that's exactly what Packs are
@@ -47,7 +60,10 @@ export function createDefaultInkboxClient(draftStore?: DraftStore): InkboxClient
  * command that reads mail directly and an Agent Run that reads mail via a
  * Tool would silently see two different, unsynchronized fake mailboxes.
  */
-export function loadDefaultConfig(inkboxClient: InkboxClient = createDefaultInkboxClient()): Registry {
+export function loadDefaultConfig(
+  inkboxClient: InkboxClient = createDefaultInkboxClient(),
+  browserClient: BrowserClient = createDefaultBrowserClient("sermo"),
+): Registry {
   const registry = new Registry();
 
   registry.registerProvider(createAnthropicProvider());
@@ -58,6 +74,7 @@ export function loadDefaultConfig(inkboxClient: InkboxClient = createDefaultInkb
   registry.registerTool(createInkboxReadThreadTool(inkboxClient));
   registry.registerTool(createInkboxSaveDraftTool(inkboxClient));
   registry.registerTool(createSendEmailTool(inkboxClient));
+  registry.registerTool(createReadWebPageTool(browserClient));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);

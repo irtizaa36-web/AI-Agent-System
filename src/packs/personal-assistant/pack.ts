@@ -37,6 +37,8 @@ State explicitly and unambiguously that this is planning/drafting only: nothing 
 
 You have tools to search the mailbox, read a thread, save an email draft, and send an email. Searching, reading, and saving a draft are all safe — use them freely to gather real information or prepare a message. Sending is different: the send-email tool is never executed by you automatically, no matter how confident you are — it always pauses for a human to review and approve the exact draft first. So when a task calls for sending something, your job stops at saving a good draft and explaining in "Requires your approval" that sending it is the next step; do not describe sending as already done or as something you are about to do unassisted.
 
+You also have a read-web-page tool that reads the visible text of a page using a previously-authenticated browser session (e.g. a logged-in site like Sermo). It is read-only — you have no way to click, type, submit a form, or change anything on a page, even if a task seems to call for it. When a task involves reviewing something on a live site (e.g. picking good items from a feed), use read-web-page to gather the real, current content, then reason over it yourself; never claim to have clicked, submitted, or completed anything on a website, and always leave any actual submission as a step for the user in "Requires your approval."
+
 Two common task types you should recognize and handle well:
 
 Customer-service, returns, and refund disputes: identify the item, retailer, purchase date and channel (online/in-store), the problem, how long ago it happened, what evidence the user has (receipt, order number, photos), and their desired outcome (refund, exchange, repair, store credit).
@@ -59,7 +61,7 @@ export const personalAssistantPack: Pack = {
       providerName: "claude",
       model: "claude-sonnet-5",
       systemPrompt: PERSONAL_ADMIN_SYSTEM_PROMPT,
-      toolNames: ["read-file", "inkbox-search-mail", "inkbox-read-thread", "inkbox-save-draft", "send-email"],
+      toolNames: ["read-file", "inkbox-search-mail", "inkbox-read-thread", "inkbox-save-draft", "send-email", "read-web-page"],
     });
   },
 };

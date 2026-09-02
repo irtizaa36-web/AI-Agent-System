@@ -13,10 +13,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist",
-    "cli": "npm run build --silent && node dist/cli/index.js"
+    "cli": "npm run build --silent && node dist/cli/index.js",
+    "cli:env": "npm run build --silent && node --env-file=.env dist/cli/index.js"
   },
   "dependencies": {
-    "@inkbox/sdk": "^0.6.6"
+    "@inkbox/sdk": "^0.6.6",
+    "playwright": "^1.48.0"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
