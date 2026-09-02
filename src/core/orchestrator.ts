@@ -76,6 +76,24 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
   };
   const steps = [...run.steps, step];
 
+  // A truncated response is never a usable final answer — treating it as a
+  // success would silently hand back a cut-off draft (e.g. a personal
+  // statement stopping mid-sentence) with nothing to say it's incomplete.
+  if (response.stopReason === "max_tokens") {
+    return {
+      ...run,
+      session,
+      steps,
+      status: "failed",
+      result: {
+        status: "failed",
+        output: "",
+        error: `Model response was truncated (hit the max_tokens limit) before finishing. Raise the provider's maxTokens or shorten the task and try again.`,
+      },
+      completedAt: new Date().toISOString(),
+    };
+  }
+
   if (response.stopReason === "end_turn" || response.toolCalls.length === 0) {
     return {
       ...run,

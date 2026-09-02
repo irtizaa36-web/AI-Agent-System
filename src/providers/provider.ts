@@ -10,7 +10,8 @@ export interface GenerateRequest {
 export interface GenerateResult {
   readonly content: string;
   readonly toolCalls: readonly ToolCall[];
-  readonly stopReason: "end_turn" | "tool_use";
+  /** "max_tokens" means the model was cut off before finishing — advance() treats that as a failure, never as a usable final answer (see orchestrator.ts). */
+  readonly stopReason: "end_turn" | "tool_use" | "max_tokens";
 }
 
 /**

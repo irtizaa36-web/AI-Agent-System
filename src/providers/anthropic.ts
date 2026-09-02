@@ -4,7 +4,11 @@ import type { GenerateRequest, GenerateResult, ModelProvider } from "./provider"
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
-const DEFAULT_MAX_TOKENS = 1024;
+// A structured, multi-section response (e.g. career-advisor's fixed 7-section
+// format) routinely needs several thousand tokens — 1024 was cutting real
+// responses off mid-section, silently reported as "succeeded" until the
+// advance() fix below started treating a max_tokens stop as a failure.
+const DEFAULT_MAX_TOKENS = 8192;
 
 interface AnthropicTextBlock {
   readonly type: "text";
@@ -90,7 +94,7 @@ export function parseResponseBody(body: AnthropicResponseBody): GenerateResult {
   return {
     content: textBlocks.map((b) => b.text).join(""),
     toolCalls: toolUseBlocks.map((b) => ({ id: b.id, toolName: b.name, input: b.input })),
-    stopReason: body.stop_reason === "tool_use" ? "tool_use" : "end_turn",
+    stopReason: body.stop_reason === "tool_use" ? "tool_use" : body.stop_reason === "max_tokens" ? "max_tokens" : "end_turn",
   };
 }
 

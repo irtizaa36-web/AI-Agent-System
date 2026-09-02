@@ -43,6 +43,19 @@ test("advance succeeds a Run in one step when the Provider ends the turn immedia
   assert.equal(Number.isNaN(Date.parse(next.completedAt ?? "")), false);
 });
 
+test("advance fails a Run whose response was truncated (max_tokens), rather than treating a cut-off draft as succeeded", async () => {
+  const task = createTask("write something long");
+  const run = startRun(task, agent());
+  const provider = new FakeProvider([{ content: "this got cut off mid-sen", toolCalls: [], stopReason: "max_tokens" }]);
+
+  const next = await advance(run, agent(), { provider, tools: new Map() });
+
+  assert.equal(next.status, "failed");
+  assert.match(next.result?.error ?? "", /truncated/);
+  assert.match(next.result?.error ?? "", /max_tokens/);
+  assert.equal(next.result?.output, "");
+});
+
 test("advance executes a requested Tool and keeps the Run running", async () => {
   const echoTool: Tool = {
     name: "echo",

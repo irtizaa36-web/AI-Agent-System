@@ -61,6 +61,20 @@ test("parseResponseBody joins text blocks and maps tool_use blocks", () => {
   assert.equal(result.stopReason, "tool_use");
 });
 
+test("parseResponseBody maps a max_tokens stop_reason distinctly, rather than collapsing it into end_turn", () => {
+  const result = parseResponseBody({
+    content: [{ type: "text", text: "this response got cut off mid" }],
+    stop_reason: "max_tokens",
+  });
+
+  assert.equal(result.stopReason, "max_tokens");
+});
+
+test("buildRequestBody defaults max_tokens high enough for a real structured multi-section response", () => {
+  const body = buildRequestBody({ model: "claude-sonnet-5", messages: [], tools: [] });
+  assert.equal(body.max_tokens, 8192);
+});
+
 test("createAnthropicProvider throws a clear error when no API key is available", async () => {
   const provider = createAnthropicProvider({ apiKey: undefined });
   const originalKey = process.env["ANTHROPIC_API_KEY"];
