@@ -13,6 +13,9 @@ test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' 
   assert.equal(registry.getTool("inkbox-save-draft").name, "inkbox-save-draft");
   assert.equal(registry.getTool("send-email").requiresApproval, true);
   assert.equal(registry.getTool("read-web-page").name, "read-web-page");
+  assert.equal(registry.getTool("browser-list-form-fields").name, "browser-list-form-fields");
+  assert.equal(registry.getTool("browser-fill-form-preview").requiresApproval, false);
+  assert.equal(registry.getTool("browser-submit-form").requiresApproval, true);
 
   const names = registry
     .listAgents()

@@ -15,6 +15,11 @@ import type { DraftStore } from "../integrations/inkbox/draft-store";
 import type { BrowserClient } from "../integrations/browser/client";
 import { FakeBrowserClient } from "../integrations/browser/fake-client";
 import { createBrowserClientFromSession } from "../integrations/browser/real-client";
+import type { FormFillingClient } from "../integrations/browser/form-client";
+import { RealFormFillingClient } from "../integrations/browser/real-form-client";
+import { createBrowserListFormFieldsTool } from "../tools/browser-list-form-fields";
+import { createBrowserFillFormPreviewTool } from "../tools/browser-fill-form-preview";
+import { createBrowserSubmitFormTool } from "../tools/browser-submit-form";
 import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
 import { dispatcherPack } from "../packs/dispatcher/pack";
@@ -69,6 +74,7 @@ export function createDefaultBrowserClient(siteName: string): BrowserClient {
 export function loadDefaultConfig(
   inkboxClient: InkboxClient = createDefaultInkboxClient(),
   browserClient: BrowserClient = createDefaultBrowserClient("sermo"),
+  formFillingClient: FormFillingClient = new RealFormFillingClient(),
 ): Registry {
   const registry = new Registry();
 
@@ -81,6 +87,9 @@ export function loadDefaultConfig(
   registry.registerTool(createInkboxSaveDraftTool(inkboxClient));
   registry.registerTool(createSendEmailTool(inkboxClient));
   registry.registerTool(createReadWebPageTool(browserClient));
+  registry.registerTool(createBrowserListFormFieldsTool(formFillingClient));
+  registry.registerTool(createBrowserFillFormPreviewTool(formFillingClient));
+  registry.registerTool(createBrowserSubmitFormTool(formFillingClient));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);

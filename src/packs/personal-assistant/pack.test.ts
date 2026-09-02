@@ -13,10 +13,15 @@ import { createInkboxSaveDraftTool } from "../../tools/inkbox-save-draft";
 import { createSendEmailTool } from "../../tools/send-email";
 import { createReadWebPageTool } from "../../tools/read-web-page";
 import { FakeBrowserClient } from "../../integrations/browser/fake-client";
+import { createBrowserListFormFieldsTool } from "../../tools/browser-list-form-fields";
+import { createBrowserFillFormPreviewTool } from "../../tools/browser-fill-form-preview";
+import { createBrowserSubmitFormTool } from "../../tools/browser-submit-form";
+import { FakeFormFillingClient } from "../../integrations/browser/fake-form-client";
 import type { Tool } from "../../tools/tool";
 
 function toolsFor(agentToolNames: readonly string[]): Map<string, Tool> {
   const client = new FakeInkboxClient();
+  const formClient = new FakeFormFillingClient();
   const all = new Map<string, Tool>([
     ["read-file", readFileTool],
     ["inkbox-search-mail", createInkboxSearchMailTool(client)],
@@ -24,6 +29,9 @@ function toolsFor(agentToolNames: readonly string[]): Map<string, Tool> {
     ["inkbox-save-draft", createInkboxSaveDraftTool(client)],
     ["send-email", createSendEmailTool(client)],
     ["read-web-page", createReadWebPageTool(new FakeBrowserClient("sermo"))],
+    ["browser-list-form-fields", createBrowserListFormFieldsTool(formClient)],
+    ["browser-fill-form-preview", createBrowserFillFormPreviewTool(formClient)],
+    ["browser-submit-form", createBrowserSubmitFormTool(formClient)],
   ]);
   return new Map(agentToolNames.map((name) => [name, all.get(name) as Tool]));
 }
@@ -43,12 +51,28 @@ test("personalAssistantPack registers personal-admin with Claude, read-file, and
     "inkbox-save-draft",
     "send-email",
     "read-web-page",
+    "browser-list-form-fields",
+    "browser-fill-form-preview",
+    "browser-submit-form",
   ]);
   assert.match(agent.systemPrompt, /Requires your approval/);
-  assert.match(agent.systemPrompt, /never take real-world action yourself/i);
   assert.match(agent.systemPrompt, /send-email tool is never executed by you automatically/);
   assert.match(agent.systemPrompt, /read-web-page tool/);
-  assert.match(agent.systemPrompt, /no way to click, type, submit a form/);
+  assert.match(agent.systemPrompt, /browser-list-form-fields/);
+  assert.match(agent.systemPrompt, /browser-fill-form-preview/);
+  assert.match(agent.systemPrompt, /browser-submit-form/);
+  assert.match(agent.systemPrompt, /is never executed by you automatically, no matter how confident you are — it always pauses/);
+});
+
+test("browser-submit-form is the only new browser tool marked requiresApproval", () => {
+  const registry = new Registry();
+  personalAssistantPack.register(registry);
+  const agent = registry.getAgent("personal-admin");
+  const tools = toolsFor(agent.toolNames);
+
+  assert.equal(tools.get("browser-list-form-fields")?.requiresApproval, undefined);
+  assert.equal(tools.get("browser-fill-form-preview")?.requiresApproval, false);
+  assert.equal(tools.get("browser-submit-form")?.requiresApproval, true);
 });
 
 test("personal-admin runs a return task through to a Result via runToCompletion, using a fake provider", async () => {
@@ -137,4 +161,36 @@ test("personal-admin pauses in awaiting_approval if it ever calls send-email, ne
 
   assert.equal(run.status, "awaiting_approval");
   assert.equal(run.pendingAction?.toolName, "send-email");
+});
+
+test("personal-admin pauses in awaiting_approval if it ever calls browser-submit-form, never submitting a real web form automatically", async () => {
+  const registry = new Registry();
+  personalAssistantPack.register(registry);
+  const agent = registry.getAgent("personal-admin");
+
+  const provider = new FakeProvider([
+    {
+      content: "I've filled out the return form and would like to submit it.",
+      toolCalls: [
+        {
+          id: "call-1",
+          toolName: "browser-submit-form",
+          input: {
+            url: "https://example-retailer.test/returns",
+            values: { "#reason": "Defective" },
+            submitSelector: "#submit-button",
+          },
+        },
+      ],
+      stopReason: "tool_use",
+    },
+  ]);
+
+  const run = await runToCompletion(createTask("Submit the return."), agent, {
+    provider,
+    tools: toolsFor(agent.toolNames),
+  });
+
+  assert.equal(run.status, "awaiting_approval");
+  assert.equal(run.pendingAction?.toolName, "browser-submit-form");
 });
