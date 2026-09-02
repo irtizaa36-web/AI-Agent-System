@@ -26,7 +26,8 @@ export class InMemoryRunStore implements RunStore {
   }
 }
 
-function isNotFoundError(error: unknown): boolean {
+/** Shared with other JSON-file-per-record stores (e.g. Inkbox's draft store) that follow the same on-disk shape. */
+export function isNotFoundError(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as NodeJS.ErrnoException).code === "ENOENT";
 }
 

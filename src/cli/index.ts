@@ -6,12 +6,15 @@ import { createTask } from "../core/task";
 import { runToCompletion } from "../core/orchestrator";
 import { loadDefaultConfig, createDefaultInkboxClient } from "../config/load";
 import { JsonFileRunStore } from "../store/run-store";
-import { InMemoryForwardingLog } from "../integrations/inkbox/forwarding-log";
+import { JsonFileForwardingLog } from "../integrations/inkbox/forwarding-log";
+import { JsonFileMessageEventLog } from "../integrations/inkbox/message-event-log";
+import { JsonFileDraftStore } from "../integrations/inkbox/draft-store";
 import { runInkboxCommand } from "./inkbox-commands";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { InkboxClient } from "../integrations/inkbox/client";
 import type { ForwardingLog } from "../integrations/inkbox/forwarding-log";
+import type { MessageEventLog } from "../integrations/inkbox/message-event-log";
 
 export interface CliDeps {
   readonly registry: Registry;
@@ -24,6 +27,8 @@ export interface CliDeps {
   readonly inkboxClient: InkboxClient;
   /** Tracks which inbound messages have already been forwarded to the owner, so `inkbox check-replies` never double-forwards. */
   readonly forwardingLog: ForwardingLog;
+  /** Records sent/delivered/bounced/failed/forwarded-confirmation outcomes reported by Inkbox webhook events. */
+  readonly messageEventLog: MessageEventLog;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -36,7 +41,8 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator inkbox <subcommand>                            Draft-review-approve email flow (see below)",
       "  orchestrator help                                           Show this message",
       "",
-      "inkbox subcommands: draft, review-draft, prepare-send, approve-send, check-replies, review-offer",
+      "inkbox subcommands: draft, review-draft, prepare-send, approve-send, check-replies, review-offer, " +
+        "serve-webhook, webhook-health",
       "",
       'Try it with no API key: orchestrator run --task "say hello" --agent demo',
     ].join("\n"),
@@ -203,9 +209,9 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
 }
 
 async function main(): Promise<void> {
-  const inkboxClient = createDefaultInkboxClient();
-  const registry = loadDefaultConfig(inkboxClient);
   const cwd = process.cwd();
+  const inkboxClient = createDefaultInkboxClient(new JsonFileDraftStore(join(cwd, ".orchestrator", "inkbox-drafts")));
+  const registry = loadDefaultConfig(inkboxClient);
   const store = new JsonFileRunStore(join(cwd, ".orchestrator", "runs"));
 
   const exitCode = await runCli(process.argv.slice(2), {
@@ -213,7 +219,8 @@ async function main(): Promise<void> {
     store,
     cwd,
     inkboxClient,
-    forwardingLog: new InMemoryForwardingLog(),
+    forwardingLog: new JsonFileForwardingLog(join(cwd, ".orchestrator", "inkbox-forwarding")),
+    messageEventLog: new JsonFileMessageEventLog(join(cwd, ".orchestrator", "inkbox-events")),
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });

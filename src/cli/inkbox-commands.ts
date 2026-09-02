@@ -5,7 +5,12 @@ import { runToCompletion, approveAndExecute, resumeWithReply } from "../core/orc
 import { FakeProvider } from "../providers/fake";
 import type { EmailAddress } from "../integrations/inkbox/client";
 import { getOwnerForwardAddress, shouldForwardInbound } from "../integrations/inkbox/owner-forwarding";
+import { INKBOX_WEBHOOK_PATH } from "../integrations/inkbox/webhook";
+import { startInkboxWebhookServer } from "../integrations/inkbox/webhook-server";
+import { connectTunnel, getTunnelConfigFromEnv, type ConnectedTunnel } from "../integrations/inkbox/tunnel";
 import type { CliDeps } from "./index";
+
+const DEFAULT_WEBHOOK_PORT = 8787;
 
 function parseAddresses(raw: string | undefined): readonly EmailAddress[] {
   if (!raw) return [];
@@ -280,6 +285,126 @@ async function reviewOfferCommand(args: readonly string[], deps: CliDeps): Promi
   return 0;
 }
 
+/**
+ * Starts the real-time Inkbox mail webhook receiver and keeps running until
+ * interrupted (Ctrl+C). This is the live counterpart to `check-replies`
+ * (still available as a polling fallback) — see webhook-server.ts for the
+ * actual verification (signature, timestamp, replay, bearer token) and
+ * webhook-handler.ts for the forward/resume logic once a request is
+ * verified.
+ */
+async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Promise<number> {
+  const signingKey = process.env["INKBOX_WEBHOOK_SIGNING_KEY"];
+  if (!signingKey) {
+    deps.stderr(
+      "INKBOX_WEBHOOK_SIGNING_KEY is not set. Create or rotate a signing key in Inkbox and set this " +
+        "environment variable to it before starting the receiver.",
+    );
+    return 1;
+  }
+
+  const authToken = process.env["INKBOX_WEBHOOK_AUTH_TOKEN"];
+  const port = Number(process.env["INKBOX_WEBHOOK_PORT"] ?? DEFAULT_WEBHOOK_PORT);
+  if (!Number.isInteger(port) || port <= 0) {
+    deps.stderr(`INKBOX_WEBHOOK_PORT must be a positive integer (got "${process.env["INKBOX_WEBHOOK_PORT"]}").`);
+    return 1;
+  }
+
+  let started;
+  try {
+    started = await startInkboxWebhookServer(
+      {
+        inkboxClient: deps.inkboxClient,
+        forwardingLog: deps.forwardingLog,
+        messageEventLog: deps.messageEventLog,
+        registry: deps.registry,
+        store: deps.store,
+      },
+      {
+        path: INKBOX_WEBHOOK_PATH,
+        port,
+        signingKey,
+        authToken,
+        onEvent: (result) => deps.stdout(`[inkbox webhook] ${result.event}: ${result.actions.join("; ") || "(no action)"}`),
+        onRejected: (info) => deps.stderr(`[inkbox webhook] rejected (${info.statusCode}): ${info.reason}`),
+      },
+    );
+  } catch (error) {
+    deps.stderr(`Failed to start the webhook receiver: ${(error as Error).message}`);
+    return 1;
+  }
+
+  deps.stdout("Inkbox webhook receiver is READY.");
+  deps.stdout(`Listening locally on http://localhost:${started.port}${INKBOX_WEBHOOK_PATH}`);
+  deps.stdout(authToken ? "Bearer-token check: enabled (INKBOX_WEBHOOK_AUTH_TOKEN is set)." : "Bearer-token check: disabled (INKBOX_WEBHOOK_AUTH_TOKEN is not set).");
+
+  // The tunnel is what actually makes a public *.inkboxwire.com URL reach
+  // this local server — starting the server alone does not. Only attempted
+  // when real credentials are configured; never during tests.
+  let tunnel: ConnectedTunnel | undefined;
+  const tunnelConfig = getTunnelConfigFromEnv(`http://localhost:${started.port}`);
+  if (tunnelConfig) {
+    try {
+      tunnel = await connectTunnel(tunnelConfig);
+      deps.stdout(`Tunnel connected. Public URL: ${tunnel.publicUrl}${INKBOX_WEBHOOK_PATH}`);
+    } catch (error) {
+      deps.stderr(`Failed to connect the Inkbox tunnel: ${(error as Error).message}`);
+      deps.stdout("Continuing with the local receiver only — it is not yet reachable from the public internet.");
+    }
+  } else {
+    deps.stdout(
+      "Tunnel NOT connected (INKBOX_API_KEY and/or INKBOX_TUNNEL_NAME not set). " +
+        "This receiver is only reachable at the localhost URL above until both are configured.",
+    );
+  }
+
+  deps.stdout("Press Ctrl+C to stop.");
+
+  await new Promise<void>((resolve) => {
+    const shutdown = (): void => {
+      void (async () => {
+        if (tunnel) await tunnel.close();
+        started.server.close(() => resolve());
+      })();
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+  });
+
+  deps.stdout("Inkbox webhook receiver stopped.");
+  return 0;
+}
+
+/**
+ * A dry-run readiness check: confirms the receiver started by `serve-webhook`
+ * (in a separate, still-running invocation) is actually up and listening,
+ * before you point the real Inkbox webhook subscription at it. Never signed,
+ * never touches Inkbox — just a local HTTP GET.
+ */
+async function webhookHealthCommand(args: readonly string[], deps: CliDeps): Promise<number> {
+  const { values } = parseArgs({ args: [...args], options: { port: { type: "string" } } });
+  const port = Number(values.port ?? process.env["INKBOX_WEBHOOK_PORT"] ?? DEFAULT_WEBHOOK_PORT);
+  const url = `http://localhost:${port}${INKBOX_WEBHOOK_PATH}/health`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      deps.stderr(`Health check failed: ${url} responded with HTTP ${response.status}.`);
+      return 1;
+    }
+    const body = (await response.json()) as { status?: string; bearerTokenRequired?: boolean };
+    deps.stdout(`OK: receiver is up at ${url}`);
+    deps.stdout(`Bearer token required: ${body.bearerTokenRequired ? "yes" : "no"}`);
+    return 0;
+  } catch (error) {
+    deps.stderr(
+      `Health check failed: could not reach ${url} (${(error as Error).message}). ` +
+        'Is "orchestrator inkbox serve-webhook" running in another terminal?',
+    );
+    return 1;
+  }
+}
+
 /** Dispatches `orchestrator inkbox <subcommand>`. */
 export async function runInkboxCommand(argv: readonly string[], deps: CliDeps): Promise<number> {
   const [subcommand, ...rest] = argv;
@@ -297,10 +422,15 @@ export async function runInkboxCommand(argv: readonly string[], deps: CliDeps): 
       return checkRepliesCommand(rest, deps);
     case "review-offer":
       return reviewOfferCommand(rest, deps);
+    case "serve-webhook":
+      return serveWebhookCommand(rest, deps);
+    case "webhook-health":
+      return webhookHealthCommand(rest, deps);
     default:
       deps.stderr(
         `Unknown "inkbox" subcommand "${subcommand ?? ""}". ` +
-          "Available: draft, review-draft, prepare-send, approve-send, check-replies, review-offer.",
+          "Available: draft, review-draft, prepare-send, approve-send, check-replies, review-offer, " +
+          "serve-webhook, webhook-health.",
       );
       return 1;
   }

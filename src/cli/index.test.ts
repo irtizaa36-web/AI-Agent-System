@@ -9,6 +9,7 @@ import { loadDefaultConfig } from "../config/load";
 import { InMemoryRunStore } from "../store/run-store";
 import { FakeInkboxClient } from "../integrations/inkbox/fake-client";
 import { InMemoryForwardingLog } from "../integrations/inkbox/forwarding-log";
+import { InMemoryMessageEventLog } from "../integrations/inkbox/message-event-log";
 import type { CliDeps } from "./index";
 
 function captureOutput(): { stdout: string[]; stderr: string[]; deps: Omit<CliDeps, "registry" | "store"> } {
@@ -21,6 +22,7 @@ function captureOutput(): { stdout: string[]; stderr: string[]; deps: Omit<CliDe
       cwd: process.cwd(),
       inkboxClient: new FakeInkboxClient(),
       forwardingLog: new InMemoryForwardingLog(),
+      messageEventLog: new InMemoryMessageEventLog(),
       stdout: (line) => stdout.push(line),
       stderr: (line) => stderr.push(line),
     },

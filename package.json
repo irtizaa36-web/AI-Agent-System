@@ -8,12 +8,15 @@
     "orchestrator": "dist/cli/index.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist",
     "cli": "npm run build --silent && node dist/cli/index.js"
+  },
+  "dependencies": {
+    "@inkbox/sdk": "^0.6.6"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

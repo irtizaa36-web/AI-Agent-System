@@ -9,6 +9,8 @@ import { createInkboxSaveDraftTool } from "../tools/inkbox-save-draft";
 import { createSendEmailTool } from "../tools/send-email";
 import type { InkboxClient } from "../integrations/inkbox/client";
 import { FakeInkboxClient } from "../integrations/inkbox/fake-client";
+import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
+import type { DraftStore } from "../integrations/inkbox/draft-store";
 import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
 
@@ -20,12 +22,15 @@ import { personalAssistantPack } from "../packs/personal-assistant/pack";
 const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack];
 
 /**
- * The Inkbox mailbox address tools report as "self" (used for BCC-loop and
- * "is this from us" checks). No real client exists yet (see
- * integrations/inkbox/client.ts), so this only ever configures the fake —
- * real account configuration is a separate, later, explicitly-approved step.
+ * Picks the real Inkbox client when INKBOX_API_KEY and INKBOX_MAILBOX_ADDRESS
+ * are both set (see integrations/inkbox/real-client.ts), otherwise falls back
+ * to the in-memory fake — never a half-configured real client. Tests, and
+ * any environment that hasn't explicitly configured real Inkbox credentials,
+ * get the fake automatically this way.
  */
-export function createDefaultInkboxClient(): InkboxClient {
+export function createDefaultInkboxClient(draftStore?: DraftStore): InkboxClient {
+  const real = createInkboxClientFromEnv({ draftStore });
+  if (real) return real;
   const mailboxAddress = process.env["INKBOX_MAILBOX_ADDRESS"] ?? "agent@example.test";
   return new FakeInkboxClient(mailboxAddress);
 }
