@@ -1,5 +1,9 @@
 # AI-Agent-System
 
+## Project context
+
+Read `PROJECT-BRAIN.md` first — it's the durable, plain-English briefing on what this project is, what actually exists vs. what's only planned, the standing architectural principles, safety boundaries, and how this project expects Claude Code to work. See also `CONTEXT.md` (domain vocabulary) and `docs/adr/` (why specific architectural decisions were made).
+
 ## Agent skills
 
 ### Issue tracker
