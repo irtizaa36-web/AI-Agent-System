@@ -18,8 +18,8 @@ test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' 
     .listAgents()
     .map((agent) => agent.name)
     .sort();
-  assert.deepEqual(names, ["career-advisor", "default", "demo", "dispatcher", "inkbox-send", "personal-admin"]);
-  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant", "dispatcher", "career-advisor"]);
+  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "demo", "dispatcher", "inkbox-send", "personal-admin"]);
+  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant", "dispatcher", "career-advisor", "ai-research"]);
 });
 
 test("dispatchableAgents excludes the dispatcher itself and utility/demo agents, keeping only agents with a description", () => {
@@ -27,5 +27,5 @@ test("dispatchableAgents excludes the dispatcher itself and utility/demo agents,
   const names = dispatchableAgents(registry)
     .map((a) => a.name)
     .sort();
-  assert.deepEqual(names, ["career-advisor", "default", "personal-admin"]);
+  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "personal-admin"]);
 });

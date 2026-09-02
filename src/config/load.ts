@@ -19,13 +19,14 @@ import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
 import { dispatcherPack } from "../packs/dispatcher/pack";
 import { careerAdvisorPack } from "../packs/career-advisor/pack";
+import { aiResearchPack } from "../packs/ai-research/pack";
 
 /**
  * Packs enabled by default. A future CLI flag or config file can change
  * which Packs load without touching the engine — this list is the only
  * place that currently decides.
  */
-const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack];
+const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack];
 
 /** Agents the Dispatcher should never route a goal to: itself, and utility agents with no real conversational job (ADR 0008). */
 const NOT_DISPATCHABLE = new Set(["dispatcher", "inkbox-send", "demo"]);
