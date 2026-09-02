@@ -32,6 +32,8 @@ test("careerAdvisorPack registers career-advisor with Claude, read-file, and the
   assert.deepEqual(agent.toolNames, ["read-file", "inkbox-save-draft", "send-email"]);
   assert.match(agent.systemPrompt, /never invent, embellish, or assume any credential/);
   assert.match(agent.systemPrompt, /October 23, 2026/);
+  assert.match(agent.systemPrompt, /discuss why you think the applicant would benefit from the Chrysalis Project program/);
+  assert.match(agent.systemPrompt, /2nd-year resident/);
   assert.match(agent.systemPrompt, /Never draft the recommendation letter itself/);
   assert.match(agent.systemPrompt, /you have no ability to do it/);
   assert.ok(agent.description);
