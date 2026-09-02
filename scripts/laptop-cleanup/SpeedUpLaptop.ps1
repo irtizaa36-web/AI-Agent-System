@@ -9,7 +9,7 @@
       spinning HDD (auto-detected)
     - Turns off Xbox Game Bar's background game recording (safe, reversible, pure overhead
       on a laptop that isn't used for gaming)
-    - Lists current startup programs for you to review — NOT auto-disabled. Some may be
+    - Lists current startup programs for you to review - NOT auto-disabled. Some may be
       device-specific drivers/utilities (e.g. Surface firmware tools) that are risky to
       guess about from a script; disable anything you don't need yourself via
       Task Manager > Startup apps.
@@ -31,7 +31,7 @@ $isElevated = ([Security.Principal.WindowsPrincipal] `
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isElevated) {
-    Write-Host "Not running as Administrator — power plan and storage steps will be skipped." -ForegroundColor Yellow
+    Write-Host "Not running as Administrator - power plan and storage steps will be skipped." -ForegroundColor Yellow
 }
 
 # 1. Power plan
@@ -67,10 +67,10 @@ if ($isElevated) {
     try {
         $media = (Get-PhysicalDisk -ErrorAction Stop | Select-Object -First 1).MediaType
         if ($media -eq 'SSD') {
-            Write-Host "  SSD detected — running TRIM on C: (this is quick)..." -ForegroundColor DarkGray
+            Write-Host "  SSD detected - running TRIM on C: (this is quick)..." -ForegroundColor DarkGray
             Optimize-Volume -DriveLetter C -ReTrim -Verbose -ErrorAction Stop
         } else {
-            Write-Host "  Spinning HDD detected — running defrag on C: (this can take a while)..." -ForegroundColor DarkGray
+            Write-Host "  Spinning HDD detected - running defrag on C: (this can take a while)..." -ForegroundColor DarkGray
             Optimize-Volume -DriveLetter C -Defrag -Verbose -ErrorAction Stop
         }
         Write-Host "  Storage optimization complete." -ForegroundColor Green
@@ -92,8 +92,8 @@ try {
     Write-Host "  Could not disable: $_" -ForegroundColor DarkGray
 }
 
-# 5. Startup programs — listed only, not touched
-Write-Section "Startup programs (for you to review — nothing here was changed)"
+# 5. Startup programs - listed only, not touched
+Write-Section "Startup programs (for you to review - nothing here was changed)"
 try {
     Get-CimInstance Win32_StartupCommand -ErrorAction Stop |
         Select-Object Name, Command, Location |

@@ -5,7 +5,7 @@
 .DESCRIPTION
     Removes only well-known, regenerable junk:
       - Current user's Temp folder and the system Temp folder
-      - Browser caches for Chrome, Edge, and Firefox (cache only — not history,
+      - Browser caches for Chrome, Edge, and Firefox (cache only - not history,
         passwords, bookmarks, saved logins, or extensions)
       - Old Windows Update download leftovers (SoftwareDistribution\Download)
         and component-store cleanup via DISM
@@ -13,7 +13,7 @@
       - The Recycle Bin
 
     It never touches Documents, Desktop, Pictures, Downloads, or any other
-    user file content — only the specific cache/junk locations listed above.
+    user file content - only the specific cache/junk locations listed above.
 
     Run with -WhatIf first to see what would be removed without deleting anything.
 
@@ -73,7 +73,7 @@ function Clear-FolderContents($path, $label) {
             try {
                 Remove-Item -Path $item.FullName -Recurse -Force -ErrorAction Stop
             } catch {
-                # Files in active use (locked) are skipped rather than forced —
+                # Files in active use (locked) are skipped rather than forced -
                 # forcing them can crash a running browser or app.
                 Write-Host "    (in use, skipped) $($item.Name)" -ForegroundColor DarkGray
             }
