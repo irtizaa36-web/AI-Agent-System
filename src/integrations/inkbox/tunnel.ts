@@ -28,7 +28,16 @@ export function getTunnelConfigFromEnv(forwardTo: string): TunnelConfig | undefi
 
 export interface ConnectedTunnel {
   readonly publicUrl: string;
+  readonly isConnected: boolean;
   close(): Promise<void>;
+  /**
+   * Drives the tunnel's runtime loop until it shuts down (via `close()`) or
+   * fails fatally. `connect()` resolving only registers the tunnel; nothing
+   * observed suggests the connection is actually maintained without this
+   * being awaited somewhere — a caller must run this concurrently with
+   * whatever else it's doing, not skip it.
+   */
+  wait(): Promise<void>;
 }
 
 /**
@@ -38,16 +47,31 @@ export interface ConnectedTunnel {
  * Never called during tests: it requires a real API key and makes a real
  * network connection, by design (there is nothing to fake here — a tunnel
  * either really connects or it doesn't).
+ *
+ * `connect()` resolving successfully only means the control-plane accepted
+ * the request — it does not guarantee the persistent data-plane connection
+ * that actually carries traffic is up. `onStatus` and the returned
+ * `isConnected` snapshot exist so a caller can tell the difference, rather
+ * than assuming "resolved" means "traffic will actually route."
  */
-export async function connectTunnel(config: TunnelConfig): Promise<ConnectedTunnel> {
+export async function connectTunnel(
+  config: TunnelConfig,
+  onStatus?: (status: string) => void,
+): Promise<ConnectedTunnel> {
   const { Inkbox } = await import("@inkbox/sdk");
   const { connect } = await import("@inkbox/sdk/tunnels/connect");
 
   const inkbox = new Inkbox({ apiKey: config.apiKey });
-  const listener = await connect(inkbox, { name: config.tunnelName, forwardTo: config.forwardTo });
+  const listener = await connect(inkbox, {
+    name: config.tunnelName,
+    forwardTo: config.forwardTo,
+    onStatus: onStatus ? (status) => onStatus(status) : undefined,
+  });
 
   return {
     publicUrl: listener.publicUrl,
+    isConnected: listener.isConnected,
     close: () => listener.close(),
+    wait: () => listener.wait(),
   };
 }

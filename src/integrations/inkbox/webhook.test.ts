@@ -147,7 +147,7 @@ test("verifyBearerToken accepts the exact configured token", () => {
 });
 
 test("parseWebhookPayload parses a well-formed event", () => {
-  const parsed = parseWebhookPayload('{"event":"message.received","data":{"id":"m1"}}');
+  const parsed = parseWebhookPayload('{"event_type":"message.received","data":{"id":"m1"}}');
   assert.equal(parsed.ok, true);
   if (parsed.ok) {
     assert.equal(parsed.event.event, "message.received");
@@ -156,7 +156,7 @@ test("parseWebhookPayload parses a well-formed event", () => {
 });
 
 test("parseWebhookPayload defaults data to {} when absent", () => {
-  const parsed = parseWebhookPayload('{"event":"message.sent"}');
+  const parsed = parseWebhookPayload('{"event_type":"message.sent"}');
   assert.equal(parsed.ok, true);
   if (parsed.ok) assert.deepEqual(parsed.event.data, {});
 });
@@ -171,13 +171,13 @@ test("parseWebhookPayload rejects a non-object body", () => {
   assert.equal(parsed.ok, false);
 });
 
-test("parseWebhookPayload rejects a missing event field", () => {
+test("parseWebhookPayload rejects a missing event_type field", () => {
   const parsed = parseWebhookPayload('{"data":{}}');
   assert.equal(parsed.ok, false);
 });
 
 test("parseWebhookPayload flags an unrecognized event type as unknownEvent rather than a hard error", () => {
-  const parsed = parseWebhookPayload('{"event":"message.snoozed","data":{}}');
+  const parsed = parseWebhookPayload('{"event_type":"message.snoozed","data":{}}');
   assert.equal(parsed.ok, false);
   if (!parsed.ok) assert.equal(parsed.unknownEvent, true);
 });

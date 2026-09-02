@@ -12,6 +12,11 @@ import type { CliDeps } from "./index";
 
 const DEFAULT_WEBHOOK_PORT = 8787;
 
+/** Treats an unset OR blank value (e.g. a template's untouched `KEY=` line) as "use the fallback." */
+export function parsePort(raw: string | undefined, fallback: number): number {
+  return raw && raw.trim().length > 0 ? Number(raw) : fallback;
+}
+
 function parseAddresses(raw: string | undefined): readonly EmailAddress[] {
   if (!raw) return [];
   return raw
@@ -303,8 +308,8 @@ async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Pro
     return 1;
   }
 
-  const authToken = process.env["INKBOX_WEBHOOK_AUTH_TOKEN"];
-  const port = Number(process.env["INKBOX_WEBHOOK_PORT"] ?? DEFAULT_WEBHOOK_PORT);
+  const authToken = process.env["INKBOX_WEBHOOK_AUTH_TOKEN"] || undefined;
+  const port = parsePort(process.env["INKBOX_WEBHOOK_PORT"], DEFAULT_WEBHOOK_PORT);
   if (!Number.isInteger(port) || port <= 0) {
     deps.stderr(`INKBOX_WEBHOOK_PORT must be a positive integer (got "${process.env["INKBOX_WEBHOOK_PORT"]}").`);
     return 1;
@@ -326,7 +331,12 @@ async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Pro
         signingKey,
         authToken,
         onEvent: (result) => deps.stdout(`[inkbox webhook] ${result.event}: ${result.actions.join("; ") || "(no action)"}`),
-        onRejected: (info) => deps.stderr(`[inkbox webhook] rejected (${info.statusCode}): ${info.reason}`),
+        onRejected: (info) => {
+          deps.stderr(`[inkbox webhook] rejected (${info.statusCode}): ${info.reason}`);
+          // Temporary diagnostic: only fires for a payload-shape mismatch,
+          // and only while we're actively figuring out the real shape.
+          if (info.rawBody) deps.stderr(`[inkbox webhook] raw body was: ${info.rawBody}`);
+        },
       },
     );
   } catch (error) {
@@ -345,8 +355,10 @@ async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Pro
   const tunnelConfig = getTunnelConfigFromEnv(`http://localhost:${started.port}`);
   if (tunnelConfig) {
     try {
-      tunnel = await connectTunnel(tunnelConfig);
-      deps.stdout(`Tunnel connected. Public URL: ${tunnel.publicUrl}${INKBOX_WEBHOOK_PATH}`);
+      tunnel = await connectTunnel(tunnelConfig, (status) => deps.stdout(`[tunnel status] ${status}`));
+      deps.stdout(
+        `Tunnel connected. Public URL: ${tunnel.publicUrl}${INKBOX_WEBHOOK_PATH} (isConnected: ${tunnel.isConnected})`,
+      );
     } catch (error) {
       deps.stderr(`Failed to connect the Inkbox tunnel: ${(error as Error).message}`);
       deps.stdout("Continuing with the local receiver only — it is not yet reachable from the public internet.");
@@ -360,16 +372,31 @@ async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Pro
 
   deps.stdout("Press Ctrl+C to stop.");
 
-  await new Promise<void>((resolve) => {
-    const shutdown = (): void => {
-      void (async () => {
-        if (tunnel) await tunnel.close();
-        started.server.close(() => resolve());
-      })();
-    };
+  const shutdownRequested = new Promise<void>((resolve) => {
+    const shutdown = (): void => resolve();
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
   });
+
+  // connect() only registers the tunnel; tunnel.wait() is what actually
+  // drives its runtime loop (reconnects, keeps the data-plane alive) and
+  // must be awaited concurrently with everything else, or the connection
+  // is never actually maintained. Race it against a manual shutdown signal
+  // so either one — the tunnel failing fatally, or Ctrl+C — ends the run.
+  if (tunnel) {
+    const currentTunnel = tunnel;
+    await Promise.race([
+      shutdownRequested,
+      currentTunnel.wait().catch((error: unknown) => {
+        deps.stderr(`Tunnel ended unexpectedly: ${(error as Error).message}`);
+      }),
+    ]);
+    await currentTunnel.close();
+  } else {
+    await shutdownRequested;
+  }
+
+  await new Promise<void>((resolve) => started.server.close(() => resolve()));
 
   deps.stdout("Inkbox webhook receiver stopped.");
   return 0;
@@ -383,7 +410,7 @@ async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Pro
  */
 async function webhookHealthCommand(args: readonly string[], deps: CliDeps): Promise<number> {
   const { values } = parseArgs({ args: [...args], options: { port: { type: "string" } } });
-  const port = Number(values.port ?? process.env["INKBOX_WEBHOOK_PORT"] ?? DEFAULT_WEBHOOK_PORT);
+  const port = parsePort(values.port ?? process.env["INKBOX_WEBHOOK_PORT"], DEFAULT_WEBHOOK_PORT);
   const url = `http://localhost:${port}${INKBOX_WEBHOOK_PATH}/health`;
 
   try {

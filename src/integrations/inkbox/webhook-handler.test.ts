@@ -160,6 +160,67 @@ test("message.received resumes the matching waiting_for_response run by thread i
   });
 });
 
+test("message.received parses the real nested data.message envelope, not just a flat data object", async () => {
+  await withOwnerEnv(undefined, async () => {
+    const deps = buildDeps();
+    const run: Run = {
+      ...startRun(createTask("book a table"), testAgent, "run-1"),
+      status: "waiting_for_response",
+      threadId: "thread-1",
+    };
+    await deps.store.save(run);
+
+    // The exact shape confirmed from a real Inkbox delivery: event name is
+    // `event_type` (handled in webhook.ts), and message fields live under
+    // `data.message`, not flat on `data`.
+    const result = await handleInkboxWebhookEvent(
+      { event: "message.received", data: { message: receivedMessageData() } },
+      deps,
+    );
+
+    assert.match(result.actions.join(" | "), /resumed run "run-1" \(now "succeeded"\)/);
+  });
+});
+
+test("message.received re-fetches the real body when the webhook payload's body is unavailable", async () => {
+  await withOwnerEnv(undefined, async () => {
+    const client = new FakeInkboxClient(MAILBOX);
+    client.receiveInbound({
+      id: "msg-1",
+      threadId: "thread-1",
+      from: { address: "restaurant@example.com" },
+      to: [{ address: MAILBOX }],
+      subject: "Re: booking",
+      body: "The real body, only available via a direct fetch.",
+      receivedAt: new Date().toISOString(),
+    });
+    const deps = buildDeps({ inkboxClient: client });
+    const run: Run = {
+      ...startRun(createTask("book a table"), testAgent, "run-1"),
+      status: "waiting_for_response",
+      threadId: "thread-1",
+    };
+    await deps.store.save(run);
+
+    // Mirrors a real payload with body_state: "unavailable" — no body_text,
+    // no snippet, just a null body.
+    const result = await handleInkboxWebhookEvent(
+      {
+        event: "message.received",
+        data: { message: receivedMessageData({ body_text: undefined, body: null, snippet: null }) },
+      },
+      deps,
+    );
+
+    assert.match(result.actions.join(" | "), /resumed run "run-1"/);
+    const updated = await deps.store.load("run-1");
+    assert.match(
+      updated?.session.messages.map((m) => m.content).join("\n") ?? "",
+      /The real body, only available via a direct fetch\./,
+    );
+  });
+});
+
 test("message.received does nothing extra when no run is waiting on that thread", async () => {
   await withOwnerEnv(undefined, async () => {
     const deps = buildDeps();

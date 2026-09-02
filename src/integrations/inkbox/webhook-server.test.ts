@@ -50,7 +50,7 @@ async function withServer(
 }
 
 function signedRequestInit(event: InkboxEventType, data: Record<string, unknown>, requestId = "req-1", timestamp = String(Math.floor(Date.now() / 1000))) {
-  const body = JSON.stringify({ event, data });
+  const body = JSON.stringify({ event_type: event, data });
   return {
     method: "POST",
     headers: {
@@ -63,11 +63,29 @@ function signedRequestInit(event: InkboxEventType, data: Record<string, unknown>
   };
 }
 
-test("a correctly signed request is accepted, processed, and reported via onEvent", async () => {
+/**
+ * The server now acknowledges (200) before processing (see webhook-server.ts:
+ * a webhook sender must not be kept waiting on forwarding/resume work, which
+ * can be slow or hang), so `onEvent` fires slightly after the response
+ * resolves. Tests poll briefly rather than assuming synchronous completion.
+ */
+async function waitForEventCount(
+  events: readonly unknown[],
+  count: number,
+  timeoutMs = 1000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (events.length < count && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+test("a correctly signed request is accepted immediately, then processed and reported via onEvent", async () => {
   await withServer({}, async (baseUrl, events) => {
     const res = await fetch(`${baseUrl}${INKBOX_WEBHOOK_PATH}`, signedRequestInit("message.sent", { id: "m1" }));
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { ok: true });
+    await waitForEventCount(events, 1);
     assert.equal(events.length, 1);
     assert.equal(events[0]?.event, "message.sent");
   });
@@ -105,6 +123,7 @@ test("a replayed request id is acknowledged as a duplicate without reprocessing"
     const init = signedRequestInit("message.sent", { id: "m1" }, "req-replay");
     const first = await fetch(`${baseUrl}${INKBOX_WEBHOOK_PATH}`, init);
     assert.equal(first.status, 200);
+    await waitForEventCount(events, 1);
     const second = await fetch(`${baseUrl}${INKBOX_WEBHOOK_PATH}`, init);
     assert.equal(second.status, 200);
     assert.deepEqual(await second.json(), { ok: true, duplicate: true });

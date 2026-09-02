@@ -30,26 +30,34 @@ function strArray(value: unknown): string[] {
 }
 
 /**
- * The webhook payload's exact envelope isn't published by Inkbox for every
- * event type, so this is deliberately tolerant: it accepts the RawMessage-
- * shaped fields documented in Inkbox's own SDK (snake_case: id, thread_id,
- * from_address, to_addresses, subject, body_text/snippet, created_at) and
- * degrades gracefully — returning undefined rather than throwing — for a
- * payload shape that doesn't match.
+ * Confirmed against a real delivered payload: the message fields are
+ * nested under `data.message`, not flat on `data` itself, e.g.
+ * `data.message.{id, thread_id, from_address, to_addresses, subject, body,
+ * created_at}`. Falls back to a flat `data` shape too, in case a future
+ * event type (or a documentation-only source) doesn't nest the same way —
+ * degrades to undefined rather than throwing either way.
+ *
+ * `body` is frequently `null` here (Inkbox may report `body_state:
+ * "unavailable"` and omit it from the webhook payload itself) — this
+ * returns whatever the payload had, which can be `""`. Callers that need
+ * the real content (e.g. resuming a waiting Run) must re-fetch it via
+ * `InkboxClient.getMessage`, the same way `forward()` already does.
  */
 function parseWebhookMessage(data: Record<string, unknown>): EmailMessage | undefined {
-  const id = str(data["id"]) ?? str(data["message_id"]);
-  const fromAddress = str(data["from_address"]);
+  const nested = typeof data["message"] === "object" && data["message"] !== null ? (data["message"] as Record<string, unknown>) : data;
+
+  const id = str(nested["id"]) ?? str(nested["message_id"]);
+  const fromAddress = str(nested["from_address"]);
   if (!id || !fromAddress) return undefined;
 
   return {
     id,
-    threadId: str(data["thread_id"]) ?? id,
+    threadId: str(nested["thread_id"]) ?? id,
     from: { address: fromAddress },
-    to: strArray(data["to_addresses"]).map((address) => ({ address })),
-    subject: str(data["subject"]) ?? "",
-    body: str(data["body_text"]) ?? str(data["snippet"]) ?? "",
-    receivedAt: str(data["created_at"]) ?? new Date().toISOString(),
+    to: strArray(nested["to_addresses"]).map((address) => ({ address })),
+    subject: str(nested["subject"]) ?? "",
+    body: str(nested["body"]) ?? str(nested["body_text"]) ?? str(nested["snippet"]) ?? "",
+    receivedAt: str(nested["created_at"]) ?? new Date().toISOString(),
   };
 }
 
@@ -104,10 +112,16 @@ async function handleMessageReceived(message: EmailMessage, deps: WebhookHandler
     return;
   }
 
+  // The webhook payload's body is frequently empty/unavailable inline —
+  // re-fetch the real message to get actual content to resume with,
+  // falling back to whatever the payload had if the re-fetch comes up empty.
+  const fullMessage = await deps.inkboxClient.getMessage(message.id);
+  const replyBody = fullMessage?.body || message.body;
+
   const agent = deps.registry.getAgent(waitingRun.agentName);
   const provider = deps.registry.getProvider(agent.providerName);
   const tools = deps.registry.toolMapFor(agent.toolNames);
-  const resumed = await resumeWithReply(waitingRun, agent, { provider, tools }, message.body);
+  const resumed = await resumeWithReply(waitingRun, agent, { provider, tools }, replyBody);
   await deps.store.save(resumed);
   actions.push(`resumed run "${resumed.id}" (now "${resumed.status}")`);
 }
@@ -118,12 +132,16 @@ async function recordLifecycleEvent(
   deps: WebhookHandlerDeps,
   actions: string[],
 ): Promise<void> {
-  const messageId = str(data["id"]) ?? str(data["message_id"]);
+  // Same envelope convention confirmed for message.received — assumed
+  // consistent across the other message.* event types, with a flat-`data`
+  // fallback for tolerance.
+  const nested = typeof data["message"] === "object" && data["message"] !== null ? (data["message"] as Record<string, unknown>) : data;
+  const messageId = str(nested["id"]) ?? str(nested["message_id"]);
   if (!messageId) {
     actions.push(`"${event}" event had no message id; not recorded`);
     return;
   }
-  const detail = str(data["reason"]) ?? str(data["error"]) ?? str(data["status"]);
+  const detail = str(nested["reason"]) ?? str(nested["error"]) ?? str(nested["status"]);
   await deps.messageEventLog.record({ messageId, event, detail, occurredAt: new Date().toISOString() });
   actions.push(`recorded "${event}" for message "${messageId}"`);
 }

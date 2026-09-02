@@ -44,9 +44,11 @@ export function parseWebhookPayload(raw: string): ParsedWebhookPayload {
     return { ok: false, reason: "webhook body must be a JSON object" };
   }
   const body = json as Record<string, unknown>;
-  const event = body["event"];
+  // Confirmed against a real delivered payload: Inkbox names this field
+  // `event_type`, not `event`.
+  const event = body["event_type"];
   if (typeof event !== "string") {
-    return { ok: false, reason: 'webhook body is missing a string "event" field' };
+    return { ok: false, reason: 'webhook body is missing a string "event_type" field' };
   }
   if (!isInkboxEventType(event)) {
     return { ok: false, reason: `unrecognized event type "${event}"`, unknownEvent: true };

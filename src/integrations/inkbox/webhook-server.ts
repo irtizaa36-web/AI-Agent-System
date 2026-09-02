@@ -16,6 +16,8 @@ const DEFAULT_TIMESTAMP_TOLERANCE_SECONDS = 300;
 export interface RejectedRequestInfo {
   readonly reason: string;
   readonly statusCode: number;
+  /** Set only for a parse failure — the exact bytes that didn't match the expected shape, for diagnosing a real payload against assumptions. */
+  readonly rawBody?: string;
 }
 
 export interface WebhookServerOptions {
@@ -124,18 +126,25 @@ export function createInkboxWebhookServer(deps: WebhookHandlerDeps, options: Web
           sendJson(res, 200, { ok: true, ignored: true });
           return;
         }
-        options.onRejected?.({ reason: parsed.reason, statusCode: 400 });
+        options.onRejected?.({ reason: parsed.reason, statusCode: 400, rawBody: rawBody.toString("utf-8") });
         sendJson(res, 400, { error: parsed.reason });
         return;
       }
 
-      try {
-        const result = await handleInkboxWebhookEvent(parsed.event, deps);
-        options.onEvent?.(result);
-        sendJson(res, 200, { ok: true });
-      } catch (error) {
-        sendJson(res, 500, { error: (error as Error).message });
-      }
+      // Acknowledge immediately: everything above this line is fast and
+      // synchronous (crypto checks, JSON parsing), but handleInkboxWebhookEvent
+      // does real I/O (forwarding, resuming a Run) that can be slow or, if
+      // something downstream hangs, effectively unbounded. A webhook sender
+      // times out and may retry a slow-to-acknowledge delivery, so the
+      // response must not wait on that work — it happens after, logged via
+      // onEvent/onRejected rather than reflected in the HTTP status.
+      sendJson(res, 200, { ok: true });
+
+      handleInkboxWebhookEvent(parsed.event, deps)
+        .then((result) => options.onEvent?.(result))
+        .catch((error: unknown) => {
+          options.onRejected?.({ reason: `handler failed after ack: ${(error as Error).message}`, statusCode: 200 });
+        });
     })();
   });
 }
