@@ -85,6 +85,30 @@ test("advance executes a requested Tool and keeps the Run running", async () => 
   assert.equal(toolMessage?.content, "echoed:ping");
 });
 
+test("advance feeds a Tool's execution error back as a tool result, rather than crashing the Run", async () => {
+  const task = createTask("call a tool with bad input");
+  const testAgent = agent({ toolNames: ["picky"] });
+  const run = startRun(task, testAgent);
+  const pickyTool: Tool = {
+    name: "picky",
+    description: "rejects malformed input",
+    inputSchema: {},
+    execute: () => {
+      throw new Error('picky requires { "address": string }');
+    },
+  };
+  const provider = new FakeProvider([
+    { content: "calling it", toolCalls: [{ id: "call-1", toolName: "picky", input: { wrong: "shape" } }], stopReason: "tool_use" },
+  ]);
+
+  const next = await advance(run, testAgent, { provider, tools: new Map([["picky", pickyTool]]) });
+
+  assert.equal(next.status, "running");
+  const toolMessage = next.session.messages.at(-1);
+  assert.equal(toolMessage?.role, "tool");
+  assert.match(toolMessage?.content ?? "", /^Error: picky requires/);
+});
+
 test("advance fails a Run that requests a Tool the Agent isn't wired with", async () => {
   const task = createTask("use a missing tool");
   const testAgent = agent({ toolNames: ["missing"] });

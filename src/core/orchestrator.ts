@@ -123,9 +123,20 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
 
   for (const call of response.toolCalls) {
     const tool = deps.tools.get(call.toolName);
-    const content = tool
-      ? String(await tool.execute(call.input))
-      : `Error: unknown tool "${call.toolName}"`;
+    let content: string;
+    if (!tool) {
+      content = `Error: unknown tool "${call.toolName}"`;
+    } else {
+      try {
+        content = String(await tool.execute(call.input));
+      } catch (error) {
+        // A malformed call (e.g. the model calling a Tool with an invalid
+        // input shape) is fed back as a tool result, not a crashed Run —
+        // the model can see its own mistake and retry, the same way it
+        // already recovers from an unknown-tool-name error above.
+        content = `Error: ${(error as Error).message}`;
+      }
+    }
     session = appendMessage(session, { role: "tool", content, toolCallId: call.id });
   }
 
