@@ -1,0 +1,13 @@
+---
+status: accepted
+---
+
+# LinkedIn jobs via forwarded alert emails, not automation against linkedin.com
+
+ADR 0012 built job-board reading for public, crawler-tolerant pages (RemoteOK, Greenhouse/Lever company boards). LinkedIn is a different case entirely, and deliberately gets no browser-automation Tool pointed at it: LinkedIn enforces its anti-automation terms aggressively and has pursued legal action against scrapers, and its job search results are largely gated behind a login in the first place. Unlike Indeed's Cloudflare block (ADR 0012, a technical hurdle the agent correctly reported rather than working around), LinkedIn's restriction is a deliberate policy stance — attempting to defeat it would be the actual risk, not a problem to engineer past. No amount of technique changes that; this was a request the user explicitly asked to be solved "without being a security risk," and the answer is procedural, not technical.
+
+**The safe path: let LinkedIn's own sanctioned distribution do the work.** LinkedIn already has a legitimate, ToS-compliant "Job Alerts" feature that emails matching listings on its own schedule — completely normal account usage, no automation involved. `job-search-agent` now has `inkbox-search-mail`/`inkbox-read-thread` (already-built, already-tested Tools, unchanged) added to its toolset, and its prompt treats a forwarded job-alert email as a second source of listings alongside job-board pages, extracting only what the email actually contains — same anti-fabrication discipline as everywhere else in this Pack.
+
+**Landing spot for now: the existing Inkbox mailbox (`toozy@inkboxmail.com`), not a new integration.** The requester (the user's wife) isn't available yet to set up her own connector, and the goal was to keep moving without her. Rather than building a bespoke Gmail OAuth integration into this codebase on spec, forwarding her LinkedIn alerts to the mailbox this project already fully controls (webhook receiver, search, read — all live since the Inkbox work earlier this session) needed zero new code. When she's available, connecting her own Gmail account as its own Claude connector is a real option — but that's an account-level action in Claude's own Settings, not something this codebase builds or automates; switching the mailbox target later is a configuration change, not new engineering.
+
+**Not built:** any browser-based interaction with linkedin.com, in any form (read-only or otherwise). If a future real need justifies it, that would need its own explicit decision the way every other capability boundary in this project has — not a quiet extension of ADR 0012's browser-reading pattern to a site that was deliberately excluded from it.

@@ -24,7 +24,7 @@ Anything that blocked you — the resume file wasn't found or wasn't readable, a
 ## Status
 State plainly that this is informational only: no job application was submitted, no employer was contacted, and nothing was saved or sent anywhere unless a tool result actually proves otherwise.
 
-You have a tool to read a file (the person's real resume) and a tool to read a public job-board search-results page. Both are read-only. Use the job-board tool with whatever search URL you're given in the task — don't invent search parameters or guess at a job board's URL structure if you weren't given one.`;
+You have a tool to read a file (the person's real resume), a tool to read a public job-board search-results page, and tools to search and read the mailbox. Reading a job-board page is one source of listings; the other is job-alert emails (e.g. LinkedIn's own daily job-alert emails, forwarded or auto-forwarded into this mailbox) — use inkbox-search-mail to find recent alert emails and inkbox-read-thread to read one in full, then extract only the actual listings it contains (title, company, location, link if present). All are read-only. Never invent a listing that wasn't actually in a page or email you read — if an alert email's format is unclear or a listing's details are incomplete, say so in Missing Information rather than guessing. Use the job-board tool with whatever search URL you're given in the task — don't invent search parameters or guess at a job board's URL structure if you weren't given one.`;
 
 /**
  * The Job Search Pack (ADR 0012): the first Pack in this project for a
@@ -41,9 +41,9 @@ export const jobSearchPack: Pack = {
       providerName: "claude",
       model: "claude-sonnet-5",
       systemPrompt: JOB_SEARCH_SYSTEM_PROMPT,
-      toolNames: ["read-file", "read-job-board-page"],
+      toolNames: ["read-file", "read-job-board-page", "inkbox-search-mail", "inkbox-read-thread"],
       description:
-        "Finds job openings from public job-board search results, assesses fit against a real resume, and tailors the resume for listings that need it - using only real work experience, never invented. Cannot apply to anything or contact an employer.",
+        "Finds job openings from public job-board search results and forwarded job-alert emails (e.g. LinkedIn), assesses fit against a real resume, and tailors the resume for listings that need it - using only real work experience, never invented. Cannot apply to anything or contact an employer.",
     });
   },
 };
