@@ -15,6 +15,8 @@ function sampleRun(id: string): Run {
     session: { messages: [] },
     steps: [],
     result: { status: "succeeded", output: "hi!" },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    completedAt: "2026-01-01T00:00:01.000Z",
   };
 }
 
@@ -37,6 +39,8 @@ test("JsonFileRunStore persists a run to disk and reads it back", async () => {
 
     assert.equal(loaded?.id, "run-1");
     assert.equal(loaded?.result?.output, "hi!");
+    assert.equal(loaded?.createdAt, "2026-01-01T00:00:00.000Z");
+    assert.equal(loaded?.completedAt, "2026-01-01T00:00:01.000Z");
     assert.equal((await store.list()).length, 1);
   } finally {
     await rm(dir, { recursive: true, force: true });

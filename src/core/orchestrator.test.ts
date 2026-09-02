@@ -25,6 +25,8 @@ test("startRun seeds a queued Run from the Agent's system prompt and the Task", 
   assert.equal(run.status, "queued");
   assert.equal(run.steps.length, 0);
   assert.equal(run.session.messages[1]?.content, "say hi");
+  assert.equal(Number.isNaN(Date.parse(run.createdAt)), false);
+  assert.equal(run.completedAt, undefined);
 });
 
 test("advance succeeds a Run in one step when the Provider ends the turn immediately", async () => {
@@ -37,6 +39,8 @@ test("advance succeeds a Run in one step when the Provider ends the turn immedia
   assert.equal(next.status, "succeeded");
   assert.equal(next.result?.output, "hello!");
   assert.equal(next.steps.length, 1);
+  assert.equal(Number.isNaN(Date.parse(next.steps[0]?.occurredAt ?? "")), false);
+  assert.equal(Number.isNaN(Date.parse(next.completedAt ?? "")), false);
 });
 
 test("advance executes a requested Tool and keeps the Run running", async () => {
@@ -84,7 +88,10 @@ test("advance fails a Run once it exceeds its max steps, without calling the Pro
   const task = createTask("loop forever");
   const testAgent = agent({ maxSteps: 1 });
   const run = startRun(task, testAgent);
-  const runAtLimit = { ...run, steps: [{ index: 0, responseContent: "x", toolCalls: [] }] };
+  const runAtLimit = {
+    ...run,
+    steps: [{ index: 0, occurredAt: new Date().toISOString(), responseContent: "x", toolCalls: [] }],
+  };
   const provider = new FakeProvider([]);
 
   const next = await advance(runAtLimit, testAgent, { provider, tools: new Map() });
@@ -92,6 +99,7 @@ test("advance fails a Run once it exceeds its max steps, without calling the Pro
   assert.equal(next.status, "failed");
   assert.match(next.result?.error ?? "", /Exceeded max steps/);
   assert.equal(provider.calls, 0);
+  assert.equal(Number.isNaN(Date.parse(next.completedAt ?? "")), false);
 });
 
 test("runToCompletion drives a multi-step tool-use Run through to success", async () => {
@@ -121,4 +129,6 @@ test("runToCompletion drives a multi-step tool-use Run through to success", asyn
   assert.equal(run.result?.output, "all done");
   assert.equal(run.steps.length, 2);
   assert.equal(provider.calls, 2);
+  assert.ok(run.steps.every((step) => !Number.isNaN(Date.parse(step.occurredAt))));
+  assert.equal(Number.isNaN(Date.parse(run.completedAt ?? "")), false);
 });

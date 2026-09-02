@@ -23,6 +23,7 @@ export function startRun(task: Task, agent: AgentDefinition, id: string = random
     status: "queued",
     session: createSession(agent.systemPrompt, task.instructions),
     steps: [],
+    createdAt: new Date().toISOString(),
   };
 }
 
@@ -43,6 +44,7 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
       ...run,
       status: "failed",
       result: { status: "failed", output: "", error: `Exceeded max steps (${maxSteps})` },
+      completedAt: new Date().toISOString(),
     };
   }
 
@@ -68,6 +70,7 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
 
   const step: Step = {
     index: run.steps.length,
+    occurredAt: new Date().toISOString(),
     responseContent: response.content,
     toolCalls: response.toolCalls,
   };
@@ -80,6 +83,7 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
       steps,
       status: "succeeded",
       result: { status: "succeeded", output: response.content },
+      completedAt: new Date().toISOString(),
     };
   }
 
