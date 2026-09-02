@@ -2,7 +2,7 @@
 
 A permanent, plain-English briefing document for this repository. It exists for two audiences: Irtiza (the product/domain owner, not a software engineer, and not expected to read TypeScript or run terminal commands personally), and any future Claude Code session picking this project back up cold. Read this before any major architectural work.
 
-This document describes the repository **as it actually exists**, checked directly against the code and `docs/adr/*` at the time of writing (latest commit `1e2d0c2`; 42 passing tests). Where something is planned rather than built, it is explicitly labeled as such.
+This document describes the repository **as it actually exists**, checked directly against the code and `docs/adr/*` at the time of writing (all tests passing — run `npm test` for the current count, which changes often enough that pinning a number here would quickly go stale). Where something is planned rather than built, it is explicitly labeled as such.
 
 ---
 
@@ -71,7 +71,13 @@ Plain-English explanations of every implemented piece, in `src/`:
 - **Agents** — currently there are exactly two, both examples/placeholders rather than real products (see Packs below): `default` (uses the real Claude model) and `demo` (uses a fake, scripted model for testing/demos that require no API key or cost).
 - **Packs** (`src/packs/`) — a "Pack" is a self-contained bundle of Agents (and, eventually, their own Tools) for one product or domain. Right now there is exactly one: `core-demo`, holding the two placeholder agents above. This is intentionally not a real product — it exists to prove the pattern works before any real domain content (IM Brain, A&I Research, etc.) is built on top of it.
 - **Model providers** (`src/providers/`) — the adapters that actually talk to an AI model vendor's API. There are two: `anthropic.ts` (talks to Claude's real API — requires an API key, which is deliberately not configured in this project) and `fake.ts` (a scripted, deterministic stand-in used for tests and for running the CLI demo without needing a real API key or spending any money).
-- **Tools** (`src/tools/`) — capabilities an AI agent can use mid-conversation to act on the world, beyond just talking. There is currently exactly one: `read-file`, which lets an agent read the contents of a text file from disk. No other tools (email, web browsing, calendar, GitHub, etc.) exist yet.
+- **Tools** (`src/tools/`) — capabilities an AI agent can use mid-conversation to act on the world, beyond just talking. `read-file` reads a text file from disk. The rest are the email tools below. No other tool category (web browsing, calendar, GitHub, phone, etc.) exists yet.
+- **Inkbox email integration** (`src/integrations/inkbox/`) — the mailbox capability, now real, not just a placeholder:
+  - `client.ts` defines the `InkboxClient` port (search/read/draft/send/forward); `fake-client.ts` is the deterministic in-memory stand-in tests use; `real-client.ts` is the production implementation, calling Inkbox's actual Mail API directly with `fetch` (no SDK dependency — see ADR 0006). Inkbox's real API has no server-side draft concept, so `draft-store.ts` keeps "draft" as a concept this project owns, persisted to disk (`JsonFileDraftStore`) so the draft → review → approve → send CLI flow survives across process restarts.
+  - `webhook.ts` / `webhook-handler.ts` / `webhook-server.ts` implement a real-time webhook receiver at the fixed path `/inkbox/mail`: it verifies Inkbox's HMAC-signed headers, a timestamp-freshness window, request-id replay protection, and an optional bearer token (`INKBOX_WEBHOOK_AUTH_TOKEN`) before processing `message.received/sent/forwarded/delivered/bounced/failed` events. A received message is forwarded to `OWNER_FORWARD_EMAIL` at most once (`JsonFileForwardingLog` persists that across restarts) and can resume a matching `waiting_for_response` Run in real time; the other five event types are recorded to `JsonFileMessageEventLog` for audit history.
+  - `tunnel.ts` opens the actual public tunnel connection (`*.inkboxwire.com` → this local receiver) via `@inkbox/sdk` — the one runtime dependency this project has, deliberately scoped to just this file (see ADR 0006).
+  - The CLI's polling fallback (`orchestrator inkbox check-replies`) still exists and still works, alongside the new live receiver (`orchestrator inkbox serve-webhook`, with `orchestrator inkbox webhook-health` to confirm it's up).
+  - None of this has been run against a real Inkbox mailbox or a real signing key — every test uses fakes, and real credentials are read only from environment variables at runtime.
 - **Registry** (`src/registry/`) — a simple lookup system: a place where Agents, Providers, and Tools are each registered under a name, so the system can find "the agent called X" or "the tool called Y" when it needs to.
 - **Config** (`src/config/load.ts`) — the "wiring" step that runs when the program starts: it registers the built-in Providers and Tools, then loads whichever Packs are currently enabled (today, just `core-demo`).
 - **Store** (`src/store/run-store.ts`) — where the history of a Run gets saved so it can be looked at later. There are two versions: one that only keeps history in memory (used for fast tests), and one that saves each Run as a JSON file on disk (used by the actual CLI, under a `.orchestrator/` folder that is not saved to Git).
@@ -87,6 +93,7 @@ Concrete, tested, working capabilities as of today:
 - You can run a task through the AI orchestration engine from the command line and get a real result back.
 - You can do this entirely for free and offline, using the built-in fake/demo agent — no API key, no cost, fully repeatable.
 - The engine is also wired to run tasks through real Claude models, but this path has never actually been exercised (no API key has been configured, and none should be, per current instructions) — it is built and its "no key configured" error path is tested, but a real Claude call has never been made.
+- The email integration is similarly built-but-unexercised for real credentials: a real Inkbox Mail API client and a real-time, signature-verified webhook receiver exist and are fully tested against fakes, but no real `INKBOX_API_KEY`, mailbox, or signing key has ever been configured, and the real Toozy mailbox has never been read from, sent from, or forwarded from during development.
 - Every Run's full history (what was asked, what the AI said, what tools ran, when each step happened) is automatically saved to disk as a readable JSON file.
 - The system can look up available agents and reject unknown ones with a clear error message.
 - The pattern for adding a brand-new domain (a "Pack") has been proven end-to-end, though only with placeholder content — no real domain (medical, research, career) content exists yet.
@@ -113,7 +120,7 @@ Standing rules this project has committed to, most of them recorded formally in 
 - **Domain-specific logic belongs in Packs**, not in Core (ADR 0003).
 - **Model providers should remain replaceable.** Adding a new AI vendor should never require changing Core (ADR 0001).
 - **Prefer small, composable components** — deep, focused modules behind simple interfaces, rather than large, tangled ones.
-- **Avoid unnecessary dependencies and infrastructure.** The whole project currently has zero runtime dependencies — only TypeScript itself as a development tool (ADR 0002).
+- **Avoid unnecessary dependencies and infrastructure.** The project has exactly one runtime dependency, `@inkbox/sdk`, scoped to the single file that opens the Inkbox tunnel connection because no documented alternative to it exists (ADR 0006); everything else, including the Inkbox Mail API client itself, still calls `fetch` directly with zero dependencies (ADR 0002).
 - **Test important behavior.** All 33 pieces of behavior described above are covered by automated tests, not just claimed to work.
 - **Build infrastructure when a real use case requires it, not speculatively.** Several deferred items in Section 10 are deferred specifically because building them without a real use case to design against would mean guessing.
 - **Consequential capabilities must be split into safe read/draft operations and separate, gated send/execute/modify/delete operations** (e.g. a `draft-email` tool must be a different tool from `send-email`) (ADR 0004, Section 2).
@@ -194,7 +201,7 @@ For what's currently and intentionally *not* being built, see the list below.
 
 - A full multi-step **workflow engine** (chaining multiple agents/tasks together automatically).
 - **Human-in-the-loop infrastructure** (a way for a Run to pause and wait for a person's approval or input).
-- **Browser automation, email/SMS automation, calendar integration, GitHub integration, or any computer-control tools.**
+- **Browser automation, SMS/phone automation, calendar integration, GitHub integration, or any other computer-control tools.** (Email is now the one exception — see the Inkbox email integration bullet in Section 3.)
 - **EHR integration** of any kind.
 - **Deployment infrastructure** (servers, hosting, CI/CD pipelines, containers).
 - **Unnecessary databases or external services** — the project currently uses only local JSON files for storage.
