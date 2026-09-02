@@ -13,6 +13,6 @@ test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' 
     .listAgents()
     .map((agent) => agent.name)
     .sort();
-  assert.deepEqual(names, ["default", "demo"]);
-  assert.deepEqual(registry.listPacks(), ["core-demo"]);
+  assert.deepEqual(names, ["default", "demo", "personal-admin"]);
+  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant"]);
 });

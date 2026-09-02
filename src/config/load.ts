@@ -4,13 +4,14 @@ import { createAnthropicProvider } from "../providers/anthropic";
 import { createEchoProvider } from "../providers/fake";
 import { readFileTool } from "../tools/read-file";
 import { coreDemoPack } from "../packs/core-demo/pack";
+import { personalAssistantPack } from "../packs/personal-assistant/pack";
 
 /**
  * Packs enabled by default. A future CLI flag or config file can change
  * which Packs load without touching the engine — this list is the only
  * place that currently decides.
  */
-const ENABLED_PACKS: readonly Pack[] = [coreDemoPack];
+const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack];
 
 /**
  * Builds the default Registry: engine-level Providers and Tools (available

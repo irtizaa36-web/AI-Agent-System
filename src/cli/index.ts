@@ -41,14 +41,29 @@ export function parseTestSummary(output: string): string | undefined {
   return fail === "0" ? `${pass}/${total} passing` : `${pass}/${total} passing, ${fail} failing`;
 }
 
-/** Best-effort: actually runs the compiled test suite if it's been built, rather than guessing. */
+const RECURSION_GUARD_ENV_VAR = "ORCHESTRATOR_STATUS_CHECK_IN_PROGRESS";
+
+/**
+ * Best-effort: actually runs the compiled test suite if it's been built,
+ * rather than guessing. That nested run includes this very test file, whose
+ * own status test would otherwise try to spawn another nested run in turn —
+ * an env var guard caps this at exactly one real level of recursion.
+ */
 export function getTestStatus(cwd: string): string {
   const distDir = join(cwd, "dist");
   if (!existsSync(distDir)) {
     return "not built yet (run `npm run build` or `npm test`)";
   }
 
-  const result = spawnSync(process.execPath, ["--test", distDir], { cwd, encoding: "utf-8" });
+  if (process.env[RECURSION_GUARD_ENV_VAR] === "1") {
+    return "skipped (already inside a status check)";
+  }
+
+  const result = spawnSync(process.execPath, ["--test", distDir], {
+    cwd,
+    encoding: "utf-8",
+    env: { ...process.env, [RECURSION_GUARD_ENV_VAR]: "1" },
+  });
   const summary = parseTestSummary(`${result.stdout ?? ""}\n${result.stderr ?? ""}`);
   return summary ?? "unable to determine (run `npm test` manually)";
 }

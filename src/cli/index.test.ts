@@ -109,10 +109,10 @@ test("runCli status reports agent/provider/tool/pack counts and names", async ()
 
   assert.equal(code, 0);
   const output = stdout.join("\n");
-  assert.match(output, /Agents:\s+2 \(default, demo\)/);
+  assert.match(output, /Agents:\s+3 \(default, demo, personal-admin\)/);
   assert.match(output, /Providers:\s+2 \(claude, fake\)/);
   assert.match(output, /Tools:\s+1 \(read-file\)/);
-  assert.match(output, /Packs:\s+1 \(core-demo\)/);
+  assert.match(output, /Packs:\s+2 \(core-demo, personal-assistant\)/);
   assert.match(output, /Tests:\s+\S/);
   assert.match(output, /Git:\s+\S/);
   assert.match(output, /Capabilities currently available:/);
@@ -160,5 +160,18 @@ test("getTestStatus reports not-built when the target directory has no dist/", a
     assert.match(getTestStatus(dir), /not built yet/);
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("getTestStatus refuses to recurse when already inside a status check", () => {
+  const guardVar = "ORCHESTRATOR_STATUS_CHECK_IN_PROGRESS";
+  const original = process.env[guardVar];
+  process.env[guardVar] = "1";
+
+  try {
+    assert.match(getTestStatus(process.cwd()), /skipped \(already inside a status check\)/);
+  } finally {
+    if (original === undefined) delete process.env[guardVar];
+    else process.env[guardVar] = original;
   }
 });
