@@ -37,6 +37,29 @@ test("inkbox-save-draft saves a draft with no owner BCC while forwarding is disa
   });
 });
 
+test("inkbox-save-draft rejects a `to` entry with no address, rather than crashing inside computeOutboundBcc", async () => {
+  const client = new FakeInkboxClient("agent@example.test");
+  const tool = createInkboxSaveDraftTool(client);
+
+  await assert.rejects(
+    () => Promise.resolve(tool.execute({ to: [{ name: "Dr. Motazedi" }], subject: "Hi", body: "..." })),
+    /requires \{ "to": \[\{"address": string\}/,
+  );
+});
+
+test("send-email rejects a `to` entry with no address, rather than crashing", async () => {
+  const client = new FakeInkboxClient("agent@example.test");
+  const tool = createSendEmailTool(client);
+
+  await assert.rejects(
+    () =>
+      Promise.resolve(
+        tool.execute({ to: [{ name: "Dr. Motazedi" }], subject: "Hi", body: "...", bcc: [], draftId: "d1", revision: "r1" }),
+      ),
+    /send-email requires/,
+  );
+});
+
 test("inkbox-save-draft includes the owner BCC once forwarding is configured", async () => {
   await withOwnerEnv("owner@example.com", async () => {
     const client = new FakeInkboxClient("agent@example.test");

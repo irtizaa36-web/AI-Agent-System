@@ -1,5 +1,6 @@
 import type { Tool } from "./tool";
 import type { EmailAddress, InkboxClient } from "../integrations/inkbox/client";
+import { isEmailAddressArray } from "../integrations/inkbox/client";
 import { computeOutboundBcc } from "../integrations/inkbox/owner-forwarding";
 
 interface SaveDraftInput {
@@ -13,7 +14,7 @@ interface SaveDraftInput {
 function isSaveDraftInput(value: unknown): value is SaveDraftInput {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Partial<SaveDraftInput>;
-  return Array.isArray(v.to) && v.to.length > 0 && typeof v.subject === "string" && typeof v.body === "string";
+  return isEmailAddressArray(v.to) && v.to.length > 0 && typeof v.subject === "string" && typeof v.body === "string";
 }
 
 /**

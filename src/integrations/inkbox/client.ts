@@ -11,6 +11,18 @@ export interface EmailAddress {
   readonly name?: string;
 }
 
+/**
+ * Validates a full array of `{ address: string }` entries, not just that
+ * the array itself exists — a Tool's own input guard (isSaveDraftInput,
+ * isSendEmailInput) must catch a malformed entry (e.g. a model calling a
+ * Tool with a name but no known email address) with a clear error, rather
+ * than letting `undefined.toLowerCase()` crash deep inside
+ * computeOutboundBcc/sameAddresses.
+ */
+export function isEmailAddressArray(value: unknown): value is readonly EmailAddress[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "object" && v !== null && typeof (v as { address?: unknown }).address === "string" && (v as { address: string }).address.length > 0);
+}
+
 export interface EmailMessage {
   readonly id: string;
   readonly threadId: string;

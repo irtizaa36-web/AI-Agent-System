@@ -1,5 +1,6 @@
 import type { Tool } from "./tool";
 import type { EmailAddress, InkboxClient } from "../integrations/inkbox/client";
+import { isEmailAddressArray } from "../integrations/inkbox/client";
 
 interface SendEmailInput {
   readonly to: readonly EmailAddress[];
@@ -14,10 +15,10 @@ function isSendEmailInput(value: unknown): value is SendEmailInput {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Partial<SendEmailInput>;
   return (
-    Array.isArray(v.to) &&
+    isEmailAddressArray(v.to) &&
     typeof v.subject === "string" &&
     typeof v.body === "string" &&
-    Array.isArray(v.bcc) &&
+    isEmailAddressArray(v.bcc) &&
     typeof v.draftId === "string" &&
     typeof v.revision === "string"
   );
