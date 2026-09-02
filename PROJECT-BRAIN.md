@@ -2,7 +2,7 @@
 
 A permanent, plain-English briefing document for this repository. It exists for two audiences: Irtiza (the product/domain owner, not a software engineer, and not expected to read TypeScript or run terminal commands personally), and any future Claude Code session picking this project back up cold. Read this before any major architectural work.
 
-This document describes the repository **as it actually exists**, checked directly against the code and `docs/adr/*` at the time of writing (4 commits: `ccb193e`, `24139fa`, `c46c39c`, `356af4d`; 33 passing tests). Where something is planned rather than built, it is explicitly labeled as such.
+This document describes the repository **as it actually exists**, checked directly against the code and `docs/adr/*` at the time of writing (latest commit `1e2d0c2`; 42 passing tests). Where something is planned rather than built, it is explicitly labeled as such.
 
 ---
 
@@ -75,10 +75,10 @@ Plain-English explanations of every implemented piece, in `src/`:
 - **Registry** (`src/registry/`) — a simple lookup system: a place where Agents, Providers, and Tools are each registered under a name, so the system can find "the agent called X" or "the tool called Y" when it needs to.
 - **Config** (`src/config/load.ts`) — the "wiring" step that runs when the program starts: it registers the built-in Providers and Tools, then loads whichever Packs are currently enabled (today, just `core-demo`).
 - **Store** (`src/store/run-store.ts`) — where the history of a Run gets saved so it can be looked at later. There are two versions: one that only keeps history in memory (used for fast tests), and one that saves each Run as a JSON file on disk (used by the actual CLI, under a `.orchestrator/` folder that is not saved to Git).
-- **CLI** (`src/cli/index.ts`) — the command-line program you actually run. It supports three commands: `run` (execute a task through an agent), `list-agents` (show what agents exist), and `help`.
-- **Tests** — 33 automated tests currently exist and pass, covering Core's step-by-step logic, both providers, the tool, the registry, the pack, the config wiring, the run history storage, and the CLI itself. They use Node's own built-in test runner, so no extra testing library was added.
-- **Documentation** — `CONTEXT.md` (a glossary defining every project-specific term precisely, so "Task" vs. "Run" vs. "Pack" always mean the same thing) and `docs/adr/` (four short "Architecture Decision Records" explaining *why* certain structural choices were made, listed in Section 6).
-- **Git/GitHub** — a real Git repository with 4 commits so far, pushed once to a private GitHub repository (`github.com/irtizaa36-web/AI-Agent-System`) after the first commit; the three most recent commits exist locally only and have not been pushed yet.
+- **CLI** (`src/cli/index.ts`) — the command-line program you actually run. It supports four commands: `run` (execute a task through an agent), `list-agents` (show what agents exist), `status` (a live snapshot of agents/providers/tools/packs, test results, and Git state), and `help`.
+- **Tests** — 42 automated tests currently exist and pass, covering Core's step-by-step logic, both providers, the tool, the registry, the pack, the config wiring, the run history storage, and the CLI itself (including its `status` command). They use Node's own built-in test runner, so no extra testing library was added.
+- **Documentation** — `CONTEXT.md` (a glossary defining every project-specific term precisely, so "Task" vs. "Run" vs. "Pack" always mean the same thing) and `docs/adr/` (five short "Architecture Decision Records" explaining *why* certain structural choices were made, listed in Section 6).
+- **Git/GitHub** — a real Git repository, pushed to a private GitHub repository (`github.com/irtizaa36-web/AI-Agent-System`); `main` was fully in sync with `origin/main` as of the last push.
 
 ## 4. What we have actually accomplished
 
@@ -96,11 +96,12 @@ Nothing beyond this list has been built. In particular: no domain Pack exists ye
 
 ## 5. Long-term product vision: Domain Packs
 
-The Core stays domain-agnostic (Section 7). All domain-specific capability is meant to live in Packs — self-contained bundles of Agents and, eventually, their own Tools. Three future Packs are currently planned; **none of the three has any code written for it yet**:
+The Core stays domain-agnostic (Section 7). All domain-specific capability is meant to live in Packs — self-contained bundles of Agents and, eventually, their own Tools. Four future Packs are currently planned; **none has any code written for it yet**:
 
 - **A&I Research** — a research assistant focused on Allergy & Immunology. Potential eventual capabilities: literature research, evidence synthesis, identifying research questions, novelty/gap analysis, case-report opportunities, retrospective study ideas, study design, variables and statistics, abstracts, manuscripts, conference/journal targeting, citation/reference verification, and research project tracking. Not all of these are being built now — see Section 8 and 10 for how this gets built incrementally.
 - **IM Brain** — a clinical reasoning and education assistant for Internal Medicine. Potential capabilities: differential diagnosis, diagnostic reasoning, management reasoning, teaching, evidence verification, and rounds preparation. This is clinical decision support/education with human verification, **not** autonomous patient care (see Section 9).
 - **Medical Career Advisor** — a broader medical career/application advisor spanning premed, medical school, residency, fellowship, research/career strategy, application review, interview preparation, program research, and timelines — potentially with a human consultant in the loop (the real-world "Scholr" consulting role is one example of what this could look like).
+- **Personal Assistant** — handles tedious real-world administrative and customer-service tasks (returns/refunds, order tracking, disputes, routine emails and calls, navigating customer-service chatbots/phone menus), eventually choosing the right method (website, chatbot, email, phone) itself rather than requiring Irtiza to specify it. Confirmed to fit the existing architecture with no Core changes (ADR 0005) — it registers as a Pack like any other, and every external capability it eventually needs (email, phone, browser, chat) becomes a Tool/Provider adapter when actually built, not before.
 
 Each should be built as its own Pack sitting on top of the generic, unchanged Core — not as special-case logic hard-coded into the engine itself.
 

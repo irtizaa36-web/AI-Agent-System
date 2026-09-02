@@ -1,0 +1,7 @@
+---
+status: accepted
+---
+
+# Personal Assistant fits as a Pack; waiting/verification stay deferred
+
+A future Personal Assistant Pack (returns, customer service, routine admin tasks) needs no Core changes to get started: like any Pack, it registers its own Agents into the existing Registry, and any external capability it eventually needs (email, phone, browser, chat) is just a new Tool/Provider adapter (ADR 0001). Two real gaps exist in Core that this Pack will eventually need, beyond what ADR 0004 already covers: `Run` has no way to represent "waiting on an external event" (`RunStatus` is only `queued/running/succeeded/failed`), and `Result` has no outcome vocabulary richer than `succeeded/failed` (no attempted/partially-succeeded/requires-user-action, no evidence field). We're deliberately not building either now — no real waiting-capable Tool exists yet to design against, so guessing at the shape now would mean building the wrong thing (same reasoning as ADR 0004). When one does exist, the smallest anticipated change is a single additional `RunStatus` value plus a way to resume a Run from an external event — resumability itself needs no new storage design, since `RunStore` already persists a Run's full Session. Auditability is also already substantially covered without change: `Run`/`Step` already record full conversation history and per-step/per-run timestamps; a future Personal Assistant just needs its Tools to write meaningful content into that record, not a new Core mechanism.
