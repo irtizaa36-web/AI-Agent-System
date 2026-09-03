@@ -22,6 +22,22 @@ status ("my check-in is live"), a bug in the protocol, a design question,
 a blocker. Checking issue #1 is now a required step in the recurring
 check-in below, not something to remember separately.
 
+## Named projects
+
+Ongoing pieces of work get a short reference name so every team/session means
+the same thing when they mention it, in commit messages, issue #1, the
+dashboard, or conversation with Irtiza:
+
+- **Project Shivani** — the recurring job search + resume tailoring for
+  Irtiza's wife, run via `job-search-agent` against her real resume and
+  stated preferences (`.orchestrator/job-search/shivani-*.txt`, gitignored/
+  local-only) and delivered via iMessage + the shared "Job Search Checkpoint"
+  Google Doc. Not itself a `coworker/tasks/` entry (it's macmini's recurring
+  routine, not dispatched work), but named here so it's referenced
+  consistently anywhere else it comes up (e.g. the dashboard's Projects
+  section, if/when it's wired up as a tracked project rather than only
+  coworker tasks).
+
 ## Where the list lives
 
 `coworker/tasks/<id>.json` — one small JSON file per task, committed to
