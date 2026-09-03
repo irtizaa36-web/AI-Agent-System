@@ -135,6 +135,53 @@ export const DASHBOARD_HTML = `<!doctype html>
     margin: 0;
     padding: 0;
   }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: var(--space-3);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .metric {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    padding: var(--space-3) var(--space-4);
+  }
+  .metric-value { display: block; font-size: 1.7rem; font-weight: 750; line-height: 1.2; }
+  .metric-label { color: var(--muted); font-size: 0.82rem; }
+  .attention-list { display: flex; flex-direction: column; gap: var(--space-2); }
+  .attention-item {
+    background: var(--stuck-bg);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: var(--stuck);
+    padding: var(--space-3) var(--space-4);
+  }
+  .attention-item strong { display: block; }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .filters label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 650;
+  }
+  .filters select {
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text);
+  }
   .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
@@ -331,7 +378,7 @@ export const DASHBOARD_HTML = `<!doctype html>
   <form id="add-task-form">
     <div class="field-group">
       <label for="task-text">What needs doing</label>
-      <input type="text" id="task-text" name="task" required>
+      <input type="text" id="task-text" name="task" placeholder="Describe the next concrete action" required>
     </div>
     <div class="field-group">
       <label for="task-assignee">Who it's for</label>
@@ -340,6 +387,7 @@ export const DASHBOARD_HTML = `<!doctype html>
         <option value="Laptop2">Laptop2</option>
         <option value="Riley">Riley</option>
         <option value="Jordan">Jordan</option>
+        <option value="PinkyBaby">PinkyBaby</option>
         <option value="both">Both (macmini &amp; Laptop2)</option>
       </select>
     </div>
@@ -349,13 +397,46 @@ export const DASHBOARD_HTML = `<!doctype html>
 </dialog>
 
 <main>
+  <section aria-labelledby="summary-h">
+    <h2 id="summary-h">At a glance</h2>
+    <div id="summary" class="summary-grid" aria-live="polite"></div>
+  </section>
+
+  <section aria-labelledby="attention-h" id="attention-section">
+    <h2 id="attention-h">Attention needed</h2>
+    <div id="attention" class="attention-list" aria-live="polite"></div>
+  </section>
+
   <section aria-labelledby="agents-h">
     <h2 id="agents-h">Agents</h2>
     <ul id="agents" class="grid" aria-live="polite"></ul>
   </section>
 
   <section aria-labelledby="projects-h">
-    <h2 id="projects-h">Projects</h2>
+    <h2 id="projects-h">Projects and tasks</h2>
+    <div class="filters" aria-label="Project filters">
+      <label>
+        Status
+        <select id="status-filter">
+          <option value="all">All statuses</option>
+          <option value="pending">Not started</option>
+          <option value="in_progress">In progress</option>
+          <option value="done">Done</option>
+        </select>
+      </label>
+      <label>
+        Assignee
+        <select id="assignee-filter">
+          <option value="all">All assignees</option>
+          <option value="macmini">macmini</option>
+          <option value="Laptop2">Laptop2</option>
+          <option value="Riley">Riley</option>
+          <option value="Jordan">Jordan</option>
+          <option value="PinkyBaby">PinkyBaby</option>
+          <option value="both">Both</option>
+        </select>
+      </label>
+    </div>
     <div class="kanban">
       <div class="kanban-column">
         <div class="kanban-column-head status-pending">
@@ -391,6 +472,7 @@ export const DASHBOARD_HTML = `<!doctype html>
   var STATUS_LABEL = { working: "Working", idle: "Idle", stuck: "Stuck", offline: "Offline", unknown: "No report yet" };
   var STATUS_ICON = { working: "\\u25CF", idle: "\\u25CB", stuck: "\\u25B2", offline: "\\u2715", unknown: "\\u2013" };
   var KANBAN_COLUMNS = ["pending", "in_progress", "done"];
+  var latestProjects = [];
 
   function el(tag, className, text) {
     var e = document.createElement(tag);
@@ -416,6 +498,35 @@ export const DASHBOARD_HTML = `<!doctype html>
       if (a.currentTask) li.appendChild(el("p", "field", "Working on: " + a.currentTask));
       li.appendChild(el("p", "field", a.updatedAt ? "Last update: " + new Date(a.updatedAt).toLocaleString() : "Never reported in"));
       list.appendChild(li);
+    });
+  }
+
+  function renderSummary(snap) {
+    var summary = document.getElementById("summary");
+    summary.innerHTML = "";
+    [
+      ["Total tasks", snap.projects.length],
+      ["In progress", snap.projects.filter(function (p) { return p.overallStatus === "in_progress"; }).length],
+      ["Ready to start", snap.projects.filter(function (p) { return p.overallStatus === "pending"; }).length]
+    ].forEach(function (metric) {
+      var card = el("div", "metric");
+      card.appendChild(el("span", "metric-value", String(metric[1])));
+      card.appendChild(el("span", "metric-label", metric[0]));
+      summary.appendChild(card);
+    });
+  }
+
+  function renderAttention(agents) {
+    var section = document.getElementById("attention-section");
+    var list = document.getElementById("attention");
+    var needingAttention = agents.filter(function (a) { return a.status === "stuck"; });
+    list.innerHTML = "";
+    section.hidden = needingAttention.length === 0;
+    needingAttention.forEach(function (a) {
+      var item = el("div", "attention-item");
+      item.appendChild(el("strong", null, a.name + " is stuck"));
+      item.appendChild(el("span", null, a.currentTask ? "Current task: " + a.currentTask : "No current task reported."));
+      list.appendChild(item);
     });
   }
 
@@ -559,6 +670,14 @@ export const DASHBOARD_HTML = `<!doctype html>
     // single assignee, the persona list already names them.
     if (p.assignedTo === "both") li.appendChild(el("p", "field", "Assigned to: both"));
 
+    li.appendChild(el(
+      "p",
+      "field",
+      p.mostRecentUpdate
+        ? "Last activity: " + new Date(p.mostRecentUpdate.at).toLocaleString()
+        : "Created: " + new Date(p.createdAt).toLocaleString()
+    ));
+
     li.appendChild(renderPersonaList(p.personas || []));
     if (isExplicitUpdate(p)) li.appendChild(renderRecentUpdate(p.mostRecentUpdate));
     var history = renderHistory(p.updateHistory);
@@ -569,8 +688,15 @@ export const DASHBOARD_HTML = `<!doctype html>
 
   /** Groups projects into Kanban columns by overall status (Not started / In progress / Done) — see the file-level comment for why a Kanban board instead of a flat grid. */
   function renderProjects(projects) {
+    var statusFilter = document.getElementById("status-filter").value;
+    var assigneeFilter = document.getElementById("assignee-filter").value;
     var buckets = { pending: [], in_progress: [], done: [] };
-    projects.forEach(function (p) { (buckets[p.overallStatus] || buckets.pending).push(p); });
+    projects
+      .filter(function (p) {
+        return (statusFilter === "all" || p.overallStatus === statusFilter) &&
+          (assigneeFilter === "all" || p.assignedTo === assigneeFilter);
+      })
+      .forEach(function (p) { (buckets[p.overallStatus] || buckets.pending).push(p); });
 
     KANBAN_COLUMNS.forEach(function (status) {
       var list = document.getElementById("kanban-" + status);
@@ -601,8 +727,11 @@ export const DASHBOARD_HTML = `<!doctype html>
     fetch("/api/snapshot")
       .then(function (res) { return res.json(); })
       .then(function (snap) {
+        latestProjects = snap.projects;
+        renderSummary(snap);
+        renderAttention(snap.agents);
         renderAgents(snap.agents);
-        renderProjects(snap.projects);
+        renderProjects(latestProjects);
         renderRecommendations(snap.recommendations);
         document.getElementById("meta").textContent = "Updated " + new Date(snap.generatedAt).toLocaleTimeString();
       })
@@ -612,6 +741,8 @@ export const DASHBOARD_HTML = `<!doctype html>
   }
 
   document.getElementById("refresh").addEventListener("click", load);
+  document.getElementById("status-filter").addEventListener("change", function () { renderProjects(latestProjects); });
+  document.getElementById("assignee-filter").addEventListener("change", function () { renderProjects(latestProjects); });
 
   var addTaskDialog = document.getElementById("add-task-dialog");
   var openAddTaskBtn = document.getElementById("open-add-task");
