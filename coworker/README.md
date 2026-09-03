@@ -77,6 +77,9 @@ dashboard, or conversation with Irtiza:
   gitignored/local-only, so a cloud-sandboxed routine wouldn't be able to
   read them (see the "two kinds of trigger" note below).
 
+- **PinkyBaby** — Team B's Lead Agent. Owns triage, integration, durable
+  handoffs, and tasks that require Team B coordination.
+
 ## Where the list lives
 
 `coworker/tasks/<id>.json` — one small JSON file per task, committed to

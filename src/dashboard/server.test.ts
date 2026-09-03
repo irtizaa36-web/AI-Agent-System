@@ -34,6 +34,11 @@ test("GET / serves the dashboard HTML page", async () => {
     assert.match(res.headers.get("content-type") ?? "", /text\/html/);
     const body = await res.text();
     assert.match(body, /Coworker Dashboard/);
+    assert.match(body, /At a glance/);
+    assert.match(body, /Attention needed/);
+    assert.match(body, /id="status-filter"/);
+    assert.match(body, /id="assignee-filter"/);
+    assert.match(body, /Projects and tasks/);
   });
 });
 

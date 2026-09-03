@@ -154,6 +154,13 @@ test("coworker add accepts the specialist Jordan persona", async () => {
   assert.match(stdout.join("\n"), /for Jordan/);
 });
 
+test("coworker add accepts the Team B lead persona", async () => {
+  const { stdout, deps } = buildDeps();
+  const code = await runCli(["coworker", "add", "coordinate a handoff", "--to", "PinkyBaby"], deps);
+  assert.equal(code, 0);
+  assert.match(stdout.join("\n"), /for PinkyBaby/);
+});
+
 test("coworker with no subcommand prints usage", async () => {
   const { stderr, deps } = buildDeps();
   assert.equal(await runCli(["coworker"], deps), 1);
