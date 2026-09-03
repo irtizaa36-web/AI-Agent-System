@@ -1,6 +1,6 @@
 # Moby AI Coworker Dashboard Benchmark
 
-**Research date:** 2026-09-03  
+**Research date:** 2026-09-03
 **Scope:** Improvements must remain local-only and file-backed. They must not add external feeds, live-session discovery, personal-data display, autonomous actions, or consequential actions.
 
 ## Current baseline
