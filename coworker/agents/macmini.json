@@ -1,6 +1,6 @@
 {
   "name": "macmini",
   "status": "idle",
-  "currentTask": "Handled ae73c05f (blocked, flagged on issue #1) and applied the cost-cadence directive (trigger now 3h, fallback plist draft now 4h). No other pending tasks.",
-  "updatedAt": "2026-09-03T06:53:57.988Z"
+  "currentTask": "Completed 41a4b6f7 (git-guardrails + fewer-permission-prompts skills applied). Starting 38fd59e8 (Indeed connector for Project Shivani) next.",
+  "updatedAt": "2026-09-03T17:38:23.329Z"
 }
