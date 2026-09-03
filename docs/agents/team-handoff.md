@@ -15,6 +15,7 @@ PinkyBaby is Team B's Lead Agent. Team B coordinates primarily with Sam, the Tea
 1. Read `PROJECT-BRAIN.md`, this document, and any documentation relevant to the task.
 2. Update the local branch from its shared remote branch before making decisions based on its state.
 3. Inspect `git status`, recent commits, and the relevant GitHub Issue or current work item before modifying files.
+4. When work affects a local service or scheduled operation, read `docs/operations/local-operations.md` before acting.
 
 ## Working
 

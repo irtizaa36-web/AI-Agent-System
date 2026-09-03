@@ -65,7 +65,7 @@ function printUsage(stdout: (line: string) => void): void {
       '  orchestrator dispatch run --task "<goal>"                   State a goal in plain English; the Dispatcher plans and runs it',
       "  orchestrator dispatch status|approve|resume <id>            Check on, approve, or resume a paused workflow",
       '  orchestrator coworker add "<task>" --to <persona>           Add a task to the shared coworker list',
-      "  orchestrator coworker list|dispatched|complete|update       Inspect or update the shared coworker task list",
+      "  orchestrator coworker list|dispatched|undispatch|complete|update Inspect or update the shared coworker task list",
       "  orchestrator agent-status set <name> --status <s> [--task]  An agent reports its own current status",
       "  orchestrator agent-status list                              List the latest self-reported statuses",
       '  orchestrator recommend add "<summary>" --scope <s>          Log something the dashboard noticed',

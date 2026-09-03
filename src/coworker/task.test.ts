@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ALL_COWORKER_PERSONAS, coworkerTaskOverallStatus, createCoworkerTask, personasFor, withDispatched, withResult, withUpdate } from "./task";
+import {
+  ALL_COWORKER_PERSONAS,
+  coworkerTaskOverallStatus,
+  createCoworkerTask,
+  personasFor,
+  withDispatched,
+  withPending,
+  withResult,
+  withUpdate,
+} from "./task";
 
 test("createCoworkerTask rejects empty task text", () => {
   assert.throws(() => createCoworkerTask("   ", "macmini"), /must not be empty/);
@@ -39,6 +48,22 @@ test("withDispatched and withResult reject a persona the task isn't assigned to"
   const task = createCoworkerTask("do a thing", "macmini");
   assert.throws(() => withDispatched(task, "Laptop2"), /not assigned/);
   assert.throws(() => withResult(task, "Laptop2", "x", true), /not assigned/);
+});
+
+test("withPending returns a dispatched task to the pickup queue and clears stale metadata", () => {
+  const task = withDispatched(createCoworkerTask("do a thing", "macmini"), "macmini");
+  const pending = withPending(task, "macmini");
+
+  assert.equal(pending.results.macmini?.status, "pending");
+  assert.equal(pending.results.macmini?.dispatchedAt, undefined);
+  assert.equal(pending.results.macmini?.finishedAt, undefined);
+  assert.equal(pending.results.macmini?.output, undefined);
+  assert.equal(coworkerTaskOverallStatus(pending), "pending");
+});
+
+test("withPending rejects a task that was not dispatched", () => {
+  const task = createCoworkerTask("do a thing", "macmini");
+  assert.throws(() => withPending(task, "macmini"), /not dispatched/);
 });
 
 test("withResult records output, success/failure, and a finish time", () => {

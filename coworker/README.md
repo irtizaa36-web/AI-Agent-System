@@ -125,6 +125,7 @@ Anyone can post one, not just the assigned persona.
 - `add "<task text>" --to macmini|Laptop2|Riley|both` — write down a new idea.
 - `list [--status pending|in_progress|done] [--for macmini|Laptop2|Riley]` — inspect the list.
 - `dispatched <id> --persona macmini|Laptop2|Riley` — mark that a persona has picked the task up (call this right before starting the work).
+- `undispatch <id> --persona macmini|Laptop2|Riley` — return interrupted work to `pending`, clearing stale dispatch metadata so a later check-in can pick it up.
 - `complete <id> --persona macmini|Laptop2|Riley --output "<summary>" [--failed]` — record what happened, once the work is actually done.
 - `update <id> --by <name> --note "<text>"` — post a progress note, without changing status. For an ongoing project (see below), post one of these periodically instead of ever calling `complete`.
 
@@ -171,6 +172,11 @@ whatever scheduling this machine has) whose prompt is along these lines:
 > Do this without asking for confirmation on each step, but never touch
 > money/payments, and stop and flag anything that seems illegal or that a
 > reasonable person would want to weigh in on first.
+
+If a session expires or a machine becomes unavailable after a task was marked
+`dispatched`, use `undispatch` before the next pickup cycle. Dispatched tasks
+do not appear in the normal pending-task query, so this recovery step prevents
+interrupted work from being stranded.
 
 `SendMessage` between the two persona sessions is still there for anything
 that isn't this loop — asking each other a question, flagging something
