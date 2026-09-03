@@ -11,6 +11,7 @@ import { InMemoryWorkflowStore } from "../store/workflow-store";
 import { FakeInkboxClient } from "../integrations/inkbox/fake-client";
 import { InMemoryForwardingLog } from "../integrations/inkbox/forwarding-log";
 import { InMemoryMessageEventLog } from "../integrations/inkbox/message-event-log";
+import { InMemoryCoworkerTaskStore } from "../coworker/store";
 import type { CliDeps } from "./index";
 
 function captureOutput(): { stdout: string[]; stderr: string[]; deps: Omit<CliDeps, "registry" | "store"> } {
@@ -25,6 +26,7 @@ function captureOutput(): { stdout: string[]; stderr: string[]; deps: Omit<CliDe
       forwardingLog: new InMemoryForwardingLog(),
       messageEventLog: new InMemoryMessageEventLog(),
       workflowStore: new InMemoryWorkflowStore(),
+      coworkerStore: new InMemoryCoworkerTaskStore(),
       stdout: (line) => stdout.push(line),
       stderr: (line) => stderr.push(line),
     },

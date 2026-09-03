@@ -13,12 +13,15 @@ import { JsonFileDraftStore } from "../integrations/inkbox/draft-store";
 import { runInkboxCommand } from "./inkbox-commands";
 import { runBrowserCommand } from "./browser-commands";
 import { runDispatchCommand } from "./dispatch-commands";
+import { runCoworkerCommand } from "./coworker-commands";
+import { JsonFileCoworkerTaskStore } from "../coworker/store";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { WorkflowStore } from "../store/workflow-store";
 import type { InkboxClient } from "../integrations/inkbox/client";
 import type { ForwardingLog } from "../integrations/inkbox/forwarding-log";
 import type { MessageEventLog } from "../integrations/inkbox/message-event-log";
+import type { CoworkerTaskStore } from "../coworker/store";
 
 export interface CliDeps {
   readonly registry: Registry;
@@ -35,6 +38,8 @@ export interface CliDeps {
   readonly forwardingLog: ForwardingLog;
   /** Records sent/delivered/bounced/failed/forwarded-confirmation outcomes reported by Inkbox webhook events. */
   readonly messageEventLog: MessageEventLog;
+  /** The shared coworker task list (`orchestrator coworker ...`) — meant to be committed to Git so both personas' machines see it. */
+  readonly coworkerStore: CoworkerTaskStore;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -48,6 +53,8 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator browser login <site> <url>                     One-time human login, saves an authenticated session",
       '  orchestrator dispatch run --task "<goal>"                   State a goal in plain English; the Dispatcher plans and runs it',
       "  orchestrator dispatch status|approve|resume <id>            Check on, approve, or resume a paused workflow",
+      '  orchestrator coworker add "<task>" --to <persona>           Add a task to the shared macmini/Laptop coworker list',
+      "  orchestrator coworker list|dispatched|complete              Inspect or update the shared coworker task list",
       "  orchestrator help                                           Show this message",
       "",
       "inkbox subcommands: draft, review-draft, prepare-send, approve-send, check-replies, review-offer, " +
@@ -221,6 +228,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return runDispatchCommand(rest, deps);
   }
 
+  if (command === "coworker") {
+    return runCoworkerCommand(rest, deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
@@ -231,6 +242,7 @@ async function main(): Promise<void> {
   const registry = loadDefaultConfig(inkboxClient);
   const store = new JsonFileRunStore(join(cwd, ".orchestrator", "runs"));
   const workflowStore = new JsonFileWorkflowStore(join(cwd, ".orchestrator", "workflows"));
+  const coworkerStore = new JsonFileCoworkerTaskStore(join(cwd, "coworker", "tasks"));
 
   const exitCode = await runCli(process.argv.slice(2), {
     registry,
@@ -240,6 +252,7 @@ async function main(): Promise<void> {
     inkboxClient,
     forwardingLog: new JsonFileForwardingLog(join(cwd, ".orchestrator", "inkbox-forwarding")),
     messageEventLog: new JsonFileMessageEventLog(join(cwd, ".orchestrator", "inkbox-events")),
+    coworkerStore,
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });

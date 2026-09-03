@@ -8,6 +8,7 @@ import { InMemoryWorkflowStore } from "../store/workflow-store";
 import { FakeInkboxClient } from "../integrations/inkbox/fake-client";
 import { InMemoryForwardingLog } from "../integrations/inkbox/forwarding-log";
 import { InMemoryMessageEventLog } from "../integrations/inkbox/message-event-log";
+import { InMemoryCoworkerTaskStore } from "../coworker/store";
 import { dispatcherPack } from "../packs/dispatcher/pack";
 import type { GenerateResult, ModelProvider } from "../providers/provider";
 import type { Tool } from "../tools/tool";
@@ -57,6 +58,7 @@ function buildDeps(provider: ModelProvider, extraTools: readonly Tool[] = []): C
     inkboxClient: new FakeInkboxClient(),
     forwardingLog: new InMemoryForwardingLog(),
     messageEventLog: new InMemoryMessageEventLog(),
+    coworkerStore: new InMemoryCoworkerTaskStore(),
     stdout: () => {},
     stderr: () => {},
   };
