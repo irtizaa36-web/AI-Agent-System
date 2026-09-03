@@ -100,6 +100,18 @@ export function withDispatched(task: CoworkerTask, persona: CoworkerPersona): Co
   };
 }
 
+/** Returns an interrupted persona's task to the pickup queue, clearing stale dispatch/result metadata. */
+export function withPending(task: CoworkerTask, persona: CoworkerPersona): CoworkerTask {
+  requireAssignedPersona(task, persona);
+  if (task.results[persona]?.status !== "dispatched") {
+    throw new Error(`Task ${task.id} is not dispatched to "${persona}"`);
+  }
+  return {
+    ...task,
+    results: { ...task.results, [persona]: { status: "pending" } },
+  };
+}
+
 /** Appends a progress note. Deliberately not restricted to an assigned persona — anyone can leave one. */
 export function withUpdate(task: CoworkerTask, by: string, note: string, at: string = new Date().toISOString()): CoworkerTask {
   if (note.trim().length === 0) {

@@ -87,6 +87,20 @@ test("coworker dispatched then complete moves a single-persona task from pending
   assert.match(text, /all done/);
 });
 
+test("coworker undispatch returns interrupted work to pending", async () => {
+  const { stdout, deps } = buildDeps();
+  await runCli(["coworker", "add", "do a thing", "--to", "macmini"], deps);
+  const id = stdout[0].match(/task (\S+) for/)?.[1];
+  assert.ok(id);
+
+  assert.equal(await runCli(["coworker", "dispatched", id!, "--persona", "macmini"], deps), 0);
+  assert.equal(await runCli(["coworker", "undispatch", id!, "--persona", "macmini"], deps), 0);
+
+  const before = stdout.length;
+  await runCli(["coworker", "list", "--status", "pending", "--for", "macmini"], deps);
+  assert.match(stdout.slice(before).join("\n"), /do a thing/);
+});
+
 test("coworker complete on a persona the task isn't assigned to fails clearly", async () => {
   const { stdout, stderr, deps } = buildDeps();
   await runCli(["coworker", "add", "do a thing", "--to", "macmini"], deps);
