@@ -43,17 +43,17 @@ test("GET / serves the dashboard HTML page", async () => {
     assert.match(body, /Projects and tasks/);
     assert.match(body, /p\.assignedTo === "both"/);
   });
+});
 
-  test("POST /api/operational-updates persists an authored operational update", async () => {
-    await withServer(async (baseUrl, deps) => {
-      const res = await fetch(`${baseUrl}/api/operational-updates`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ summary: "Restart required", by: "Irtiza", provenance: "external_operator" }),
-      });
-      assert.equal(res.status, 201);
-      assert.equal((await deps.operationalUpdateStore.list())[0]?.summary, "Restart required");
+test("POST /api/operational-updates persists an authored operational update", async () => {
+  await withServer(async (baseUrl, deps) => {
+    const res = await fetch(`${baseUrl}/api/operational-updates`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ summary: "Restart required", by: "Irtiza", provenance: "external_operator" }),
     });
+    assert.equal(res.status, 201);
+    assert.equal((await deps.operationalUpdateStore.list())[0]?.summary, "Restart required");
   });
 });
 
