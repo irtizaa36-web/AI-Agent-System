@@ -5,7 +5,10 @@
   "assignedTo": "Riley",
   "results": {
     "Riley": {
-      "status": "pending"
+      "status": "succeeded",
+      "dispatchedAt": "2026-09-03T05:49:04.349Z",
+      "finishedAt": "2026-09-03T05:55:01.691Z",
+      "output": "Per-persona status lines are now a real <ul>/<li> list (name/status/output as separate elements) instead of one concatenated string. The 'most recent update' is now a labeled block (LATEST UPDATE / note / by · date on separate lines) instead of one run-on sentence. History entries show 'who · when' on its own line above the note text."
     }
   }
 }

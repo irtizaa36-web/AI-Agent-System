@@ -5,7 +5,10 @@
   "assignedTo": "Riley",
   "results": {
     "Riley": {
-      "status": "pending"
+      "status": "succeeded",
+      "dispatchedAt": "2026-09-03T05:49:04.249Z",
+      "finishedAt": "2026-09-03T05:55:01.588Z",
+      "output": "Moved 'Add a task' out of a scrollable section into a sticky header button (always visible regardless of scroll position) that opens a native <dialog>. Each project's 'Post an update' is now a prominent, colored <details>/<summary> disclosure button on every card instead of a small plain form easy to miss. Verified keyboard (Tab focus, Escape closes dialog) and touch (mobile viewport) behavior with Playwright."
     }
   }
 }
