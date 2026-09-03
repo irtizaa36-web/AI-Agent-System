@@ -1,0 +1,12 @@
+{
+  "id": "a7f3e8c2-9d4c-4f2b-a1e9-3c6d8f7b4e2a",
+  "createdAt": "2026-09-03T12:25:00.000Z",
+  "task": "Comprehensive Mac Mini local optimization pass. Irtiza wants a thorough performance & usability tune-up now that the machine is ~1 year old. This is NOT a remote task — Jordan (IT) is coordinating from the cloud, but Max (the macmini persona) will execute directly on that machine. Scope: (1) System health baseline — storage free %, RAM pressure, thermal status, battery health. (2) File cleanup — ~/Library caches/logs, ~/Downloads old files, unused Applications, system caches, identify and report large files/folders. (3) Photos & Screenshots — organize, find duplicates, suggest archival targets (external drive, cloud). (4) Keychain audit — list entries, identify weak/old passwords, flag for manual update where needed (don't delete or change without flagging). (5) Settings optimization — power settings (sleep timers, display brightness profiles), trackpad/keyboard (gestures, acceleration), Spotlight indexing scope, background app refresh, startup items. (6) Performance tuning — verify Gatekeeper + XProtect status (native security), check for memory hogs, disk I/O patterns, thermal management. (7) Hidden macOS features — document useful built-in tools (Spotlight shortcuts, accessibility features, gesture controls, quick actions) in a summary doc. EXPLICIT: do NOT install third-party AV or ad blocker (macOS native tools suffice); do NOT delete user files without explicit Irtiza approval; do NOT make system changes Irtiza hasn't OK'd. For anything uncertain, flag on issue #1 before making changes. Report before/after metrics (disk space, free RAM, startup item count, cache size, etc.) and document any changes made.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  },
+  "updates": []
+}
