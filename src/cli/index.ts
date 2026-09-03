@@ -15,6 +15,11 @@ import { runBrowserCommand } from "./browser-commands";
 import { runDispatchCommand } from "./dispatch-commands";
 import { runCoworkerCommand } from "./coworker-commands";
 import { JsonFileCoworkerTaskStore } from "../coworker/store";
+import { runAgentStatusCommand } from "./agent-status-commands";
+import { JsonFileAgentStatusStore } from "../dashboard/agent-status-store";
+import { runRecommendCommand } from "./recommend-commands";
+import { JsonFileRecommendationStore } from "../dashboard/recommendation-store";
+import { runDashboardCommand } from "./dashboard-command";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { WorkflowStore } from "../store/workflow-store";
@@ -22,6 +27,8 @@ import type { InkboxClient } from "../integrations/inkbox/client";
 import type { ForwardingLog } from "../integrations/inkbox/forwarding-log";
 import type { MessageEventLog } from "../integrations/inkbox/message-event-log";
 import type { CoworkerTaskStore } from "../coworker/store";
+import type { AgentStatusStore } from "../dashboard/agent-status-store";
+import type { RecommendationStore } from "../dashboard/recommendation-store";
 
 export interface CliDeps {
   readonly registry: Registry;
@@ -40,6 +47,10 @@ export interface CliDeps {
   readonly messageEventLog: MessageEventLog;
   /** The shared coworker task list (`orchestrator coworker ...`) — meant to be committed to Git so both personas' machines see it. */
   readonly coworkerStore: CoworkerTaskStore;
+  /** Each agent's latest self-reported status (`orchestrator agent-status ...`), read by the dashboard. */
+  readonly agentStatusStore: AgentStatusStore;
+  /** The dashboard's own "noticed / did" feed (`orchestrator recommend ...`). */
+  readonly recommendationStore: RecommendationStore;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -55,6 +66,12 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator dispatch status|approve|resume <id>            Check on, approve, or resume a paused workflow",
       '  orchestrator coworker add "<task>" --to <persona>           Add a task to the shared macmini/Laptop2 coworker list',
       "  orchestrator coworker list|dispatched|complete              Inspect or update the shared coworker task list",
+      "  orchestrator agent-status set <name> --status <s> [--task]  An agent reports its own current status",
+      "  orchestrator agent-status list                              List the latest self-reported statuses",
+      '  orchestrator recommend add "<summary>" --scope <s>          Log something the dashboard noticed',
+      "  orchestrator recommend implemented <id> [--details]        Record that a recommendation was acted on",
+      "  orchestrator recommend list                                 List logged recommendations",
+      "  orchestrator dashboard [--port N]                           Serve the local agents/projects dashboard",
       "  orchestrator help                                           Show this message",
       "",
       "inkbox subcommands: draft, review-draft, prepare-send, approve-send, check-replies, review-offer, " +
@@ -232,6 +249,18 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return runCoworkerCommand(rest, deps);
   }
 
+  if (command === "agent-status") {
+    return runAgentStatusCommand(rest, deps);
+  }
+
+  if (command === "recommend") {
+    return runRecommendCommand(rest, deps);
+  }
+
+  if (command === "dashboard") {
+    return runDashboardCommand(rest, deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
@@ -243,6 +272,8 @@ async function main(): Promise<void> {
   const store = new JsonFileRunStore(join(cwd, ".orchestrator", "runs"));
   const workflowStore = new JsonFileWorkflowStore(join(cwd, ".orchestrator", "workflows"));
   const coworkerStore = new JsonFileCoworkerTaskStore(join(cwd, "coworker", "tasks"));
+  const agentStatusStore = new JsonFileAgentStatusStore(join(cwd, "coworker", "agents"));
+  const recommendationStore = new JsonFileRecommendationStore(join(cwd, "coworker", "recommendations"));
 
   const exitCode = await runCli(process.argv.slice(2), {
     registry,
@@ -253,6 +284,8 @@ async function main(): Promise<void> {
     forwardingLog: new JsonFileForwardingLog(join(cwd, ".orchestrator", "inkbox-forwarding")),
     messageEventLog: new JsonFileMessageEventLog(join(cwd, ".orchestrator", "inkbox-events")),
     coworkerStore,
+    agentStatusStore,
+    recommendationStore,
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });

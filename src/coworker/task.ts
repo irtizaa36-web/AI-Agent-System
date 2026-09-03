@@ -38,7 +38,12 @@ export function personasFor(assignedTo: CoworkerAssignment): readonly CoworkerPe
   return assignedTo === "both" ? COWORKER_PERSONAS : [assignedTo];
 }
 
-export function createCoworkerTask(task: string, assignedTo: CoworkerAssignment, id: string = randomUUID()): CoworkerTask {
+export function createCoworkerTask(
+  task: string,
+  assignedTo: CoworkerAssignment,
+  id: string = randomUUID(),
+  createdAt: string = new Date().toISOString(),
+): CoworkerTask {
   if (task.trim().length === 0) {
     throw new Error("Coworker task text must not be empty");
   }
@@ -46,7 +51,7 @@ export function createCoworkerTask(task: string, assignedTo: CoworkerAssignment,
   for (const persona of personasFor(assignedTo)) {
     results[persona] = { status: "pending" };
   }
-  return { id, createdAt: new Date().toISOString(), task, assignedTo, results };
+  return { id, createdAt, task, assignedTo, results };
 }
 
 export type CoworkerOverallStatus = "pending" | "in_progress" | "done";

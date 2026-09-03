@@ -1,0 +1,7 @@
+{
+  "id": "60afd58d-67a9-47ca-b8e0-728280100609",
+  "createdAt": "2026-09-03T02:31:33.870Z",
+  "scope": "system",
+  "summary": "macmini's recurring check-in runs in a cloud sandbox, not on the physical Mac mini, so any task needing local-only state (.env key, files under .orchestrator/) will stall there until a true local (cron/launchd) fallback trigger exists on that machine.",
+  "implemented": false
+}

@@ -9,6 +9,8 @@ import { FakeInkboxClient } from "../integrations/inkbox/fake-client";
 import { InMemoryForwardingLog } from "../integrations/inkbox/forwarding-log";
 import { InMemoryMessageEventLog } from "../integrations/inkbox/message-event-log";
 import { InMemoryCoworkerTaskStore } from "../coworker/store";
+import { InMemoryAgentStatusStore } from "../dashboard/agent-status-store";
+import { InMemoryRecommendationStore } from "../dashboard/recommendation-store";
 import { dispatcherPack } from "../packs/dispatcher/pack";
 import type { GenerateResult, ModelProvider } from "../providers/provider";
 import type { Tool } from "../tools/tool";
@@ -59,6 +61,8 @@ function buildDeps(provider: ModelProvider, extraTools: readonly Tool[] = []): C
     forwardingLog: new InMemoryForwardingLog(),
     messageEventLog: new InMemoryMessageEventLog(),
     coworkerStore: new InMemoryCoworkerTaskStore(),
+    agentStatusStore: new InMemoryAgentStatusStore(),
+    recommendationStore: new InMemoryRecommendationStore(),
     stdout: () => {},
     stderr: () => {},
   };
