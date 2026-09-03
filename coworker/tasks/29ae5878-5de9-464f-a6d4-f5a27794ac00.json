@@ -1,0 +1,11 @@
+{
+  "id": "29ae5878-5de9-464f-a6d4-f5a27794ac00",
+  "createdAt": "2026-09-03T05:40:51.504Z",
+  "task": "Dashboard feedback from Irtiza: the 'Add a task' form and per-project 'Post an update' forms were not easy to find on the page. Make them significantly more visually prominent/discoverable regardless of where someone lands on the page - this is a real usability bug, not just a nice-to-have.",
+  "assignedTo": "Riley",
+  "results": {
+    "Riley": {
+      "status": "pending"
+    }
+  }
+}
