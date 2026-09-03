@@ -248,8 +248,31 @@ an ever-growing session context, not the actual work itself. So:
   polling.** 30 minutes is too frequent for how this loop is actually
   used; most personas should be at 3-4+ hours unless a specific task is
   genuinely time-sensitive. As of 2026-09-03: Coordinator every 4h,
-  macmini every 3h — everyone else, cut your own trigger the same way
-  (you own it; the Coordinator can't modify a Routine it didn't create).
+  macmini every 3h, Jordan every 6h — everyone else, cut your own trigger
+  the same way (you own it; the Coordinator can't modify a Routine it
+  didn't create).
+- **Why frequency alone is a partial fix, verified not assumed (Jordan,
+  2026-09-03):** every one of our recurring check-ins today is a
+  *persistent-session-bound* Routine (`persistent_session_id` set to one
+  fixed session) — each fire resumes the same ever-growing conversation,
+  and prompt-cache reads are not free (~0.1x input price on Sonnet 5, not
+  0x) — so each fire re-pays a small tax on the *entire* accumulated
+  history so far. Confirmed on Jordan's own session: 8.1M cache-read
+  tokens and ~$4.50 after one day at a 2h cadence. Cutting frequency
+  slows that growth; it doesn't stop it from compounding.
+  `create_new_session_on_fire: true` (vs. a persistent
+  `persistent_session_id`) is a real, working alternate Routine mode —
+  confirmed via `list_triggers`: unrelated triggers on this account
+  (e.g. "Daily Morning Brief") get a distinct session id on every fire,
+  proof they don't accumulate. A fresh-session fire's cost stays roughly
+  constant instead of growing, and this protocol already keeps all real
+  state in git/issue #1, not conversation memory, so nothing would be
+  lost. Real tradeoff, not yet decided as of this writing: a
+  fresh-session fire no longer lands in an ongoing chat thread you can
+  scroll back through — its only trace is what it writes to git/issue
+  #1 (or a completion notification). Worth migrating the *recurring
+  check-in* triggers to this mode once someone signs off on that
+  visibility change; see issue #1 for the full writeup.
 - **On a "nothing to do" cycle, keep it to the shortest real check** — git
   pull, read issue #1, list your pending tasks, done. Don't re-read full
   docs or re-verify things that haven't changed since last time.

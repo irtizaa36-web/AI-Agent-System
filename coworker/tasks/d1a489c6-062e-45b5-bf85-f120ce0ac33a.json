@@ -5,7 +5,10 @@
   "assignedTo": "Jordan",
   "results": {
     "Jordan": {
-      "status": "pending"
+      "status": "succeeded",
+      "dispatchedAt": "2026-09-03T12:06:58.170Z",
+      "finishedAt": "2026-09-03T12:09:09.625Z",
+      "output": "Confirmed real: create_new_session_on_fire is a genuine, working Routine mode that spawns a fresh, non-accumulating session per fire (proven via list_triggers - the Daily Morning Brief and Kanye ticket-watch triggers show a distinct session_id on each fire, no persistent_session_id). Root cause of the cost growth: cache reads are NOT free (~0.1x input price on Sonnet 5, ~$0.20/1M), and a persistent-session-bound trigger resends+re-reads-from-cache its ENTIRE accumulated history every fire, so per-fire cost grows roughly linearly with prior fires (total cost grows ~quadratically over time). My own session confirms this: 8.13M cache-read tokens, ~$4.52 total after ~6h of a 2h-cadence trigger. A fresh-session trigger's cost per fire stays roughly constant instead, since there is no growing tail to resend - and our protocol is already git/issue-#1-based state, so nothing is lost. Real tradeoff to flag: fresh-session fires would no longer land in this ongoing chat thread (only visible via git/issue #1 or completion notifications) - a genuine behavior change, not just a cost one, so I did not silently convert my own trigger; proposing it on issue #1 for a decision instead. Applied the simple, already-decided part of the cost directive (bumped my own trigger 2h->6h) directly."
     }
   }
 }
