@@ -709,7 +709,8 @@ export const DASHBOARD_HTML = `<!doctype html>
     projects
       .filter(function (p) {
         return (statusFilter === "all" || p.overallStatus === statusFilter) &&
-          (assigneeFilter === "all" || p.assignedTo === assigneeFilter);
+          (assigneeFilter === "all" || p.assignedTo === assigneeFilter ||
+            (p.assignedTo === "both" && (assigneeFilter === "macmini" || assigneeFilter === "Laptop2")));
       })
       .forEach(function (p) { (buckets[p.overallStatus] || buckets.pending).push(p); });
 

@@ -12,11 +12,16 @@ export async function runDashboardCommand(args: readonly string[], deps: CliDeps
     deps.stderr(`--port must be a positive integer (got "${values.port}").`);
     return 1;
   }
+  if (!deps.operationalUpdateStore) {
+    deps.stderr("Operational update store is not configured.");
+    return 1;
+  }
 
   const server = createDashboardServer({
     coworkerStore: deps.coworkerStore,
     agentStatusStore: deps.agentStatusStore,
     recommendationStore: deps.recommendationStore,
+    operationalUpdateStore: deps.operationalUpdateStore,
   });
 
   await new Promise<void>((resolve, reject) => {

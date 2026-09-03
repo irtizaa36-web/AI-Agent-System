@@ -12,7 +12,7 @@ export interface DashboardServerDeps {
   readonly coworkerStore: CoworkerTaskStore;
   readonly agentStatusStore: AgentStatusStore;
   readonly recommendationStore: RecommendationStore;
-  readonly operationalUpdateStore?: OperationalUpdateStore;
+  readonly operationalUpdateStore: OperationalUpdateStore;
 }
 
 // A dashboard form submission is tiny; this just bounds abuse from a malformed/huge body.
@@ -111,7 +111,6 @@ async function handleCreateOperationalUpdate(req: IncomingMessage, res: ServerRe
     sendJson(res, 400, { error: '"summary", "by", and a valid "provenance" are required' });
     return;
   }
-  if (!deps.operationalUpdateStore) throw new Error("operational update store is not configured");
   const update = createOperationalUpdate(summary, by, provenance as OperationalUpdateProvenance, details);
   await deps.operationalUpdateStore.save(update);
   sendJson(res, 201, update);
@@ -138,7 +137,7 @@ export function createDashboardServer(deps: DashboardServerDeps): Server {
           deps.coworkerStore.list(),
           deps.agentStatusStore.list(),
           deps.recommendationStore.list(),
-          deps.operationalUpdateStore?.list() ?? [],
+          deps.operationalUpdateStore.list(),
         ]);
         sendJson(res, 200, buildDashboardSnapshot(tasks, agentStatuses, recommendations, undefined, undefined, operationalUpdates));
         return;
