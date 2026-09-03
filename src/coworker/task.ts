@@ -5,13 +5,13 @@ import { randomUUID } from "node:crypto";
  * exact peer session names — they must match what `SendMessage`'s `to`
  * field expects on the machine dispatching the task, so casing matters.
  */
-export type CoworkerPersona = "macmini" | "Laptop2" | "Riley";
+export type CoworkerPersona = "macmini" | "Laptop2" | "Riley" | "Jordan";
 
-/** What `"both"` expands to — the original two general-purpose coworkers. Doesn't grow just because a new specialist persona (e.g. Riley) joins. */
+/** What `"both"` expands to — the original two general-purpose coworkers. Doesn't grow just because a new specialist persona (e.g. Riley, Jordan) joins. */
 export const COWORKER_PERSONAS: readonly CoworkerPersona[] = ["macmini", "Laptop2"];
 
 /** Every persona a task can be individually assigned to, general-purpose or specialist. */
-export const ALL_COWORKER_PERSONAS: readonly CoworkerPersona[] = ["macmini", "Laptop2", "Riley"];
+export const ALL_COWORKER_PERSONAS: readonly CoworkerPersona[] = ["macmini", "Laptop2", "Riley", "Jordan"];
 
 export type CoworkerAssignment = CoworkerPersona | "both";
 

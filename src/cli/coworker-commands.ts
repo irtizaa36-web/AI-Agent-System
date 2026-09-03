@@ -182,10 +182,10 @@ export async function runCoworkerCommand(args: readonly string[], deps: CliDeps)
     default:
       deps.stderr(
         [
-          'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop2|Riley|both',
-          "                  coworker list [--status pending|in_progress|done] [--for macmini|Laptop2|Riley]",
-          "                  coworker dispatched <id> --persona macmini|Laptop2|Riley",
-          '                  coworker complete <id> --persona macmini|Laptop2|Riley --output "<text>" [--failed]',
+          'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop2|Riley|Jordan|both',
+          "                  coworker list [--status pending|in_progress|done] [--for macmini|Laptop2|Riley|Jordan]",
+          "                  coworker dispatched <id> --persona macmini|Laptop2|Riley|Jordan",
+          '                  coworker complete <id> --persona macmini|Laptop2|Riley|Jordan --output "<text>" [--failed]',
           '                  coworker update <id> --by <name> --note "<text>"',
         ].join("\n"),
       );
