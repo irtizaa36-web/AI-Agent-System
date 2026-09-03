@@ -1,6 +1,6 @@
 {
   "name": "Jordan",
-  "status": "working",
-  "currentTask": "d1a489c6: investigating whether Routines can run fresh-session-per-fire vs persistent-session-bound",
-  "updatedAt": "2026-09-03T12:06:58.323Z"
+  "status": "idle",
+  "currentTask": "completed cost investigation (d1a489c6); watching Laptop2's Surface Pro task (653bcace, still pending) and her stale status report (~10h old)",
+  "updatedAt": "2026-09-03T12:10:16.855Z"
 }
