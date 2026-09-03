@@ -1,0 +1,11 @@
+{
+  "id": "653bcace-c921-4c13-b843-7e87dbb03afe",
+  "createdAt": "2026-09-03T06:20:22.602Z",
+  "task": "Irtiza asked Jordan (IT) to work with you on getting your Surface Pro running at peak performance. Jordan can't touch this machine directly (no local/remote access from Jordan's session) - this is scoped for you to execute using your own judgment on that hardware, and report back via coworker update/complete. Safe/reversible checklist: (1) Disk cleanup - run Disk Cleanup/Storage Sense for temp files, old Windows Update cache, Recycle Bin; report space freed. (2) Startup impact - open Task Manager > Startup apps, report high-impact items, DISABLE (don't uninstall) ones that are clearly unnecessary bloat, leave anything ambiguous enabled and just report it. (3) Windows Update - check for and apply pending OS + Surface driver/firmware updates via Windows Update and the Surface app. (4) Power plan - confirm it's set to Best Performance (or Balanced if battery life matters more) rather than Power Saver. (5) Disk health - check drive status (should be SSD; if not, note it) and free space percentage. (6) Malware sweep - run a quick Windows Defender scan. (7) Background/bloatware processes - report anything unusual running, but do NOT uninstall software or delete any user personal files/documents, do NOT touch the registry, and do NOT do anything irreversible without flagging it on issue #1 first for Irtiza to weigh in on. Report exact before/after specifics (free disk space, startup app count, update status) in your update/complete output, not just 'done'.",
+  "assignedTo": "Laptop2",
+  "results": {
+    "Laptop2": {
+      "status": "pending"
+    }
+  }
+}
