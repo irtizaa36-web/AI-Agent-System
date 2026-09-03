@@ -1,0 +1,9 @@
+{
+  "id": "f77f9a78-09e5-4043-aa3a-07ba73347ab1",
+  "createdAt": "2026-09-03T03:07:28.263Z",
+  "scope": "dashboard",
+  "summary": "Muted text color was borderline for WCAG AA contrast; darkened --muted (light: #5b6270 to #4b515c, dark: #a7adb8 to #b7bcc5) and manually verified all badge/text color pairs now exceed 4.5:1 against their backgrounds.",
+  "implemented": true,
+  "implementedAt": "2026-09-03T03:07:33.890Z",
+  "details": "Already shipped in PR #5 (src/dashboard/page.ts color tokens)."
+}
