@@ -236,6 +236,24 @@ and `orchestrator recommend implemented <id> [--details "..."]` log the
 "noticed / did" feed — anyone (any persona, not just the Coordinator) can
 add to it.
 
+### Operational updates
+
+Operational updates are concise, authored status or handoff records that do
+not change a task's lifecycle and are not recommendations. They are committed
+as one JSON file per entry in `coworker/operational-updates/` and appear in
+the dashboard's **Operational updates** feed. Use them for safe summaries such
+as merged dashboard work, platform-optimizer status, or a required operator
+follow-up:
+
+```text
+node dist/cli/index.js operational-update add "Dashboard review queue merged" --by PinkyBaby --provenance agent
+node dist/cli/index.js operational-update add "Restart required to finish updates" --by Irtiza --provenance external_operator
+```
+
+`--provenance` is required and is one of `human`, `agent`, or
+`external_operator`. Do not record personal data, mailbox contents, credentials,
+or data scraped from a remote service.
+
 ### Tracking an ongoing project (no real "done")
 
 Some real work — Shivani's job-search check-in, for instance — never
