@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildDashboardSnapshot, DEFAULT_AGENT_NAMES } from "./snapshot";
 import { createAgentStatus } from "./agent-status";
-import { createCoworkerTask, withDispatched, withResult } from "../coworker/task";
+import { createCoworkerTask, withDispatched, withResult, withUpdate } from "../coworker/task";
 import { createRecommendation, withImplemented } from "./recommendation";
 
 const NOW = new Date("2026-09-03T12:00:00.000Z");
@@ -55,6 +55,32 @@ test("projects are built from coworker tasks, newest first, with per-persona det
   assert.equal(snap.projects[0]?.overallStatus, "in_progress");
   assert.equal(snap.projects[0]?.personas.find((p) => p.persona === "macmini")?.status, "succeeded");
   assert.equal(snap.projects[1]?.id, "task-a");
+});
+
+test("mostRecentUpdate falls back to the latest dispatch/result event when there's no explicit progress note", () => {
+  const task = withResult(withDispatched(createCoworkerTask("do a thing", "macmini", "task-c"), "macmini"), "macmini", "all done", true);
+  const snap = buildDashboardSnapshot([task], [], [], NOW);
+  const project = snap.projects.find((p) => p.id === "task-c");
+  assert.equal(project?.mostRecentUpdate?.by, "macmini");
+  assert.match(project?.mostRecentUpdate?.note ?? "", /succeeded/);
+  assert.deepEqual(project?.updateHistory, []);
+});
+
+test("an explicit progress note newer than the latest result event wins as mostRecentUpdate", () => {
+  let task = withResult(withDispatched(createCoworkerTask("do a thing", "macmini", "task-d"), "macmini"), "macmini", "done", true);
+  task = withUpdate(task, "Irtiza", "looks good, thanks!", "2026-09-04T00:00:00.000Z");
+  const snap = buildDashboardSnapshot([task], [], [], NOW);
+  const project = snap.projects.find((p) => p.id === "task-d");
+  assert.equal(project?.mostRecentUpdate?.by, "Irtiza");
+  assert.equal(project?.mostRecentUpdate?.note, "looks good, thanks!");
+  assert.equal(project?.updateHistory.length, 1);
+});
+
+test("a project with no activity at all has no mostRecentUpdate", () => {
+  const task = createCoworkerTask("brand new", "macmini", "task-e");
+  const snap = buildDashboardSnapshot([task], [], [], NOW);
+  const project = snap.projects.find((p) => p.id === "task-e");
+  assert.equal(project?.mostRecentUpdate, undefined);
 });
 
 test("recommendations are sorted newest first and carry implemented state through", () => {

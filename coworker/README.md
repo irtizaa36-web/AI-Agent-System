@@ -1,11 +1,12 @@
 # Coworker task loop
 
-A shared to-do list between the two Claude Code personas ("macmini" and
-"Laptop2" — Irtiza calls them Max and Lucy in conversation, but the task
-list and `SendMessage` still need the literal session names above; Max/Lucy
-are friendly names, not values `--to`/`--persona` accept). Write down an
-idea, say who it's for, and that persona picks it up on its own next
-check-in — no one has to trigger it by hand.
+A shared to-do list between the Claude Code personas doing the actual work
+— "macmini" and "Laptop2" (Irtiza calls them Max and Lucy in conversation;
+the task list and `SendMessage` still need the literal session names, not
+the friendly ones), plus specialists added as real needs come up (e.g.
+"Riley", who owns the dashboard itself). Write down an idea, say who it's
+for, and that persona picks it up on its own next check-in — no one has to
+trigger it by hand.
 
 ## Coordinating between sessions
 
@@ -66,10 +67,13 @@ point of using plain files instead of a database.
   "id": "…",
   "createdAt": "2026-09-03T00:00:00.000Z",
   "task": "the idea/instructions, in plain English",
-  "assignedTo": "macmini | Laptop2 | both",
+  "assignedTo": "macmini | Laptop2 | Riley | both",
   "results": {
     "macmini": { "status": "pending | dispatched | succeeded | failed", "output": "…" }
-  }
+  },
+  "updates": [
+    { "at": "…", "by": "macmini | Irtiza | anyone", "note": "a short progress note" }
+  ]
 }
 ```
 
@@ -78,12 +82,20 @@ There's no separate top-level status field — it's always derived from
 two can't drift out of sync. `orchestrator coworker list` shows the derived
 `pending` / `in_progress` / `done` for you.
 
+`updates` is separate from `results` on purpose: it's a running log of
+progress notes ("checking on it," "found three matches, reviewing now"),
+not a status change. It's what makes an *ongoing* project — one that never
+really finishes, like a recurring check-in — still show a meaningful "most
+recent update" on the dashboard instead of sitting at "pending" forever.
+Anyone can post one, not just the assigned persona.
+
 ## The commands (`orchestrator coworker ...`)
 
-- `add "<task text>" --to macmini|Laptop2|both` — write down a new idea.
-- `list [--status pending|in_progress|done] [--for macmini|Laptop2]` — inspect the list.
-- `dispatched <id> --persona macmini|Laptop2` — mark that a persona has picked the task up (call this right before starting the work).
-- `complete <id> --persona macmini|Laptop2 --output "<summary>" [--failed]` — record what happened, once the work is actually done.
+- `add "<task text>" --to macmini|Laptop2|Riley|both` — write down a new idea.
+- `list [--status pending|in_progress|done] [--for macmini|Laptop2|Riley]` — inspect the list.
+- `dispatched <id> --persona macmini|Laptop2|Riley` — mark that a persona has picked the task up (call this right before starting the work).
+- `complete <id> --persona macmini|Laptop2|Riley --output "<summary>" [--failed]` — record what happened, once the work is actually done.
+- `update <id> --by <name> --note "<text>"` — post a progress note, without changing status. For an ongoing project (see below), post one of these periodically instead of ever calling `complete`.
 
 Run `npm run build` once, then call `node dist/cli/index.js coworker ...`
 directly (that's what the recipe below uses). Don't use `npm run cli --
@@ -155,13 +167,21 @@ cloud-sandbox spawn.
 ## The dashboard
 
 `node dist/cli/index.js dashboard` (default port 4317; `--port N` to
-change it) serves a local, read-only page at `http://localhost:<port>`
-showing every agent's live status, every project (coworker task) and its
-state, and a running feed of what the dashboard itself has noticed and
-changed. It auto-refreshes every 15 seconds; there's also a manual
-"Refresh now" button. No remote access or login — local only, for now.
+change it) serves a local page at `http://localhost:<port>` showing every
+agent's live status, every project (coworker task) with its most recent
+update, and a running feed of what's been noticed and changed. It
+auto-refreshes every 15 seconds; there's also a manual "Refresh now"
+button. No remote access or login — local only, for now.
 
-It's built entirely from files already described above, plus one small
+It's not just read-only: the page itself can add a new task (the "Add a
+task" form) and post a progress note on any project — this is meant to be
+the normal way to hand over an idea or check on something, not just a chat
+message to the Coordinator. Both write straight to the same
+`coworker/tasks/*.json` files everything else here reads, via two small
+endpoints (`POST /api/tasks`, `POST /api/tasks/:id/updates`) with no auth,
+since the page itself has none yet either.
+
+Built entirely from files already described above, plus one small
 addition: `coworker/agents/<name>.json`, one per agent, holding that
 agent's own latest self-report (`orchestrator agent-status set <name>
 --status idle|working|stuck [--task "..."]`). The dashboard derives
@@ -175,6 +195,17 @@ above; nothing extra to remember day-to-day.
 and `orchestrator recommend implemented <id> [--details "..."]` log the
 "noticed / did" feed — anyone (any persona, not just the Coordinator) can
 add to it.
+
+### Tracking an ongoing project (no real "done")
+
+Some real work — Shivani's job-search check-in, for instance — never
+finishes; it just keeps running. Represent it as a normal coworker task
+(`coworker add "..." --to <persona>`) that never gets `complete`d, and have
+whoever runs it call `coworker update <id> --by <persona> --note "..."`
+each time something happens (a new match found, a reply received). The
+dashboard shows its latest note as "most recent update" and its overall
+status stays `in_progress` — that's correct and expected for something
+that's ongoing by design, not a sign it's stuck.
 
 ## Safety note
 
