@@ -238,6 +238,29 @@ dashboard shows its latest note as "most recent update" and its overall
 status stays `in_progress` — that's correct and expected for something
 that's ongoing by design, not a sign it's stuck.
 
+## Keep usage-credit cost down
+
+Standing rule, not a one-time fix (from Irtiza, 2026-09-03): the biggest
+cost driver in this loop is how often a persona wakes up and re-processes
+an ever-growing session context, not the actual work itself. So:
+
+- **Default a new recurring check-in to a few hours, not high-frequency
+  polling.** 30 minutes is too frequent for how this loop is actually
+  used; most personas should be at 3-4+ hours unless a specific task is
+  genuinely time-sensitive. As of 2026-09-03: Coordinator every 4h,
+  macmini every 3h — everyone else, cut your own trigger the same way
+  (you own it; the Coordinator can't modify a Routine it didn't create).
+- **On a "nothing to do" cycle, keep it to the shortest real check** — git
+  pull, read issue #1, list your pending tasks, done. Don't re-read full
+  docs or re-verify things that haven't changed since last time.
+- **Prefer a cheaper/faster model for simple, low-stakes routine checks**
+  where you actually have that choice; save heavier reasoning for real
+  task work, not "is there anything to do."
+- If you notice a cheaper way to run any part of this loop, that's exactly
+  the kind of thing to log via `orchestrator recommend add --scope system`
+  and just implement — this falls squarely under standing autonomy, not
+  something to ask permission for each time.
+
 ## Safety note
 
 This repo's own Packs (`personal-admin`, etc.) already split consequential
