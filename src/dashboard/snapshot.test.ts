@@ -43,6 +43,23 @@ test("a status older than the stale threshold displays as offline", () => {
   assert.equal(laptop?.stale, true);
 });
 
+test("attention explains stuck, stale, and failed local records", () => {
+  const stuck = createAgentStatus("Riley", "stuck", "task-a", NOW.toISOString());
+  const stale = createAgentStatus("Jordan", "idle", "task-b", new Date(NOW.getTime() - 9 * 60 * 60 * 1000).toISOString());
+  const failed = withResult(createCoworkerTask("repair local dashboard", "macmini", "task-c"), "macmini", "build failed", false);
+
+  const snap = buildDashboardSnapshot([failed], [stuck, stale], [], NOW);
+
+  assert.deepEqual(
+    snap.attention.map((item) => [item.kind, item.source, item.projectId, item.detail]),
+    [
+      ["failed", "Task result", "task-c", "build failed"],
+      ["stuck", "Agent self-report", undefined, "task-a"],
+      ["offline", "Derived from last self-report", undefined, "task-b"],
+    ],
+  );
+});
+
 test("an agent not in the default list still appears once it has reported at least once", () => {
   const status = createAgentStatus("NewHelper", "idle", undefined, NOW.toISOString());
   const snap = buildDashboardSnapshot([], [status], [], NOW);

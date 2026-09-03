@@ -44,10 +44,27 @@ export interface ProjectView {
   readonly updateHistory: readonly CoworkerTaskUpdate[];
 }
 
+export type AttentionKind = "stuck" | "offline" | "failed";
+
+/**
+ * A read-only reason to review locally recorded work. `source` separates an
+ * agent's report from a conclusion derived from that report's age.
+ */
+export interface AttentionItem {
+  readonly kind: AttentionKind;
+  readonly subject: string;
+  readonly reason: string;
+  readonly source: "Agent self-report" | "Derived from last self-report" | "Task result";
+  readonly at: string;
+  readonly projectId?: string;
+  readonly detail?: string;
+}
+
 export interface DashboardSnapshot {
   readonly generatedAt: string;
   readonly agents: readonly AgentView[];
   readonly projects: readonly ProjectView[];
+  readonly attention: readonly AttentionItem[];
   readonly recommendations: readonly Recommendation[];
 }
 
@@ -108,6 +125,48 @@ function buildProjectView(task: CoworkerTask): ProjectView {
   };
 }
 
+function buildAttentionItems(agents: readonly AgentView[], tasks: readonly CoworkerTask[]): AttentionItem[] {
+  const agentItems = agents.flatMap((agent): AttentionItem[] => {
+    if (agent.status === "stuck" && agent.updatedAt) {
+      return [{
+        kind: "stuck",
+        subject: agent.name,
+        reason: `${agent.name} reported being stuck`,
+        source: "Agent self-report",
+        at: agent.updatedAt,
+        detail: agent.currentTask,
+      }];
+    }
+    if (agent.status === "offline" && agent.updatedAt) {
+      return [{
+        kind: "offline",
+        subject: agent.name,
+        reason: `${agent.name}'s last report is stale`,
+        source: "Derived from last self-report",
+        at: agent.updatedAt,
+        detail: agent.currentTask,
+      }];
+    }
+    return [];
+  });
+  const failedResultItems = tasks.flatMap((task): AttentionItem[] =>
+    Object.entries(task.results).flatMap(([persona, result]) => {
+      if (result?.status !== "failed") return [];
+      return [{
+        kind: "failed",
+        subject: task.task,
+        reason: `${persona} reported a failed result`,
+        source: "Task result",
+        at: result.finishedAt ?? result.dispatchedAt ?? task.createdAt,
+        projectId: task.id,
+        detail: result.output,
+      }];
+    }),
+  );
+
+  return [...agentItems, ...failedResultItems].sort((a, b) => b.at.localeCompare(a.at));
+}
+
 export function buildDashboardSnapshot(
   tasks: readonly CoworkerTask[],
   agentStatuses: readonly AgentStatus[],
@@ -126,8 +185,9 @@ export function buildDashboardSnapshot(
   const projects = [...tasks]
     .map(buildProjectView)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const attention = buildAttentionItems(agents, tasks);
 
   const sortedRecommendations = [...recommendations].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  return { generatedAt: now.toISOString(), agents, projects, recommendations: sortedRecommendations };
+  return { generatedAt: now.toISOString(), agents, projects, attention, recommendations: sortedRecommendations };
 }
