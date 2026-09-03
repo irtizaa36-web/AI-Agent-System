@@ -222,6 +222,53 @@ export const DASHBOARD_HTML = `<!doctype html>
   .persona-list .persona-name { font-weight: 650; }
   .persona-list .persona-output { color: var(--muted); flex-basis: 100%; }
   .persona-list details.task-detail { flex-basis: 100%; margin: 0; }
+  .persona-action, details.persona-complete { flex-basis: 100%; margin: 0.35rem 0 0; }
+  .btn-tiny {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .btn-tiny.start { background: var(--idle-bg); color: var(--idle); }
+  .btn-tiny.succeed { background: var(--working-bg); color: var(--working); }
+  .btn-tiny.fail { background: var(--stuck-bg); color: var(--stuck); }
+  details.persona-complete summary {
+    list-style: none;
+    cursor: pointer;
+    color: var(--idle);
+    background: var(--idle-bg);
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    font-weight: 650;
+    display: inline-flex;
+    align-items: center;
+  }
+  details.persona-complete summary::-webkit-details-marker { display: none; }
+  details.persona-complete[open] summary { margin-bottom: 0.4rem; }
+  .persona-complete-form { display: flex; flex-direction: column; gap: 0.4rem; }
+  .persona-complete-form textarea {
+    padding: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--input-bg); color: var(--text); width: 100%;
+  }
+  .persona-complete-form .btn-row { display: flex; gap: 0.4rem; }
+  .filter-bar { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); flex-wrap: wrap; }
+  .filter-bar label { font-size: 0.85rem; font-weight: 650; }
+  .filter-bar input[type="search"] {
+    flex: 1;
+    min-width: 12rem;
+    max-width: 22rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text);
+  }
+  .filter-bar .filter-count { font-size: 0.82rem; color: var(--muted); }
   .recent-update {
     margin: var(--space-3) 0;
     padding: var(--space-3);
@@ -356,6 +403,11 @@ export const DASHBOARD_HTML = `<!doctype html>
 
   <section aria-labelledby="projects-h">
     <h2 id="projects-h">Projects</h2>
+    <div class="filter-bar">
+      <label for="project-filter">Find a project</label>
+      <input type="search" id="project-filter" placeholder="Filter by title, assignee, or status…">
+      <span class="filter-count" id="filter-count" aria-live="polite"></span>
+    </div>
     <div class="kanban">
       <div class="kanban-column">
         <div class="kanban-column-head status-pending">
@@ -452,23 +504,15 @@ export const DASHBOARD_HTML = `<!doctype html>
       event.preventDefault();
       status.textContent = "Posting…";
       status.className = "form-status";
-      fetch("/api/tasks/" + encodeURIComponent(projectId) + "/updates", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ by: byInput.value, note: noteInput.value }),
-      })
-        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+      postJson("/api/tasks/" + encodeURIComponent(projectId) + "/updates", { by: byInput.value, note: noteInput.value })
         .then(function (result) {
-          if (!result.ok) throw new Error(result.body && result.body.error ? result.body.error : "couldn't post that update");
+          if (!result.ok) throw new Error((result.body && result.body.error) || "couldn't post that update");
           status.textContent = "Posted.";
           status.className = "form-status ok";
           noteInput.value = "";
           load();
         })
-        .catch(function (err) {
-          status.textContent = err.message;
-          status.className = "form-status error";
-        });
+        .catch(function (err) { reportActionError(status, err); });
     });
 
     return form;
@@ -496,7 +540,114 @@ export const DASHBOARD_HTML = `<!doctype html>
     return d;
   }
 
-  function renderPersonaList(personas) {
+  /** Reports a fetch failure inline in a status element instead of silently doing nothing — used by every action below so a network/validation error is always visible where the action was taken. */
+  function reportActionError(statusEl, err) {
+    statusEl.textContent = err.message;
+    statusEl.className = "form-status error";
+  }
+
+  function postJson(path, body) {
+    return fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then(
+      function (res) {
+        return res.json().then(function (parsed) { return { ok: res.ok, body: parsed }; });
+      },
+    );
+  }
+
+  /**
+   * The dashboard's one real "operate the board" control: a one-click
+   * "Start" button for a pending persona (dispatch), or a "Mark done"
+   * disclosure with an output note and Succeeded/Failed buttons for a
+   * dispatched one. Both call the exact same domain transition the CLI
+   * does (see server.ts) — this is a second front door onto the same
+   * data, not a separate concept. Terminal states (succeeded/failed) get
+   * no action; there's no "undo" in the underlying model.
+   */
+  function renderPersonaAction(taskId, persona, status) {
+    if (status === "pending") {
+      var startBtn = document.createElement("button");
+      startBtn.type = "button";
+      startBtn.className = "btn-tiny start";
+      startBtn.textContent = "Start";
+      startBtn.addEventListener("click", function () {
+        startBtn.disabled = true;
+        startBtn.textContent = "Starting…";
+        postJson("/api/tasks/" + encodeURIComponent(taskId) + "/dispatch", { persona: persona })
+          .then(function (result) {
+            if (!result.ok) throw new Error((result.body && result.body.error) || "couldn't start that");
+            load();
+          })
+          .catch(function (err) {
+            startBtn.disabled = false;
+            startBtn.textContent = "Start";
+            window.alert("Couldn't mark " + persona + " as started: " + err.message);
+          });
+      });
+      var startWrap = el("div", "persona-action");
+      startWrap.appendChild(startBtn);
+      return startWrap;
+    }
+
+    if (status === "dispatched") {
+      var details = document.createElement("details");
+      details.className = "persona-complete";
+      var summary = document.createElement("summary");
+      summary.textContent = "Mark done";
+      details.appendChild(summary);
+
+      var form = el("form", "persona-complete-form");
+      var outputId = "complete-output-" + taskId + "-" + persona;
+      var outLabel = el("label", "visually-hidden", "Result / output for " + persona);
+      outLabel.setAttribute("for", outputId);
+      var outInput = document.createElement("textarea");
+      outInput.id = outputId;
+      outInput.rows = 2;
+      outInput.placeholder = "What happened? (optional)";
+
+      var row = el("div", "btn-row");
+      var succeedBtn = document.createElement("button");
+      succeedBtn.type = "submit";
+      succeedBtn.value = "succeeded";
+      succeedBtn.className = "btn-tiny succeed";
+      succeedBtn.textContent = "Succeeded";
+      var failBtn = document.createElement("button");
+      failBtn.type = "submit";
+      failBtn.value = "failed";
+      failBtn.className = "btn-tiny fail";
+      failBtn.textContent = "Failed";
+      row.appendChild(succeedBtn);
+      row.appendChild(failBtn);
+
+      var formStatus = el("p", "form-status", "");
+      formStatus.setAttribute("role", "status");
+      formStatus.setAttribute("aria-live", "polite");
+
+      form.appendChild(outLabel);
+      form.appendChild(outInput);
+      form.appendChild(row);
+      form.appendChild(formStatus);
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        var failed = !!(event.submitter && event.submitter.value === "failed");
+        formStatus.textContent = "Saving…";
+        formStatus.className = "form-status";
+        postJson("/api/tasks/" + encodeURIComponent(taskId) + "/complete", { persona: persona, output: outInput.value, failed: failed })
+          .then(function (result) {
+            if (!result.ok) throw new Error((result.body && result.body.error) || "couldn't save that");
+            load();
+          })
+          .catch(function (err) { reportActionError(formStatus, err); });
+      });
+
+      details.appendChild(form);
+      return details;
+    }
+
+    return null;
+  }
+
+  function renderPersonaList(personas, taskId) {
     var ul = el("ul", "persona-list");
     personas.forEach(function (ps) {
       var li = document.createElement("li");
@@ -507,6 +658,8 @@ export const DASHBOARD_HTML = `<!doctype html>
         out.className = (out.className ? out.className + " " : "") + "persona-output";
         li.appendChild(out);
       }
+      var action = renderPersonaAction(taskId, ps.persona, ps.status);
+      if (action) li.appendChild(action);
       ul.appendChild(li);
     });
     return ul;
@@ -559,7 +712,7 @@ export const DASHBOARD_HTML = `<!doctype html>
     // single assignee, the persona list already names them.
     if (p.assignedTo === "both") li.appendChild(el("p", "field", "Assigned to: both"));
 
-    li.appendChild(renderPersonaList(p.personas || []));
+    li.appendChild(renderPersonaList(p.personas || [], p.id));
     if (isExplicitUpdate(p)) li.appendChild(renderRecentUpdate(p.mostRecentUpdate));
     var history = renderHistory(p.updateHistory);
     if (history) li.appendChild(history);
@@ -567,20 +720,45 @@ export const DASHBOARD_HTML = `<!doctype html>
     return li;
   }
 
-  /** Groups projects into Kanban columns by overall status (Not started / In progress / Done) — see the file-level comment for why a Kanban board instead of a flat grid. */
+  var lastProjects = [];
+  var filterInput = document.getElementById("project-filter");
+  var filterCount = document.getElementById("filter-count");
+
+  /** Substring match against everything visible on a card, so "find a project" means what it looks like it means — title, who it's for, and each persona's status/output. */
+  function matchesFilter(p, query) {
+    if (!query) return true;
+    var haystack = [p.name, p.assignedTo]
+      .concat((p.personas || []).map(function (ps) { return ps.persona + " " + ps.status + " " + (ps.output || ""); }))
+      .join(" ")
+      .toLowerCase();
+    return haystack.indexOf(query) !== -1;
+  }
+
+  /** Groups the (possibly filtered) projects into Kanban columns by overall status (Not started / In progress / Done) — see the file-level comment for why a Kanban board instead of a flat grid. */
   function renderProjects(projects) {
+    lastProjects = projects;
+    applyProjectFilter();
+  }
+
+  function applyProjectFilter() {
+    var query = (filterInput.value || "").trim().toLowerCase();
+    var visible = lastProjects.filter(function (p) { return matchesFilter(p, query); });
+    filterCount.textContent = query ? "Showing " + visible.length + " of " + lastProjects.length : "";
+
     var buckets = { pending: [], in_progress: [], done: [] };
-    projects.forEach(function (p) { (buckets[p.overallStatus] || buckets.pending).push(p); });
+    visible.forEach(function (p) { (buckets[p.overallStatus] || buckets.pending).push(p); });
 
     KANBAN_COLUMNS.forEach(function (status) {
       var list = document.getElementById("kanban-" + status);
       var items = buckets[status];
       list.innerHTML = "";
       document.getElementById("kanban-count-" + status).textContent = String(items.length);
-      if (!items.length) { list.appendChild(el("li", "empty", "Nothing here.")); return; }
+      if (!items.length) { list.appendChild(el("li", "empty", query ? "No matches." : "Nothing here.")); return; }
       items.forEach(function (p) { list.appendChild(buildProjectCard(p)); });
     });
   }
+
+  filterInput.addEventListener("input", applyProjectFilter);
 
   function renderRecommendations(recs) {
     var list = document.getElementById("recommendations");
@@ -633,23 +811,15 @@ export const DASHBOARD_HTML = `<!doctype html>
     var assignedTo = document.getElementById("task-assignee").value;
     addTaskStatus.textContent = "Adding…";
     addTaskStatus.className = "form-status";
-    fetch("/api/tasks", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ task: taskText, assignedTo: assignedTo }),
-    })
-      .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+    postJson("/api/tasks", { task: taskText, assignedTo: assignedTo })
       .then(function (result) {
-        if (!result.ok) throw new Error(result.body && result.body.error ? result.body.error : "couldn't add that task");
+        if (!result.ok) throw new Error((result.body && result.body.error) || "couldn't add that task");
         addTaskStatus.textContent = "Added.";
         addTaskStatus.className = "form-status ok";
         document.getElementById("task-text").value = "";
         load();
       })
-      .catch(function (err) {
-        addTaskStatus.textContent = err.message;
-        addTaskStatus.className = "form-status error";
-      });
+      .catch(function (err) { reportActionError(addTaskStatus, err); });
   });
 
   load();

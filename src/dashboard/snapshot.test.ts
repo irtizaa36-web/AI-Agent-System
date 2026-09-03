@@ -34,6 +34,21 @@ test("a status older than the stale threshold displays as offline", () => {
   assert.equal(laptop?.stale, true);
 });
 
+test("agents needing attention (stuck, then offline) sort before healthy ones, alphabetically within each group", () => {
+  const statuses = [
+    createAgentStatus("Zeta", "idle", undefined, NOW.toISOString()),
+    createAgentStatus("Alpha", "working", undefined, NOW.toISOString()),
+    createAgentStatus("Beta", "stuck", "blocked on X", NOW.toISOString()),
+    createAgentStatus("Omega", "idle", undefined, NOW.toISOString()),
+  ];
+  const snap = buildDashboardSnapshot([], statuses, [], NOW);
+  const names = snap.agents.map((a) => a.name);
+  // Beta (stuck) first; Coordinator/Laptop2/macmini/Riley/Jordan (unreported -> "unknown") sort last.
+  assert.equal(names[0], "Beta");
+  assert.equal(names[1], "Alpha");
+  assert.ok(names.indexOf("Zeta") < names.indexOf("Coordinator"), "a reported idle agent outranks an unreported one");
+});
+
 test("an agent not in the default list still appears once it has reported at least once", () => {
   const status = createAgentStatus("NewHelper", "idle", undefined, NOW.toISOString());
   const snap = buildDashboardSnapshot([], [status], [], NOW);

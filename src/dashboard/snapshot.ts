@@ -108,6 +108,15 @@ function buildProjectView(task: CoworkerTask): ProjectView {
   };
 }
 
+/**
+ * Lower sorts first. Agents that need a look — stuck, or offline when they
+ * were expected to check in — surface above ones that are simply fine, so
+ * the person glancing at the dashboard sees what needs attention without
+ * having to read every card. Alphabetical order was hiding this: a stuck
+ * agent named "Zeta" used to sort dead last, behind a dozen idle ones.
+ */
+const AGENT_URGENCY: Record<DisplayAgentStatus, number> = { stuck: 0, offline: 1, working: 2, idle: 3, unknown: 4 };
+
 export function buildDashboardSnapshot(
   tasks: readonly CoworkerTask[],
   agentStatuses: readonly AgentStatus[],
@@ -121,7 +130,7 @@ export function buildDashboardSnapshot(
 
   const agents = [...agentNames]
     .map((name) => buildAgentView(name, statusByName.get(name), nowMs, staleAfterMs))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => AGENT_URGENCY[a.status] - AGENT_URGENCY[b.status] || a.name.localeCompare(b.name));
 
   const projects = [...tasks]
     .map(buildProjectView)

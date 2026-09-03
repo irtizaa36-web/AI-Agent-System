@@ -127,3 +127,77 @@ test("POST /api/tasks/:id/updates 404s for an unknown task", async () => {
     assert.equal(res.status, 404);
   });
 });
+
+test("POST /api/tasks/:id/dispatch marks a persona dispatched the same way the CLI would", async () => {
+  await withServer(async (baseUrl, deps) => {
+    await deps.coworkerStore.save(createCoworkerTask("do a thing", "macmini", "task-1"));
+
+    const res = await fetch(`${baseUrl}/api/tasks/task-1/dispatch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ persona: "macmini" }),
+    });
+    assert.equal(res.status, 200);
+
+    const [stored] = await deps.coworkerStore.list();
+    assert.equal(stored?.results.macmini?.status, "dispatched");
+  });
+});
+
+test("POST /api/tasks/:id/dispatch rejects an invalid persona, an unassigned persona, and an unknown task", async () => {
+  await withServer(async (baseUrl, deps) => {
+    await deps.coworkerStore.save(createCoworkerTask("do a thing", "macmini", "task-1"));
+
+    const badPersona = await fetch(`${baseUrl}/api/tasks/task-1/dispatch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ persona: "nobody" }),
+    });
+    assert.equal(badPersona.status, 400);
+
+    const unassigned = await fetch(`${baseUrl}/api/tasks/task-1/dispatch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ persona: "Laptop2" }),
+    });
+    assert.equal(unassigned.status, 400);
+
+    const unknownTask = await fetch(`${baseUrl}/api/tasks/no-such-id/dispatch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ persona: "macmini" }),
+    });
+    assert.equal(unknownTask.status, 404);
+  });
+});
+
+test("POST /api/tasks/:id/complete records a persona's result the same way the CLI would", async () => {
+  await withServer(async (baseUrl, deps) => {
+    await deps.coworkerStore.save(createCoworkerTask("do a thing", "macmini", "task-1"));
+
+    const succeeded = await fetch(`${baseUrl}/api/tasks/task-1/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ persona: "macmini", output: "all done" }),
+    });
+    assert.equal(succeeded.status, 200);
+    const [stored] = await deps.coworkerStore.list();
+    assert.equal(stored?.results.macmini?.status, "succeeded");
+    assert.equal(stored?.results.macmini?.output, "all done");
+  });
+});
+
+test("POST /api/tasks/:id/complete with failed: true records a failure", async () => {
+  await withServer(async (baseUrl, deps) => {
+    await deps.coworkerStore.save(createCoworkerTask("do a thing", "macmini", "task-1"));
+
+    const res = await fetch(`${baseUrl}/api/tasks/task-1/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ persona: "macmini", output: "hit an error", failed: true }),
+    });
+    assert.equal(res.status, 200);
+    const [stored] = await deps.coworkerStore.list();
+    assert.equal(stored?.results.macmini?.status, "failed");
+  });
+});

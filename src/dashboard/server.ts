@@ -1,5 +1,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { ALL_COWORKER_PERSONAS, createCoworkerTask, withUpdate, type CoworkerAssignment } from "../coworker/task";
+import {
+  ALL_COWORKER_PERSONAS,
+  createCoworkerTask,
+  withDispatched,
+  withResult,
+  withUpdate,
+  type CoworkerAssignment,
+  type CoworkerPersona,
+} from "../coworker/task";
 import type { CoworkerTaskStore } from "../coworker/store";
 import type { AgentStatusStore } from "./agent-status-store";
 import type { RecommendationStore } from "./recommendation-store";
@@ -60,6 +68,14 @@ function isValidAssignment(value: unknown): value is CoworkerAssignment {
   return typeof value === "string" && ((ALL_COWORKER_PERSONAS as readonly string[]).includes(value) || value === "both");
 }
 
+function isValidPersona(value: unknown): value is CoworkerPersona {
+  return typeof value === "string" && (ALL_COWORKER_PERSONAS as readonly string[]).includes(value);
+}
+
+async function findTask(deps: DashboardServerDeps, taskId: string) {
+  return (await deps.coworkerStore.list()).find((t) => t.id === taskId);
+}
+
 async function handleCreateTask(req: IncomingMessage, res: ServerResponse, deps: DashboardServerDeps): Promise<void> {
   const body = await readJsonBody(req);
   const task = typeof body["task"] === "string" ? body["task"] : "";
@@ -87,7 +103,7 @@ async function handleAddUpdate(req: IncomingMessage, res: ServerResponse, deps: 
     return;
   }
 
-  const task = (await deps.coworkerStore.list()).find((t) => t.id === taskId);
+  const task = await findTask(deps, taskId);
   if (!task) {
     sendJson(res, 404, { error: `no task "${taskId}" found` });
     return;
@@ -98,13 +114,68 @@ async function handleAddUpdate(req: IncomingMessage, res: ServerResponse, deps: 
   sendJson(res, 200, updated);
 }
 
+/** Lets the dashboard itself mark a persona as picked up — the same transition `coworker dispatched` makes from the CLI. */
+async function handleDispatch(req: IncomingMessage, res: ServerResponse, deps: DashboardServerDeps, taskId: string): Promise<void> {
+  const body = await readJsonBody(req);
+  const persona = body["persona"];
+  if (!isValidPersona(persona)) {
+    sendJson(res, 400, { error: `"persona" must be one of: ${ALL_COWORKER_PERSONAS.join(", ")}` });
+    return;
+  }
+
+  const task = await findTask(deps, taskId);
+  if (!task) {
+    sendJson(res, 404, { error: `no task "${taskId}" found` });
+    return;
+  }
+
+  try {
+    const updated = withDispatched(task, persona);
+    await deps.coworkerStore.save(updated);
+    sendJson(res, 200, updated);
+  } catch (error) {
+    sendJson(res, 400, { error: (error as Error).message });
+  }
+}
+
+/** Lets the dashboard itself record a persona's finished result — the same transition `coworker complete` makes from the CLI. */
+async function handleComplete(req: IncomingMessage, res: ServerResponse, deps: DashboardServerDeps, taskId: string): Promise<void> {
+  const body = await readJsonBody(req);
+  const persona = body["persona"];
+  const output = typeof body["output"] === "string" ? body["output"] : "";
+  const failed = body["failed"] === true;
+  if (!isValidPersona(persona)) {
+    sendJson(res, 400, { error: `"persona" must be one of: ${ALL_COWORKER_PERSONAS.join(", ")}` });
+    return;
+  }
+
+  const task = await findTask(deps, taskId);
+  if (!task) {
+    sendJson(res, 404, { error: `no task "${taskId}" found` });
+    return;
+  }
+
+  try {
+    const updated = withResult(task, persona, output, !failed);
+    await deps.coworkerStore.save(updated);
+    sendJson(res, 200, updated);
+  } catch (error) {
+    sendJson(res, 400, { error: (error as Error).message });
+  }
+}
+
 /**
  * The local dashboard: one HTML page, a JSON snapshot endpoint it polls,
- * and two small write endpoints (add a task, add a progress note) so the
- * page itself can be the primary way to create and track work — not just a
- * read-only view. No auth, no remote access — bind to localhost only (the
- * CLI command does this); per "don't worry about remote access yet", the
- * write endpoints stay open to anyone who can already reach localhost.
+ * and small write endpoints (add a task, add a progress note, dispatch a
+ * persona, record a persona's result) so the page itself is somewhere you
+ * can actually operate the coworker loop — not just watch it. Dispatch and
+ * complete are the exact same domain transitions `coworker dispatched`/
+ * `coworker complete` make from the CLI (same task.ts functions), so a
+ * task moved from the dashboard is indistinguishable from one moved by a
+ * persona's own check-in. No auth, no remote access — bind to localhost
+ * only (the CLI command does this); per "don't worry about remote access
+ * yet", the write endpoints stay open to anyone who can already reach
+ * localhost.
  */
 export function createDashboardServer(deps: DashboardServerDeps): Server {
   return createServer((req, res) => {
@@ -132,6 +203,18 @@ export function createDashboardServer(deps: DashboardServerDeps): Server {
       const updateMatch = req.method === "POST" ? req.url?.match(/^\/api\/tasks\/([^/]+)\/updates$/) : undefined;
       if (updateMatch) {
         await handleAddUpdate(req, res, deps, decodeURIComponent(updateMatch[1]));
+        return;
+      }
+
+      const dispatchMatch = req.method === "POST" ? req.url?.match(/^\/api\/tasks\/([^/]+)\/dispatch$/) : undefined;
+      if (dispatchMatch) {
+        await handleDispatch(req, res, deps, decodeURIComponent(dispatchMatch[1]));
+        return;
+      }
+
+      const completeMatch = req.method === "POST" ? req.url?.match(/^\/api\/tasks\/([^/]+)\/complete$/) : undefined;
+      if (completeMatch) {
+        await handleComplete(req, res, deps, decodeURIComponent(completeMatch[1]));
         return;
       }
 
