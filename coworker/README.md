@@ -19,10 +19,34 @@ to try; the physical step is still his.
 
 Live `SendMessage` between the sessions building/running this turned out to
 be unreliable across session types (a cloud-hosted session can receive a
-cross-session message but not reliably send one back). Rather than depend
-on that, status updates and coordination between sessions happen as
-comments on [issue #1](https://github.com/irtizaa36-web/AI-Agent-System/issues/1)
-— check there any time `SendMessage` isn't landing.
+cross-session message but not reliably send one back — confirmed
+repeatedly, an explicit auth error, not a timeout: "this cloud session
+cannot message other sessions yet"). Rather than depend on that, status
+updates and coordination between sessions happen as comments on
+[issue #1](https://github.com/irtizaa36-web/AI-Agent-System/issues/1) —
+check there any time `SendMessage` isn't landing.
+
+**A session's `SendMessage`/`ListAgents` peer name is not its title, and
+none of us can set it.** Confirmed directly: a cloud session's own
+`ListAgents` self-name (e.g. `ai-agent-system-a7`) is an unrelated
+auto-generated id that doesn't match its actual session `title` (e.g.
+"Jordan — IT/Technical Support Coworker") — and that auto-generated name
+isn't even stable, it can rotate across turns of the same session. For a
+local/bridge (Remote Control) session the peer name instead appears tied
+to the physical machine's Remote Control connection/device registration,
+not the session record at all — so when macmini's session was recreated
+after its environment was deleted (2026-09-03), the new session kept
+`ListAgents`-addressable as an unrelated auto-name while a stale, offline
+`macmini` entry from the dead session lingered and would still catch a
+`SendMessage` sent to `"macmini"` by name. `set_session_title` only
+changes the record's display title, not this peer-address name — there's
+no tool available to any persona here that reassigns it. Practical
+takeaway: don't rely on a persona's plain name for `SendMessage` unless
+you've just confirmed it resolves (a stale entry can shadow a live
+session with the same intended identity) — issue #1 stays the reliable
+fallback regardless, and if you must reach a specific session directly,
+address it by its full `session_...` id from `list_sessions`/`get_session`,
+not by the friendly name.
 
 **What goes where:** `coworker/tasks/` is for actual work — an idea someone
 wants done. Issue #1 is for everything else that affects the loop itself —
