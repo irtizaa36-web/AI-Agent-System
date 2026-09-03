@@ -53,5 +53,9 @@ The final output of a Run: status (succeeded/failed), output payload, and any er
 _Avoid_: output, response
 
 **Workflow**:
-A defined sequence or graph of Tasks handed to one or more Agents to reach a larger goal, with dependencies between them. Named for future use; not yet built.
+A persisted, ordered sequence of Tasks handed to one or more Agents to reach a larger goal. The Dispatcher plans it, and the Workflow Runner executes one Step at a time, pausing when a Run awaits approval or an external reply.
 _Avoid_: pipeline, plan
+
+**Operational update**:
+A concise, timestamped status or handoff authored by a human, Agent, or external operator. It records coordination context without changing a Task's lifecycle or representing a recommendation.
+_Avoid_: task update, alert

@@ -25,9 +25,18 @@ test("a fresh self-reported status passes through as-is", () => {
   assert.equal(macmini?.stale, false);
 });
 
+test("a six-hour-old report remains current for the documented slowest check-in", () => {
+  const sixHoursAgo = new Date(NOW.getTime() - 6 * 60 * 60 * 1000).toISOString();
+  const status = createAgentStatus("Jordan", "idle", undefined, sixHoursAgo);
+  const snap = buildDashboardSnapshot([], [status], [], NOW);
+  const jordan = snap.agents.find((a) => a.name === "Jordan");
+  assert.equal(jordan?.status, "idle");
+  assert.equal(jordan?.stale, false);
+});
+
 test("a status older than the stale threshold displays as offline", () => {
-  const fourHoursAgo = new Date(NOW.getTime() - 4 * 60 * 60 * 1000).toISOString();
-  const status = createAgentStatus("Laptop2", "idle", undefined, fourHoursAgo);
+  const nineHoursAgo = new Date(NOW.getTime() - 9 * 60 * 60 * 1000).toISOString();
+  const status = createAgentStatus("Laptop2", "idle", undefined, nineHoursAgo);
   const snap = buildDashboardSnapshot([], [status], [], NOW);
   const laptop = snap.agents.find((a) => a.name === "Laptop2");
   assert.equal(laptop?.status, "offline");
@@ -47,6 +56,42 @@ test("agents needing attention (stuck, then offline) sort before healthy ones, a
   assert.equal(names[0], "Beta");
   assert.equal(names[1], "Alpha");
   assert.ok(names.indexOf("Zeta") < names.indexOf("Coordinator"), "a reported idle agent outranks an unreported one");
+});
+
+test("attention explains stuck, stale, and failed local records", () => {
+  const stuck = createAgentStatus("Riley", "stuck", "task-a", NOW.toISOString());
+  const stale = createAgentStatus("Jordan", "idle", "task-b", new Date(NOW.getTime() - 9 * 60 * 60 * 1000).toISOString());
+  const failed = withResult(createCoworkerTask("repair local dashboard", "macmini", "task-c"), "macmini", "build failed", false);
+
+  const snap = buildDashboardSnapshot([failed], [stuck, stale], [], NOW);
+
+  assert.deepEqual(
+    snap.attention.map((item) => [item.kind, item.source, item.projectId, item.detail]),
+    [
+      ["failed", "Task result", "task-c", "build failed"],
+      ["stuck", "Agent self-report", undefined, "task-a"],
+      ["offline", "Derived from last self-report", undefined, "task-b"],
+    ],
+  );
+});
+
+test("attention preserves a stale agent's self-reported stuck signal alongside offline", () => {
+  const staleStuck = createAgentStatus(
+    "Riley",
+    "stuck",
+    "waiting for approval",
+    new Date(NOW.getTime() - 9 * 60 * 60 * 1000).toISOString(),
+  );
+
+  const snap = buildDashboardSnapshot([], [staleStuck], [], NOW);
+
+  assert.deepEqual(
+    snap.attention.map((item) => [item.kind, item.source, item.detail]),
+    [
+      ["stuck", "Agent self-report", "waiting for approval"],
+      ["offline", "Derived from last self-report", "waiting for approval"],
+    ],
+  );
 });
 
 test("an agent not in the default list still appears once it has reported at least once", () => {

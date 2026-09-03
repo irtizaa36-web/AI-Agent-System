@@ -4,6 +4,7 @@ import {
   coworkerTaskOverallStatus,
   createCoworkerTask,
   withDispatched,
+  withPending,
   withResult,
   withUpdate,
   type CoworkerAssignment,
@@ -107,6 +108,34 @@ async function dispatchedCommand(args: readonly string[], deps: CliDeps): Promis
   return 0;
 }
 
+/** `coworker undispatch <id> --persona <name>`: returns interrupted work to the pending pickup queue. */
+async function undispatchCommand(args: readonly string[], deps: CliDeps): Promise<number> {
+  const usage = "Usage: orchestrator coworker undispatch <id> --persona macmini|Laptop2|Riley|Jordan";
+  const { values, positionals } = parseArgs({
+    args: [...args],
+    options: { persona: { type: "string" } },
+    allowPositionals: true,
+  });
+  const id = positionals[0];
+  const persona = parsePersona(values.persona, usage, deps);
+  if (!id || !persona) {
+    if (!id) deps.stderr(usage);
+    return 1;
+  }
+
+  const task = await findTask(deps, id);
+  if (!task) return 1;
+
+  try {
+    await deps.coworkerStore.save(withPending(task, persona));
+  } catch (error) {
+    deps.stderr((error as Error).message);
+    return 1;
+  }
+  deps.stdout(`Task ${id} returned to pending for ${persona}.`);
+  return 0;
+}
+
 /** `coworker complete <id> --persona macmini|Laptop2 --output "<text>" [--failed]`: a persona calls this once it has actually done the work. */
 async function completeCommand(args: readonly string[], deps: CliDeps): Promise<number> {
   const usage = 'Usage: orchestrator coworker complete <id> --persona macmini|Laptop2 --output "<text>" [--failed]';
@@ -175,6 +204,8 @@ export async function runCoworkerCommand(args: readonly string[], deps: CliDeps)
       return listCommand(rest, deps);
     case "dispatched":
       return dispatchedCommand(rest, deps);
+    case "undispatch":
+      return undispatchCommand(rest, deps);
     case "complete":
       return completeCommand(rest, deps);
     case "update":
@@ -185,6 +216,7 @@ export async function runCoworkerCommand(args: readonly string[], deps: CliDeps)
           'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop2|Riley|Jordan|both',
           "                  coworker list [--status pending|in_progress|done] [--for macmini|Laptop2|Riley|Jordan]",
           "                  coworker dispatched <id> --persona macmini|Laptop2|Riley|Jordan",
+          "                  coworker undispatch <id> --persona macmini|Laptop2|Riley|Jordan",
           '                  coworker complete <id> --persona macmini|Laptop2|Riley|Jordan --output "<text>" [--failed]',
           '                  coworker update <id> --by <name> --note "<text>"',
         ].join("\n"),

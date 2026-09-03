@@ -77,6 +77,9 @@ dashboard, or conversation with Irtiza:
   gitignored/local-only, so a cloud-sandboxed routine wouldn't be able to
   read them (see the "two kinds of trigger" note below).
 
+- **PinkyBaby** — Team B's Lead Agent. Owns triage, integration, durable
+  handoffs, and tasks that require Team B coordination.
+
 ## Where the list lives
 
 `coworker/tasks/<id>.json` — one small JSON file per task, committed to
@@ -125,6 +128,7 @@ Anyone can post one, not just the assigned persona.
 - `add "<task text>" --to macmini|Laptop2|Riley|both` — write down a new idea.
 - `list [--status pending|in_progress|done] [--for macmini|Laptop2|Riley]` — inspect the list.
 - `dispatched <id> --persona macmini|Laptop2|Riley` — mark that a persona has picked the task up (call this right before starting the work).
+- `undispatch <id> --persona macmini|Laptop2|Riley` — return interrupted work to `pending`, clearing stale dispatch metadata so a later check-in can pick it up.
 - `complete <id> --persona macmini|Laptop2|Riley --output "<summary>" [--failed]` — record what happened, once the work is actually done.
 - `update <id> --by <name> --note "<text>"` — post a progress note, without changing status. For an ongoing project (see below), post one of these periodically instead of ever calling `complete`.
 
@@ -171,6 +175,11 @@ whatever scheduling this machine has) whose prompt is along these lines:
 > Do this without asking for confirmation on each step, but never touch
 > money/payments, and stop and flag anything that seems illegal or that a
 > reasonable person would want to weigh in on first.
+
+If a session expires or a machine becomes unavailable after a task was marked
+`dispatched`, use `undispatch` before the next pickup cycle. Dispatched tasks
+do not appear in the normal pending-task query, so this recovery step prevents
+interrupted work from being stranded.
 
 `SendMessage` between the two persona sessions is still there for anything
 that isn't this loop — asking each other a question, flagging something
@@ -226,6 +235,24 @@ above; nothing extra to remember day-to-day.
 and `orchestrator recommend implemented <id> [--details "..."]` log the
 "noticed / did" feed — anyone (any persona, not just the Coordinator) can
 add to it.
+
+### Operational updates
+
+Operational updates are concise, authored status or handoff records that do
+not change a task's lifecycle and are not recommendations. They are committed
+as one JSON file per entry in `coworker/operational-updates/` and appear in
+the dashboard's **Operational updates** feed. Use them for safe summaries such
+as merged dashboard work, platform-optimizer status, or a required operator
+follow-up:
+
+```text
+node dist/cli/index.js operational-update add "Dashboard review queue merged" --by PinkyBaby --provenance agent
+node dist/cli/index.js operational-update add "Restart required to finish updates" --by Irtiza --provenance external_operator
+```
+
+`--provenance` is required and is one of `human`, `agent`, or
+`external_operator`. Do not record personal data, mailbox contents, credentials,
+or data scraped from a remote service.
 
 ### Tracking an ongoing project (no real "done")
 

@@ -4,6 +4,10 @@
 
 Read `PROJECT-BRAIN.md` first — it's the durable, plain-English briefing on what this project is, what actually exists vs. what's only planned, the standing architectural principles, safety boundaries, and how this project expects Claude Code to work. See also `CONTEXT.md` (domain vocabulary) and `docs/adr/` (why specific architectural decisions were made).
 
+## Cross-team continuity
+
+This repository is the shared source of truth for Team B and any alternating team. Before starting or handing off work, follow `docs/agents/team-handoff.md`.
+
 ## Agent skills
 
 ### Issue tracker

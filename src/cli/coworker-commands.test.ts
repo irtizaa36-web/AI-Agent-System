@@ -87,6 +87,20 @@ test("coworker dispatched then complete moves a single-persona task from pending
   assert.match(text, /all done/);
 });
 
+test("coworker undispatch returns interrupted work to pending", async () => {
+  const { stdout, deps } = buildDeps();
+  await runCli(["coworker", "add", "do a thing", "--to", "macmini"], deps);
+  const id = stdout[0].match(/task (\S+) for/)?.[1];
+  assert.ok(id);
+
+  assert.equal(await runCli(["coworker", "dispatched", id!, "--persona", "macmini"], deps), 0);
+  assert.equal(await runCli(["coworker", "undispatch", id!, "--persona", "macmini"], deps), 0);
+
+  const before = stdout.length;
+  await runCli(["coworker", "list", "--status", "pending", "--for", "macmini"], deps);
+  assert.match(stdout.slice(before).join("\n"), /do a thing/);
+});
+
 test("coworker complete on a persona the task isn't assigned to fails clearly", async () => {
   const { stdout, stderr, deps } = buildDeps();
   await runCli(["coworker", "add", "do a thing", "--to", "macmini"], deps);
@@ -138,6 +152,13 @@ test("coworker add accepts the specialist Jordan persona", async () => {
   const code = await runCli(["coworker", "add", "figure out why the Windows trigger stopped", "--to", "Jordan"], deps);
   assert.equal(code, 0);
   assert.match(stdout.join("\n"), /for Jordan/);
+});
+
+test("coworker add accepts the Team B lead persona", async () => {
+  const { stdout, deps } = buildDeps();
+  const code = await runCli(["coworker", "add", "coordinate a handoff", "--to", "PinkyBaby"], deps);
+  assert.equal(code, 0);
+  assert.match(stdout.join("\n"), /for PinkyBaby/);
 });
 
 test("coworker with no subcommand prints usage", async () => {

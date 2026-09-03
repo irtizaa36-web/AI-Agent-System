@@ -5,17 +5,19 @@ import { createDashboardServer } from "./server";
 import { InMemoryCoworkerTaskStore } from "../coworker/store";
 import { InMemoryAgentStatusStore } from "./agent-status-store";
 import { InMemoryRecommendationStore } from "./recommendation-store";
+import { InMemoryOperationalUpdateStore } from "./operational-update-store";
 import { createCoworkerTask } from "../coworker/task";
 import { createAgentStatus } from "./agent-status";
 import { createRecommendation } from "./recommendation";
 
 async function withServer(
-  fn: (baseUrl: string, deps: { coworkerStore: InMemoryCoworkerTaskStore; agentStatusStore: InMemoryAgentStatusStore; recommendationStore: InMemoryRecommendationStore }) => Promise<void>,
+  fn: (baseUrl: string, deps: { coworkerStore: InMemoryCoworkerTaskStore; agentStatusStore: InMemoryAgentStatusStore; recommendationStore: InMemoryRecommendationStore; operationalUpdateStore: InMemoryOperationalUpdateStore }) => Promise<void>,
 ): Promise<void> {
   const deps = {
     coworkerStore: new InMemoryCoworkerTaskStore(),
     agentStatusStore: new InMemoryAgentStatusStore(),
     recommendationStore: new InMemoryRecommendationStore(),
+    operationalUpdateStore: new InMemoryOperationalUpdateStore(),
   };
   const server = createDashboardServer(deps);
   await new Promise<void>((resolve) => server.listen(0, "localhost", resolve));
@@ -34,6 +36,25 @@ test("GET / serves the dashboard HTML page", async () => {
     assert.match(res.headers.get("content-type") ?? "", /text\/html/);
     const body = await res.text();
     assert.match(body, /Coworker Dashboard/);
+    assert.match(body, /At a glance/);
+    assert.match(body, /Attention needed/);
+    assert.match(body, /id="status-filter"/);
+    assert.match(body, /id="assignee-filter"/);
+    assert.match(body, /Projects/);
+    assert.match(body, /id="project-filter"/);
+    assert.match(body, /p\.assignedTo === "both"/);
+  });
+});
+
+test("POST /api/operational-updates persists an authored operational update", async () => {
+  await withServer(async (baseUrl, deps) => {
+    const res = await fetch(`${baseUrl}/api/operational-updates`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ summary: "Restart required", by: "Irtiza", provenance: "external_operator" }),
+    });
+    assert.equal(res.status, 201);
+    assert.equal((await deps.operationalUpdateStore.list())[0]?.summary, "Restart required");
   });
 });
 

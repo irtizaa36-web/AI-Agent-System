@@ -135,6 +135,54 @@ export const DASHBOARD_HTML = `<!doctype html>
     margin: 0;
     padding: 0;
   }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: var(--space-3);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .metric {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    padding: var(--space-3) var(--space-4);
+  }
+  .metric-value { display: block; font-size: 1.7rem; font-weight: 750; line-height: 1.2; }
+  .metric-label { color: var(--muted); font-size: 0.82rem; }
+  .attention-list { display: flex; flex-direction: column; gap: var(--space-2); }
+  .attention-item {
+    background: var(--stuck-bg);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: var(--stuck);
+    padding: var(--space-3) var(--space-4);
+  }
+  .attention-item strong { display: block; }
+  .attention-item .attention-meta { display: block; margin-top: var(--space-1); font-size: 0.78rem; }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .filters label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 650;
+  }
+  .filters select {
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text);
+  }
   .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
@@ -378,7 +426,7 @@ export const DASHBOARD_HTML = `<!doctype html>
   <form id="add-task-form">
     <div class="field-group">
       <label for="task-text">What needs doing</label>
-      <input type="text" id="task-text" name="task" required>
+      <input type="text" id="task-text" name="task" placeholder="Describe the next concrete action" required>
     </div>
     <div class="field-group">
       <label for="task-assignee">Who it's for</label>
@@ -387,6 +435,7 @@ export const DASHBOARD_HTML = `<!doctype html>
         <option value="Laptop2">Laptop2</option>
         <option value="Riley">Riley</option>
         <option value="Jordan">Jordan</option>
+        <option value="PinkyBaby">PinkyBaby</option>
         <option value="both">Both (macmini &amp; Laptop2)</option>
       </select>
     </div>
@@ -396,6 +445,16 @@ export const DASHBOARD_HTML = `<!doctype html>
 </dialog>
 
 <main>
+  <section aria-labelledby="summary-h">
+    <h2 id="summary-h">At a glance</h2>
+    <div id="summary" class="summary-grid" aria-live="polite"></div>
+  </section>
+
+  <section aria-labelledby="attention-h" id="attention-section">
+    <h2 id="attention-h">Attention needed</h2>
+    <div id="attention" class="attention-list" aria-live="polite"></div>
+  </section>
+
   <section aria-labelledby="agents-h">
     <h2 id="agents-h">Agents</h2>
     <ul id="agents" class="grid" aria-live="polite"></ul>
@@ -407,6 +466,29 @@ export const DASHBOARD_HTML = `<!doctype html>
       <label for="project-filter">Find a project</label>
       <input type="search" id="project-filter" placeholder="Filter by title, assignee, or status…">
       <span class="filter-count" id="filter-count" aria-live="polite"></span>
+    </div>
+    <div class="filters" aria-label="Project filters">
+      <label>
+        Status
+        <select id="status-filter">
+          <option value="all">All statuses</option>
+          <option value="pending">Not started</option>
+          <option value="in_progress">In progress</option>
+          <option value="done">Done</option>
+        </select>
+      </label>
+      <label>
+        Assignee
+        <select id="assignee-filter">
+          <option value="all">All assignees</option>
+          <option value="macmini">macmini</option>
+          <option value="Laptop2">Laptop2</option>
+          <option value="Riley">Riley</option>
+          <option value="Jordan">Jordan</option>
+          <option value="PinkyBaby">PinkyBaby</option>
+          <option value="both">Both</option>
+        </select>
+      </label>
     </div>
     <div class="kanban">
       <div class="kanban-column">
@@ -436,6 +518,20 @@ export const DASHBOARD_HTML = `<!doctype html>
   <section aria-labelledby="recs-h">
     <h2 id="recs-h">Recommendations &amp; changes</h2>
     <ul id="recommendations" class="plain" aria-live="polite"></ul>
+  </section>
+  <section aria-labelledby="operations-h">
+    <h2 id="operations-h">Operational updates</h2>
+    <form id="operational-update-form" class="update-form">
+      <label class="visually-hidden" for="operational-summary">Operational update</label>
+      <input id="operational-summary" name="summary" type="text" placeholder="Concise operational update" required>
+      <label class="visually-hidden" for="operational-by">Author</label>
+      <input id="operational-by" name="by" type="text" placeholder="Your name" required>
+      <label for="operational-provenance">Provenance</label>
+      <select id="operational-provenance" name="provenance"><option value="human">Human</option><option value="agent">Agent</option><option value="external_operator">External operator</option></select>
+      <button type="submit">Post operational update</button>
+      <p id="operational-update-status" class="form-status" role="status" aria-live="polite"></p>
+    </form>
+    <ul id="operational-updates" class="plain" aria-live="polite"></ul>
   </section>
 </main>
 <script>
@@ -468,6 +564,35 @@ export const DASHBOARD_HTML = `<!doctype html>
       if (a.currentTask) li.appendChild(el("p", "field", "Working on: " + a.currentTask));
       li.appendChild(el("p", "field", a.updatedAt ? "Last update: " + new Date(a.updatedAt).toLocaleString() : "Never reported in"));
       list.appendChild(li);
+    });
+  }
+
+  function renderSummary(snap) {
+    var summary = document.getElementById("summary");
+    summary.innerHTML = "";
+    [
+      ["Total tasks", snap.projects.length],
+      ["In progress", snap.projects.filter(function (p) { return p.overallStatus === "in_progress"; }).length],
+      ["Ready to start", snap.projects.filter(function (p) { return p.overallStatus === "pending"; }).length]
+    ].forEach(function (metric) {
+      var card = el("div", "metric");
+      card.appendChild(el("span", "metric-value", String(metric[1])));
+      card.appendChild(el("span", "metric-label", metric[0]));
+      summary.appendChild(card);
+    });
+  }
+
+  function renderAttention(items) {
+    var section = document.getElementById("attention-section");
+    var list = document.getElementById("attention");
+    list.innerHTML = "";
+    section.hidden = items.length === 0;
+    items.forEach(function (attentionItem) {
+      var card = el("div", "attention-item");
+      card.appendChild(el("strong", null, attentionItem.reason));
+      if (attentionItem.detail) card.appendChild(el("span", null, attentionItem.detail));
+      card.appendChild(el("span", "attention-meta", attentionItem.source + " · " + new Date(attentionItem.at).toLocaleString()));
+      list.appendChild(card);
     });
   }
 
@@ -712,6 +837,14 @@ export const DASHBOARD_HTML = `<!doctype html>
     // single assignee, the persona list already names them.
     if (p.assignedTo === "both") li.appendChild(el("p", "field", "Assigned to: both"));
 
+    li.appendChild(el(
+      "p",
+      "field",
+      p.mostRecentUpdate
+        ? "Last activity: " + new Date(p.mostRecentUpdate.at).toLocaleString()
+        : "Created: " + new Date(p.createdAt).toLocaleString()
+    ));
+
     li.appendChild(renderPersonaList(p.personas || [], p.id));
     if (isExplicitUpdate(p)) li.appendChild(renderRecentUpdate(p.mostRecentUpdate));
     var history = renderHistory(p.updateHistory);
@@ -740,10 +873,20 @@ export const DASHBOARD_HTML = `<!doctype html>
     applyProjectFilter();
   }
 
+  /** All three filters — free-text query, status dropdown, assignee dropdown — apply together (AND), so narrowing by category and searching by keyword compose instead of fighting each other. */
   function applyProjectFilter() {
     var query = (filterInput.value || "").trim().toLowerCase();
-    var visible = lastProjects.filter(function (p) { return matchesFilter(p, query); });
-    filterCount.textContent = query ? "Showing " + visible.length + " of " + lastProjects.length : "";
+    var statusFilter = document.getElementById("status-filter").value;
+    var assigneeFilter = document.getElementById("assignee-filter").value;
+
+    var anyFilterActive = !!query || statusFilter !== "all" || assigneeFilter !== "all";
+    var visible = lastProjects.filter(function (p) {
+      return matchesFilter(p, query) &&
+        (statusFilter === "all" || p.overallStatus === statusFilter) &&
+        (assigneeFilter === "all" || p.assignedTo === assigneeFilter ||
+          (p.assignedTo === "both" && (assigneeFilter === "macmini" || assigneeFilter === "Laptop2")));
+    });
+    filterCount.textContent = anyFilterActive ? "Showing " + visible.length + " of " + lastProjects.length : "";
 
     var buckets = { pending: [], in_progress: [], done: [] };
     visible.forEach(function (p) { (buckets[p.overallStatus] || buckets.pending).push(p); });
@@ -753,12 +896,14 @@ export const DASHBOARD_HTML = `<!doctype html>
       var items = buckets[status];
       list.innerHTML = "";
       document.getElementById("kanban-count-" + status).textContent = String(items.length);
-      if (!items.length) { list.appendChild(el("li", "empty", query ? "No matches." : "Nothing here.")); return; }
+      if (!items.length) { list.appendChild(el("li", "empty", anyFilterActive ? "No matches." : "Nothing here.")); return; }
       items.forEach(function (p) { list.appendChild(buildProjectCard(p)); });
     });
   }
 
   filterInput.addEventListener("input", applyProjectFilter);
+  document.getElementById("status-filter").addEventListener("change", applyProjectFilter);
+  document.getElementById("assignee-filter").addEventListener("change", applyProjectFilter);
 
   function renderRecommendations(recs) {
     var list = document.getElementById("recommendations");
@@ -774,14 +919,30 @@ export const DASHBOARD_HTML = `<!doctype html>
     });
   }
 
+  function renderOperationalUpdates(updates) {
+    var list = document.getElementById("operational-updates");
+    list.innerHTML = "";
+    if (!updates.length) { list.appendChild(el("li", "empty", "No operational updates yet.")); return; }
+    updates.forEach(function (update) {
+      var li = el("li", "rec");
+      li.appendChild(el("p", "rec-summary", update.summary));
+      li.appendChild(el("p", "field", update.provenance + " · " + update.by + " · " + new Date(update.createdAt).toLocaleString()));
+      if (update.details) li.appendChild(el("p", "field", update.details));
+      list.appendChild(li);
+    });
+  }
+
   function load() {
     document.getElementById("meta").textContent = "Refreshing…";
     fetch("/api/snapshot")
       .then(function (res) { return res.json(); })
       .then(function (snap) {
+        renderSummary(snap);
+        renderAttention(snap.attention);
         renderAgents(snap.agents);
         renderProjects(snap.projects);
         renderRecommendations(snap.recommendations);
+        renderOperationalUpdates(snap.operationalUpdates);
         document.getElementById("meta").textContent = "Updated " + new Date(snap.generatedAt).toLocaleTimeString();
       })
       .catch(function () {
@@ -820,6 +981,33 @@ export const DASHBOARD_HTML = `<!doctype html>
         load();
       })
       .catch(function (err) { reportActionError(addTaskStatus, err); });
+  });
+
+  var operationalForm = document.getElementById("operational-update-form");
+  var operationalStatus = document.getElementById("operational-update-status");
+  operationalForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    operationalStatus.textContent = "Posting…";
+    fetch("/api/operational-updates", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        summary: document.getElementById("operational-summary").value,
+        by: document.getElementById("operational-by").value,
+        provenance: document.getElementById("operational-provenance").value
+      })
+    }).then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.body.error || "couldn't post operational update");
+        operationalStatus.textContent = "Posted.";
+        operationalStatus.className = "form-status ok";
+        document.getElementById("operational-summary").value = "";
+        load();
+      })
+      .catch(function (err) {
+        operationalStatus.textContent = err.message;
+        operationalStatus.className = "form-status error";
+      });
   });
 
   load();
