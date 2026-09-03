@@ -5,10 +5,13 @@
  * Kept as one plain-language, at-a-glance view: status badges use an icon
  * AND a text label (never color alone), body text stays at a normal
  * reading size, and layout is a single responsive grid so it reads fine on
- * a phone with no separate mobile layout to maintain. The two forms (add a
- * task, add a progress note) are the page's only interactive pieces — real
- * <form>/<label>/<button> elements, not custom widgets, so they're
- * keyboard- and screen-reader-usable for free.
+ * a phone with no separate mobile layout to maintain. The "Add a task"
+ * dialog and each project's "Post an update" disclosure are the page's only
+ * interactive pieces — real <dialog>/<details>/<form>/<label>/<button>
+ * elements, not custom widgets, so they're keyboard- and screen-reader-
+ * usable for free. The "Add a task" trigger lives in the sticky header so
+ * it's reachable from anywhere on the page, not just after scrolling to a
+ * particular section (it used to be a section you could easily scroll past).
  */
 export const DASHBOARD_HTML = `<!doctype html>
 <html lang="en">
@@ -36,6 +39,17 @@ export const DASHBOARD_HTML = `<!doctype html>
     --unknown-bg: #eceef1;
     --focus: #1155cc;
     --input-bg: #ffffff;
+    --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 6px rgba(15, 23, 42, 0.04);
+    --backdrop: rgba(20, 22, 26, 0.45);
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2.25rem;
+    --radius-sm: 0.4rem;
+    --radius-md: 0.65rem;
+    --radius-lg: 0.9rem;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -45,6 +59,8 @@ export const DASHBOARD_HTML = `<!doctype html>
       --muted: #b7bcc5;
       --border: #3a4048;
       --input-bg: #14161a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 10px rgba(0, 0, 0, 0.28);
+      --backdrop: rgba(0, 0, 0, 0.6);
     }
   }
   * { box-sizing: border-box; }
@@ -52,36 +68,62 @@ export const DASHBOARD_HTML = `<!doctype html>
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
   a, button, input, select, textarea { font: inherit; }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   header {
-    padding: 1.25rem 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg);
+    padding: var(--space-3) var(--space-4);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: var(--space-2) var(--space-4);
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--border);
   }
-  header h1 { margin: 0; font-size: 1.4rem; }
-  #meta { color: var(--muted); font-size: 0.95rem; }
+  header .header-title { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
+  #meta { color: var(--muted); font-size: 0.85rem; }
+  header .header-actions { display: flex; gap: var(--space-2); align-items: center; margin-left: auto; }
   button { cursor: pointer; }
-  button#refresh {
-    background: var(--idle-bg);
-    color: var(--idle);
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
-    border-radius: 0.5rem;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: var(--card-bg);
+    color: var(--text);
   }
-  main { max-width: 68rem; margin: 0 auto; padding: 1rem; }
-  section { margin-bottom: 2rem; }
-  section h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
+  .btn-primary { background: var(--working-bg); color: var(--working); border-color: transparent; }
+  .btn-ghost { background: var(--idle-bg); color: var(--idle); }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2rem; height: 2rem; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--card-bg); color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 0;
+  }
+  main { max-width: 68rem; margin: 0 auto; padding: var(--space-5) var(--space-4) var(--space-6); }
+  section { margin-bottom: var(--space-6); }
+  section h2 {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin: 0 0 var(--space-3);
+  }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: var(--space-4);
     list-style: none;
     margin: 0;
     padding: 0;
@@ -89,19 +131,21 @@ export const DASHBOARD_HTML = `<!doctype html>
   .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 0.75rem;
-    padding: 1rem;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: var(--space-4);
   }
-  .card h3 { margin: 0 0 0.4rem; font-size: 1.05rem; }
+  .card h3 { margin: 0; font-size: 1.02rem; font-weight: 650; }
+  .project-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
   .badge {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    font-size: 0.85rem;
-    font-weight: 600;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 700;
     padding: 0.2rem 0.6rem;
     border-radius: 999px;
-    margin-bottom: 0.5rem;
+    white-space: nowrap;
   }
   .badge.working { color: var(--working); background: var(--working-bg); }
   .badge.idle { color: var(--idle); background: var(--idle-bg); }
@@ -110,54 +154,96 @@ export const DASHBOARD_HTML = `<!doctype html>
   .badge.unknown, .badge.pending { color: var(--unknown); background: var(--unknown-bg); }
   .badge.done { color: var(--working); background: var(--working-bg); }
   .badge.in_progress { color: var(--idle); background: var(--idle-bg); }
-  .field { color: var(--muted); font-size: 0.9rem; margin: 0.15rem 0; }
+  .agent-card .badge { margin-bottom: var(--space-2); }
+  .field { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0; }
   .empty { color: var(--muted); font-style: italic; }
-  .persona-line { font-size: 0.85rem; margin: 0.2rem 0; }
-  .recent-update { font-size: 0.9rem; margin: 0.5rem 0; padding: 0.5rem 0.6rem; background: var(--idle-bg); border-radius: 0.5rem; }
+  .persona-list { list-style: none; margin: var(--space-2) 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+  .persona-list li { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.3rem 0.4rem; align-items: baseline; }
+  .persona-list .persona-name { font-weight: 650; }
+  .persona-list .persona-output { color: var(--muted); flex-basis: 100%; }
+  .recent-update {
+    margin: var(--space-3) 0;
+    padding: var(--space-3);
+    background: var(--idle-bg);
+    border-radius: var(--radius-md);
+  }
+  /* Note: this box keeps a light "chip" background in both themes (same
+     pattern as .badge), so its text needs an explicit color that stays
+     readable against that light background — it must not inherit the
+     page's theme-aware --text/--muted, which turn light in dark mode and
+     would go near-invisible here. */
+  .recent-update-label { margin: 0 0 0.2rem; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--idle); }
+  .recent-update-note { margin: 0; font-size: 0.92rem; color: var(--idle); }
+  .recent-update-meta { margin: 0.3rem 0 0; font-size: 0.78rem; color: var(--idle); }
   ul.plain { list-style: none; margin: 0; padding: 0; }
   li.rec {
     border-left: 3px solid var(--border);
-    padding: 0.5rem 0 0.5rem 0.75rem;
-    margin-bottom: 0.6rem;
+    padding: var(--space-2) 0 var(--space-2) var(--space-3);
+    margin-bottom: var(--space-3);
   }
   li.rec.implemented { border-left-color: var(--working); }
-  li.rec .rec-summary { font-weight: 600; }
-  details.history { margin-top: 0.5rem; }
-  details.history summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
-  details.history ul { list-style: none; margin: 0.4rem 0 0; padding: 0; }
-  details.history li { font-size: 0.82rem; margin: 0.25rem 0; color: var(--muted); }
-  form.card { display: flex; flex-direction: column; gap: 0.6rem; }
-  form label { font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 0.25rem; }
-  form input[type="text"], form select, form textarea {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid var(--border);
-    border-radius: 0.4rem;
-    background: var(--input-bg);
-    color: var(--text);
+  li.rec .rec-summary { font-weight: 600; margin: 0 0 0.2rem; }
+  details.history { margin-top: var(--space-3); }
+  details.history summary { cursor: pointer; color: var(--muted); font-size: 0.82rem; }
+  details.history ul { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+  details.history li { font-size: 0.8rem; color: var(--muted); }
+  details.history .history-meta { display: block; font-weight: 600; color: var(--text); }
+  details.update-toggle { margin-top: var(--space-3); }
+  details.update-toggle summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    background: var(--idle-bg);
+    color: var(--idle);
+    border-radius: var(--radius-sm);
+    padding: 0.45rem 0.85rem;
+    font-size: 0.85rem;
+    font-weight: 650;
   }
-  form .submit {
+  details.update-toggle summary::-webkit-details-marker { display: none; }
+  details.update-toggle[open] summary { margin-bottom: var(--space-2); }
+  .update-form { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+  .update-form input, .update-form textarea {
+    padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--input-bg); color: var(--text); width: 100%;
+  }
+  .update-form button {
     align-self: flex-start;
     background: var(--working-bg);
     color: var(--working);
-    border: 1px solid var(--border);
-    border-radius: 0.5rem;
-    padding: 0.5rem 1rem;
-  }
-  .update-form { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.6rem; }
-  .update-form input, .update-form textarea { padding: 0.4rem; border: 1px solid var(--border); border-radius: 0.4rem; background: var(--input-bg); color: var(--text); }
-  .update-form button {
-    align-self: flex-start;
-    background: var(--idle-bg);
-    color: var(--idle);
-    border: 1px solid var(--border);
-    border-radius: 0.4rem;
-    padding: 0.35rem 0.8rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.9rem;
     font-size: 0.85rem;
+    font-weight: 650;
   }
-  .form-status { font-size: 0.85rem; min-height: 1.2em; }
+  .form-status { font-size: 0.85rem; min-height: 1.2em; margin: 0; }
   .form-status.error { color: var(--offline); }
   .form-status.ok { color: var(--working); }
+  dialog {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    background: var(--card-bg);
+    color: var(--text);
+    padding: var(--space-4);
+    width: min(26rem, calc(100vw - 2rem));
+  }
+  dialog::backdrop { background: var(--backdrop); }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .dialog-head h2 { margin: 0; font-size: 1.05rem; text-transform: none; letter-spacing: normal; font-weight: 650; color: var(--text); }
+  #add-task-form { display: flex; flex-direction: column; gap: var(--space-3); }
+  .field-group label { font-size: 0.85rem; font-weight: 650; display: block; margin-bottom: 0.3rem; }
+  .field-group input[type="text"], .field-group select {
+    width: 100%;
+    padding: 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text);
+  }
   .visually-hidden {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
@@ -166,35 +252,44 @@ export const DASHBOARD_HTML = `<!doctype html>
 </head>
 <body>
 <header>
-  <h1>Coworker Dashboard</h1>
-  <div id="meta">Loading…</div>
-  <button id="refresh" type="button">Refresh now</button>
+  <div class="header-title">
+    <h1>Coworker Dashboard</h1>
+    <div id="meta">Loading…</div>
+  </div>
+  <div class="header-actions">
+    <button id="open-add-task" type="button" class="btn btn-primary">+ Add a task</button>
+    <button id="refresh" type="button" class="btn btn-ghost">Refresh now</button>
+  </div>
 </header>
+
+<dialog id="add-task-dialog" aria-labelledby="add-task-h">
+  <div class="dialog-head">
+    <h2 id="add-task-h">Add a task</h2>
+    <button type="button" class="icon-btn" id="close-add-task" aria-label="Close">&times;</button>
+  </div>
+  <form id="add-task-form">
+    <div class="field-group">
+      <label for="task-text">What needs doing</label>
+      <input type="text" id="task-text" name="task" required>
+    </div>
+    <div class="field-group">
+      <label for="task-assignee">Who it's for</label>
+      <select id="task-assignee" name="assignedTo">
+        <option value="macmini">macmini</option>
+        <option value="Laptop2">Laptop2</option>
+        <option value="Riley">Riley</option>
+        <option value="both">Both (macmini &amp; Laptop2)</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Add task</button>
+    <p id="add-task-status" class="form-status" role="status" aria-live="polite"></p>
+  </form>
+</dialog>
+
 <main>
   <section aria-labelledby="agents-h">
     <h2 id="agents-h">Agents</h2>
     <ul id="agents" class="grid" aria-live="polite"></ul>
-  </section>
-
-  <section aria-labelledby="add-task-h">
-    <h2 id="add-task-h">Add a task</h2>
-    <form id="add-task-form" class="card">
-      <div>
-        <label for="task-text">What needs doing</label>
-        <input type="text" id="task-text" name="task" required>
-      </div>
-      <div>
-        <label for="task-assignee">Who it's for</label>
-        <select id="task-assignee" name="assignedTo">
-          <option value="macmini">macmini</option>
-          <option value="Laptop2">Laptop2</option>
-          <option value="Riley">Riley</option>
-          <option value="both">Both (macmini &amp; Laptop2)</option>
-        </select>
-      </div>
-      <button type="submit" class="submit">Add task</button>
-      <p id="add-task-status" class="form-status" role="status" aria-live="polite"></p>
-    </form>
   </section>
 
   <section aria-labelledby="projects-h">
@@ -233,7 +328,7 @@ export const DASHBOARD_HTML = `<!doctype html>
     list.innerHTML = "";
     if (!agents.length) { list.appendChild(el("li", "empty", "No agents yet.")); return; }
     agents.forEach(function (a) {
-      var li = el("li", "card");
+      var li = el("li", "card agent-card");
       li.appendChild(el("h3", null, a.name));
       li.appendChild(badge("agent", a.status));
       if (a.currentTask) li.appendChild(el("p", "field", "Working on: " + a.currentTask));
@@ -297,41 +392,71 @@ export const DASHBOARD_HTML = `<!doctype html>
     return form;
   }
 
+  function renderUpdateToggle(projectId) {
+    var details = document.createElement("details");
+    details.className = "update-toggle";
+    var summary = document.createElement("summary");
+    summary.textContent = "+ Post an update";
+    details.appendChild(summary);
+    details.appendChild(renderUpdateForm(projectId));
+    return details;
+  }
+
+  function renderPersonaList(personas) {
+    var ul = el("ul", "persona-list");
+    personas.forEach(function (ps) {
+      var li = document.createElement("li");
+      li.appendChild(el("span", "persona-name", ps.persona + ":"));
+      li.appendChild(el("span", "persona-status", ps.status));
+      if (ps.output) li.appendChild(el("span", "persona-output", ps.output));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+
+  function renderRecentUpdate(update) {
+    if (!update) return el("p", "field", "No updates yet.");
+    var wrap = el("div", "recent-update");
+    wrap.appendChild(el("p", "recent-update-label", "Latest update"));
+    wrap.appendChild(el("p", "recent-update-note", update.note));
+    wrap.appendChild(el("p", "recent-update-meta", update.by + " \\u00b7 " + new Date(update.at).toLocaleString()));
+    return wrap;
+  }
+
+  function renderHistory(updates) {
+    if (!updates || updates.length < 2) return null;
+    var details = document.createElement("details");
+    details.className = "history";
+    var summary = document.createElement("summary");
+    summary.textContent = "History (" + updates.length + " updates)";
+    details.appendChild(summary);
+    var ul = el("ul");
+    updates.slice().reverse().forEach(function (u) {
+      var li = document.createElement("li");
+      li.appendChild(el("span", "history-meta", u.by + " \\u00b7 " + new Date(u.at).toLocaleString()));
+      li.appendChild(document.createTextNode(u.note));
+      ul.appendChild(li);
+    });
+    details.appendChild(ul);
+    return details;
+  }
+
   function renderProjects(projects) {
     var list = document.getElementById("projects");
     list.innerHTML = "";
     if (!projects.length) { list.appendChild(el("li", "empty", "No projects yet.")); return; }
     projects.forEach(function (p) {
       var li = el("li", "card");
-      li.appendChild(el("h3", null, p.name));
-      li.appendChild(badge("project", p.overallStatus));
+      var head = el("div", "project-head");
+      head.appendChild(el("h3", null, p.name));
+      head.appendChild(badge("project", p.overallStatus));
+      li.appendChild(head);
       li.appendChild(el("p", "field", "Assigned to: " + p.assignedTo));
-      (p.personas || []).forEach(function (ps) {
-        li.appendChild(el("p", "persona-line", ps.persona + ": " + ps.status + (ps.output ? " \\u2014 " + ps.output : "")));
-      });
-
-      if (p.mostRecentUpdate) {
-        var when = new Date(p.mostRecentUpdate.at).toLocaleString();
-        li.appendChild(el("p", "recent-update", "Latest (" + p.mostRecentUpdate.by + ", " + when + "): " + p.mostRecentUpdate.note));
-      } else {
-        li.appendChild(el("p", "field", "No updates yet."));
-      }
-
-      if (p.updateHistory && p.updateHistory.length > 1) {
-        var details = document.createElement("details");
-        details.className = "history";
-        var summary = document.createElement("summary");
-        summary.textContent = "History (" + p.updateHistory.length + " updates)";
-        details.appendChild(summary);
-        var ul = el("ul");
-        p.updateHistory.slice().reverse().forEach(function (u) {
-          ul.appendChild(el("li", null, new Date(u.at).toLocaleString() + " \\u2014 " + u.by + ": " + u.note));
-        });
-        details.appendChild(ul);
-        li.appendChild(details);
-      }
-
-      li.appendChild(renderUpdateForm(p.id));
+      li.appendChild(renderPersonaList(p.personas || []));
+      li.appendChild(renderRecentUpdate(p.mostRecentUpdate));
+      var history = renderHistory(p.updateHistory);
+      if (history) li.appendChild(history);
+      li.appendChild(renderUpdateToggle(p.id));
       list.appendChild(li);
     });
   }
@@ -366,6 +491,18 @@ export const DASHBOARD_HTML = `<!doctype html>
   }
 
   document.getElementById("refresh").addEventListener("click", load);
+
+  var addTaskDialog = document.getElementById("add-task-dialog");
+  var openAddTaskBtn = document.getElementById("open-add-task");
+  var closeAddTaskBtn = document.getElementById("close-add-task");
+  openAddTaskBtn.addEventListener("click", function () {
+    addTaskDialog.showModal();
+    document.getElementById("task-text").focus();
+  });
+  closeAddTaskBtn.addEventListener("click", function () { addTaskDialog.close(); });
+  addTaskDialog.addEventListener("click", function (event) {
+    if (event.target === addTaskDialog) addTaskDialog.close();
+  });
 
   var addTaskForm = document.getElementById("add-task-form");
   var addTaskStatus = document.getElementById("add-task-status");
