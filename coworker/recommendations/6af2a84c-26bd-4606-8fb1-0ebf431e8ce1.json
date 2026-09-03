@@ -1,0 +1,7 @@
+{
+  "id": "6af2a84c-26bd-4606-8fb1-0ebf431e8ce1",
+  "createdAt": "2026-09-03T05:39:15.034Z",
+  "scope": "dashboard",
+  "summary": "Riley onboarding: confirmed build/test clean on main, tested SendMessage (no reachable peer session — matches known limitation), posted introduction to issue #1. Recurring check-in setup was blocked by the auto-mode permission classifier (standing autonomous push authority) — flagged to Irtiza/Sam on issue #1 rather than worked around.",
+  "implemented": false
+}
