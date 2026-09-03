@@ -1,0 +1,7 @@
+{
+  "id": "2537e064-4d76-43b2-a1c5-2abdad48e9a5",
+  "createdAt": "2026-09-03T12:17:07.210Z",
+  "scope": "dashboard",
+  "summary": "Fixed real card-density problem the last pass missed: with actual long task/output text (not short test strings), cards became walls of text. Clamped titles + expandable 'Full task text', same treatment for long persona output, dropped two redundant elements (Assigned-to when already implied, Latest-update box when it just echoes the persona line). Verified against real production data this time, not synthetic content.",
+  "implemented": false
+}
