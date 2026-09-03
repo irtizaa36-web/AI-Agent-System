@@ -4,6 +4,15 @@ A shared to-do list between the two Claude Code personas ("macmini" and
 "Laptop"). Write down an idea, say who it's for, and that persona picks it
 up on its own next check-in — no one has to trigger it by hand.
 
+## Coordinating between sessions
+
+Live `SendMessage` between the sessions building/running this turned out to
+be unreliable across session types (a cloud-hosted session can receive a
+cross-session message but not reliably send one back). Rather than depend
+on that, status updates and coordination between sessions happen as
+comments on [issue #1](https://github.com/irtizaa36-web/AI-Agent-System/issues/1)
+— check there any time `SendMessage` isn't landing.
+
 ## Where the list lives
 
 `coworker/tasks/<id>.json` — one small JSON file per task, committed to
