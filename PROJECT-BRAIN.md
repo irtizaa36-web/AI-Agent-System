@@ -1,6 +1,8 @@
-# PROJECT-BRAIN.md
+# PROJECT-BRAIN.md — Moby AI
 
 A permanent, plain-English briefing document for this repository. It exists for two audiences: Irtiza (the product/domain owner, not a software engineer, and not expected to read TypeScript or run terminal commands personally), and any future Claude Code session picking this project back up cold. Read this before any major architectural work.
+
+**Moby AI** is the name of the overarching system this repository builds — the orchestration engine, its Packs/Agents (career-advisor, job-search, case-report-writer, personal-admin, dispatcher), and the live Inkbox-based communication layer (email, iMessage) all together. The underlying GitHub repository and directory are still named `AI-Agent-System` — that's the technical/historical name; "Moby AI" is what to call the system when talking about it as a product.
 
 This document describes the repository **as it actually exists**, checked directly against the code and `docs/adr/*` at the time of writing (all tests passing — run `npm test` for the current count, which changes often enough that pinning a number here would quickly go stale). Where something is planned rather than built, it is explicitly labeled as such.
 
@@ -8,7 +10,7 @@ This document describes the repository **as it actually exists**, checked direct
 
 ## 1. What we are building
 
-**AI-Agent-System** is a **general-purpose AI agent orchestration system** — a reusable engine for running AI agents against tasks, not a single application. It is **not** pivoting into a medical application, an email assistant, or a computer-automation product; medicine (IM Brain, A&I Research, Medical Career Advisor) is one planned family of things built *on top of* this engine, not what the engine itself is.
+**Moby AI** (repository name: `AI-Agent-System`) is a **general-purpose AI agent orchestration system** — a reusable engine for running AI agents against tasks, not a single application. It is **not** pivoting into a medical application, an email assistant, or a computer-automation product; medicine (IM Brain, A&I Research, Medical Career Advisor) is one planned family of things built *on top of* this engine, not what the engine itself is.
 
 Conceptually, the intended shape is:
 
