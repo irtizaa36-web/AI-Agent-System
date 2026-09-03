@@ -5,7 +5,15 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "dispatched",
+      "dispatchedAt": "2026-09-03T03:11:41.080Z"
     }
-  }
+  },
+  "updates": [
+    {
+      "at": "2026-09-03T03:11:41.143Z",
+      "by": "macmini",
+      "note": "Recurring check-in active (~4x/day, session-local). Handled two real preference updates from Shivani today (broadened role categories, no Director-level, then a $120k+ base salary filter) - each triggered a fresh job-search-agent run and an updated Job Search Checkpoint doc + text reply. Salary data is mostly absent from job-board listing pages, so most listings are honestly flagged as unconfirmed against her salary filter rather than assumed to qualify."
+    }
+  ]
 }
