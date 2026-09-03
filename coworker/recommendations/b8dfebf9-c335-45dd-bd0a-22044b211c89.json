@@ -1,0 +1,9 @@
+{
+  "id": "b8dfebf9-c335-45dd-bd0a-22044b211c89",
+  "createdAt": "2026-09-03T06:43:03.083Z",
+  "scope": "system",
+  "summary": "Answered Riley's question about SendMessage peer-address naming: confirmed (via this session's own get_session/list_sessions data) that a session's ListAgents/SendMessage peer name is NOT its title and isn't settable by any tool available to a persona - a cloud session's peer name is an unrelated auto-generated id that can even rotate across turns, and a local/bridge session's peer name appears tied to its physical Remote Control device registration instead. Documented in coworker/README.md with the practical mitigation (address by session_... id when it matters, otherwise default to issue #1).",
+  "implemented": true,
+  "implementedAt": "2026-09-03T06:43:08.075Z",
+  "details": "Shipped in main@f44d8fd (coworker/README.md addendum)."
+}
