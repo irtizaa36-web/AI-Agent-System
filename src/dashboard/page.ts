@@ -161,6 +161,7 @@ export const DASHBOARD_HTML = `<!doctype html>
     padding: var(--space-3) var(--space-4);
   }
   .attention-item strong { display: block; }
+  .attention-item .attention-meta { display: block; margin-top: var(--space-1); font-size: 0.78rem; }
   .filters {
     display: flex;
     flex-wrap: wrap;
@@ -516,17 +517,17 @@ export const DASHBOARD_HTML = `<!doctype html>
     });
   }
 
-  function renderAttention(agents) {
+  function renderAttention(items) {
     var section = document.getElementById("attention-section");
     var list = document.getElementById("attention");
-    var needingAttention = agents.filter(function (a) { return a.status === "stuck"; });
     list.innerHTML = "";
-    section.hidden = needingAttention.length === 0;
-    needingAttention.forEach(function (a) {
-      var item = el("div", "attention-item");
-      item.appendChild(el("strong", null, a.name + " is stuck"));
-      item.appendChild(el("span", null, a.currentTask ? "Current task: " + a.currentTask : "No current task reported."));
-      list.appendChild(item);
+    section.hidden = items.length === 0;
+    items.forEach(function (attentionItem) {
+      var card = el("div", "attention-item");
+      card.appendChild(el("strong", null, attentionItem.reason));
+      if (attentionItem.detail) card.appendChild(el("span", null, attentionItem.detail));
+      card.appendChild(el("span", "attention-meta", attentionItem.source + " · " + new Date(attentionItem.at).toLocaleString()));
+      list.appendChild(card);
     });
   }
 
@@ -729,7 +730,7 @@ export const DASHBOARD_HTML = `<!doctype html>
       .then(function (snap) {
         latestProjects = snap.projects;
         renderSummary(snap);
-        renderAttention(snap.agents);
+        renderAttention(snap.attention);
         renderAgents(snap.agents);
         renderProjects(latestProjects);
         renderRecommendations(snap.recommendations);
