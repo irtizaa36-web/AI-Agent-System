@@ -4,6 +4,15 @@ A shared to-do list between the two Claude Code personas ("macmini" and
 "Laptop"). Write down an idea, say who it's for, and that persona picks it
 up on its own next check-in — no one has to trigger it by hand.
 
+## Coordinating between sessions
+
+Live `SendMessage` between the sessions building/running this turned out to
+be unreliable across session types (a cloud-hosted session can receive a
+cross-session message but not reliably send one back). Rather than depend
+on that, status updates and coordination between sessions happen as
+comments on [issue #1](https://github.com/irtizaa36-web/AI-Agent-System/issues/1)
+— check there any time `SendMessage` isn't landing.
+
 ## Where the list lives
 
 `coworker/tasks/<id>.json` — one small JSON file per task, committed to
@@ -44,23 +53,34 @@ two can't drift out of sync. `orchestrator coworker list` shows the derived
 - `dispatched <id> --persona macmini|Laptop` — mark that a persona has picked the task up (call this right before starting the work).
 - `complete <id> --persona macmini|Laptop --output "<summary>" [--failed]` — record what happened, once the work is actually done.
 
-Run `npm run build` first (or `npm run cli -- coworker ...`, which builds for you).
+Run `npm run build` once, then call `node dist/cli/index.js coworker ...`
+directly (that's what the recipe below uses). Don't use `npm run cli --
+coworker ...` for this — npm's own arg-passing on Windows mangles a quoted
+multi-word argument like `add "some idea"`, so a trigger built on it can
+silently misfire.
 
 ## How a persona picks up its own work
+
+**Before the first real run:** `git commit` needs a Git identity configured
+on that machine (`git config --global user.name "..."` and `user.email
+"..."`) — without it, a persona can finish real work and then get stuck
+unable to commit/push the result. Confirm this is set before testing with a
+real task, or the first test will look like a silent failure.
 
 Each persona is responsible for noticing its own tasks — there's no central
 dispatcher. Set up a recurring trigger (a Claude Code Remote Routine, or
 whatever scheduling this machine has) whose prompt is along these lines:
 
-> In the AI-Agent-System repo: `git pull`, then
-> `npm run cli -- coworker list --status pending --for <macmini|Laptop>`
-> (substitute your own persona name). For each task listed:
-> 1. `npm run cli -- coworker dispatched <id> --persona <you>`
+> In the AI-Agent-System repo: `git pull`, then run
+> `node dist/cli/index.js coworker list --status pending --for <macmini|Laptop>`
+> (substitute your own persona name; run `npm run build` first if `dist/`
+> is stale or missing). For each task listed:
+> 1. `node dist/cli/index.js coworker dispatched <id> --persona <you>`
 > 2. Do the actual work described in `task`, using whatever agents,
 >    skills, tools, and connectors you already have — including this
 >    repo's own `orchestrator run` / `orchestrator dispatch run` if one of
 >    its Packs fits better than doing it yourself directly.
-> 3. `npm run cli -- coworker complete <id> --persona <you> --output "<a short summary of what you did/found>"` (add `--failed` if it didn't work out, with the output explaining why).
+> 3. `node dist/cli/index.js coworker complete <id> --persona <you> --output "<a short summary of what you did/found>"` (add `--failed` if it didn't work out, with the output explaining why).
 > 4. `git add coworker/tasks && git commit -m "..." && git push` (if `push`
 >    fails because the remote moved, `git pull --rebase` once and push
 >    again).
