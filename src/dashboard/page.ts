@@ -4,14 +4,21 @@
  * new dependency (this project's zero-runtime-dependency stance, ADR 0002).
  * Kept as one plain-language, at-a-glance view: status badges use an icon
  * AND a text label (never color alone), body text stays at a normal
- * reading size, and layout is a single responsive grid so it reads fine on
- * a phone with no separate mobile layout to maintain. The "Add a task"
- * dialog and each project's "Post an update" disclosure are the page's only
- * interactive pieces — real <dialog>/<details>/<form>/<label>/<button>
- * elements, not custom widgets, so they're keyboard- and screen-reader-
- * usable for free. The "Add a task" trigger lives in the sticky header so
- * it's reachable from anywhere on the page, not just after scrolling to a
- * particular section (it used to be a section you could easily scroll past).
+ * reading size. The "Add a task" dialog and each project's "Post an
+ * update" disclosure are the page's only interactive pieces — real
+ * <dialog>/<details>/<form>/<label>/<button> elements, not custom widgets,
+ * so they're keyboard- and screen-reader-usable for free. The "Add a task"
+ * trigger lives in the sticky header so it's reachable from anywhere on
+ * the page, not just after scrolling to a particular section.
+ *
+ * Projects render as a Kanban board (Not started / In progress / Done
+ * columns, one per `CoworkerOverallStatus`), modeled on Devin Desktop's
+ * "Agent Command Center" — a Kanban view of coding-agent work organized by
+ * status so you can tell what's in flight, needs attention, or finished at
+ * a glance. Columns scroll horizontally as a set (standard Kanban/mobile
+ * pattern) rather than reflowing into a single responsive grid; the Agents
+ * roster above it keeps the plain responsive grid, since it's a status
+ * roster, not a workflow.
  */
 export const DASHBOARD_HTML = `<!doctype html>
 <html lang="en">
@@ -135,8 +142,50 @@ export const DASHBOARD_HTML = `<!doctype html>
     box-shadow: var(--shadow);
     padding: var(--space-4);
   }
-  .card h3 { margin: 0; font-size: 1.02rem; font-weight: 650; }
-  .project-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
+  .card h3 { margin: 0 0 var(--space-2); font-size: 1.02rem; font-weight: 650; }
+  .kanban {
+    display: flex;
+    gap: var(--space-4);
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+    scroll-snap-type: x proximity;
+  }
+  .kanban-column {
+    flex: 0 0 min(20rem, 85vw);
+    display: flex;
+    flex-direction: column;
+    scroll-snap-align: start;
+  }
+  .kanban-column-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding-left: var(--space-2);
+    border-left: 3px solid var(--border);
+    margin-bottom: var(--space-3);
+  }
+  .kanban-column-head.status-pending { border-left-color: var(--unknown); }
+  .kanban-column-head.status-in_progress { border-left-color: var(--idle); }
+  .kanban-column-head.status-done { border-left-color: var(--working); }
+  .kanban-column-head h3 {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+  .kanban-count {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--muted);
+    background: var(--unknown-bg);
+    border-radius: 999px;
+    padding: 0.1rem 0.55rem;
+    flex-shrink: 0;
+  }
+  .kanban-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
   .badge {
     display: inline-flex;
     align-items: center;
@@ -151,9 +200,7 @@ export const DASHBOARD_HTML = `<!doctype html>
   .badge.idle { color: var(--idle); background: var(--idle-bg); }
   .badge.stuck { color: var(--stuck); background: var(--stuck-bg); }
   .badge.offline { color: var(--offline); background: var(--offline-bg); }
-  .badge.unknown, .badge.pending { color: var(--unknown); background: var(--unknown-bg); }
-  .badge.done { color: var(--working); background: var(--working-bg); }
-  .badge.in_progress { color: var(--idle); background: var(--idle-bg); }
+  .badge.unknown { color: var(--unknown); background: var(--unknown-bg); }
   .agent-card .badge { margin-bottom: var(--space-2); }
   .field { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0; }
   .empty { color: var(--muted); font-style: italic; }
@@ -294,7 +341,29 @@ export const DASHBOARD_HTML = `<!doctype html>
 
   <section aria-labelledby="projects-h">
     <h2 id="projects-h">Projects</h2>
-    <ul id="projects" class="grid" aria-live="polite"></ul>
+    <div class="kanban">
+      <div class="kanban-column">
+        <div class="kanban-column-head status-pending">
+          <h3 id="kanban-pending-h">Not started</h3>
+          <span class="kanban-count" id="kanban-count-pending">0</span>
+        </div>
+        <ul class="kanban-cards" id="kanban-pending" aria-labelledby="kanban-pending-h" aria-live="polite"></ul>
+      </div>
+      <div class="kanban-column">
+        <div class="kanban-column-head status-in_progress">
+          <h3 id="kanban-in_progress-h">In progress</h3>
+          <span class="kanban-count" id="kanban-count-in_progress">0</span>
+        </div>
+        <ul class="kanban-cards" id="kanban-in_progress" aria-labelledby="kanban-in_progress-h" aria-live="polite"></ul>
+      </div>
+      <div class="kanban-column">
+        <div class="kanban-column-head status-done">
+          <h3 id="kanban-done-h">Done</h3>
+          <span class="kanban-count" id="kanban-count-done">0</span>
+        </div>
+        <ul class="kanban-cards" id="kanban-done" aria-labelledby="kanban-done-h" aria-live="polite"></ul>
+      </div>
+    </div>
   </section>
 
   <section aria-labelledby="recs-h">
@@ -306,7 +375,7 @@ export const DASHBOARD_HTML = `<!doctype html>
 (function () {
   var STATUS_LABEL = { working: "Working", idle: "Idle", stuck: "Stuck", offline: "Offline", unknown: "No report yet" };
   var STATUS_ICON = { working: "\\u25CF", idle: "\\u25CB", stuck: "\\u25B2", offline: "\\u2715", unknown: "\\u2013" };
-  var PROJECT_LABEL = { pending: "Not started", in_progress: "In progress", done: "Done" };
+  var KANBAN_COLUMNS = ["pending", "in_progress", "done"];
 
   function el(tag, className, text) {
     var e = document.createElement(tag);
@@ -315,11 +384,9 @@ export const DASHBOARD_HTML = `<!doctype html>
     return e;
   }
 
-  function badge(kind, key) {
+  function badge(key) {
     var b = el("span", "badge " + key);
-    var label = kind === "project" ? (PROJECT_LABEL[key] || key) : (STATUS_LABEL[key] || key);
-    var icon = kind === "project" ? "" : (STATUS_ICON[key] || "") + " ";
-    b.textContent = icon + label;
+    b.textContent = (STATUS_ICON[key] || "") + " " + (STATUS_LABEL[key] || key);
     return b;
   }
 
@@ -330,7 +397,7 @@ export const DASHBOARD_HTML = `<!doctype html>
     agents.forEach(function (a) {
       var li = el("li", "card agent-card");
       li.appendChild(el("h3", null, a.name));
-      li.appendChild(badge("agent", a.status));
+      li.appendChild(badge(a.status));
       if (a.currentTask) li.appendChild(el("p", "field", "Working on: " + a.currentTask));
       li.appendChild(el("p", "field", a.updatedAt ? "Last update: " + new Date(a.updatedAt).toLocaleString() : "Never reported in"));
       list.appendChild(li);
@@ -441,23 +508,30 @@ export const DASHBOARD_HTML = `<!doctype html>
     return details;
   }
 
+  function buildProjectCard(p) {
+    var li = el("li", "card");
+    li.appendChild(el("h3", null, p.name));
+    li.appendChild(el("p", "field", "Assigned to: " + p.assignedTo));
+    li.appendChild(renderPersonaList(p.personas || []));
+    li.appendChild(renderRecentUpdate(p.mostRecentUpdate));
+    var history = renderHistory(p.updateHistory);
+    if (history) li.appendChild(history);
+    li.appendChild(renderUpdateToggle(p.id));
+    return li;
+  }
+
+  /** Groups projects into Kanban columns by overall status (Not started / In progress / Done) — see the file-level comment for why a Kanban board instead of a flat grid. */
   function renderProjects(projects) {
-    var list = document.getElementById("projects");
-    list.innerHTML = "";
-    if (!projects.length) { list.appendChild(el("li", "empty", "No projects yet.")); return; }
-    projects.forEach(function (p) {
-      var li = el("li", "card");
-      var head = el("div", "project-head");
-      head.appendChild(el("h3", null, p.name));
-      head.appendChild(badge("project", p.overallStatus));
-      li.appendChild(head);
-      li.appendChild(el("p", "field", "Assigned to: " + p.assignedTo));
-      li.appendChild(renderPersonaList(p.personas || []));
-      li.appendChild(renderRecentUpdate(p.mostRecentUpdate));
-      var history = renderHistory(p.updateHistory);
-      if (history) li.appendChild(history);
-      li.appendChild(renderUpdateToggle(p.id));
-      list.appendChild(li);
+    var buckets = { pending: [], in_progress: [], done: [] };
+    projects.forEach(function (p) { (buckets[p.overallStatus] || buckets.pending).push(p); });
+
+    KANBAN_COLUMNS.forEach(function (status) {
+      var list = document.getElementById("kanban-" + status);
+      var items = buckets[status];
+      list.innerHTML = "";
+      document.getElementById("kanban-count-" + status).textContent = String(items.length);
+      if (!items.length) { list.appendChild(el("li", "empty", "Nothing here.")); return; }
+      items.forEach(function (p) { list.appendChild(buildProjectCard(p)); });
     });
   }
 
