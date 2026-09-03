@@ -37,6 +37,13 @@ dashboard, or conversation with Irtiza:
   consistently anywhere else it comes up (e.g. the dashboard's Projects
   section, if/when it's wired up as a tracked project rather than only
   coworker tasks).
+  **Cadence:** checks her iMessage thread a few times a day (currently a
+  session-local scheduled prompt, ~4x/day) rather than continuously, to keep
+  API usage down — real replies still get read and acted on in full, just
+  with more latency than a tight poll. **Must stay a local/session-based
+  trigger, not a cloud RemoteTrigger**: her resume and preferences files are
+  gitignored/local-only, so a cloud-sandboxed routine wouldn't be able to
+  read them (see the "two kinds of trigger" note below).
 
 ## Where the list lives
 
