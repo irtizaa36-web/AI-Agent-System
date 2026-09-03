@@ -49,8 +49,8 @@ test("withResult records output, success/failure, and a finish time", () => {
   assert.ok(failed.results.macmini?.finishedAt);
 });
 
-test("ALL_COWORKER_PERSONAS includes the specialist persona without changing what 'both' means", () => {
-  assert.deepEqual(ALL_COWORKER_PERSONAS, ["macmini", "Laptop2", "Riley"]);
+test("ALL_COWORKER_PERSONAS includes every specialist persona without changing what 'both' means", () => {
+  assert.deepEqual(ALL_COWORKER_PERSONAS, ["macmini", "Laptop2", "Riley", "Jordan"]);
   assert.deepEqual(personasFor("both"), ["macmini", "Laptop2"]);
 });
 

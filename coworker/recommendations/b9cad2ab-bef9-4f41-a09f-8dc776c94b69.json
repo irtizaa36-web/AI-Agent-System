@@ -1,0 +1,9 @@
+{
+  "id": "b9cad2ab-bef9-4f41-a09f-8dc776c94b69",
+  "createdAt": "2026-09-03T06:04:34.889Z",
+  "scope": "system",
+  "summary": "npm test crashed with MODULE_NOT_FOUND on this session's Node v22.22.2 build because node --test dist (bare directory arg) fails outright here (reproduced in complete isolation outside the repo too - not project-specific). Actual tests were never broken: node --test with an explicit glob (dist/**/*.test.js) ran all 293 cleanly. Fixed package.json's test script to use the glob form.",
+  "implemented": true,
+  "implementedAt": "2026-09-03T06:04:39.139Z",
+  "details": "Shipped in main@77de970: package.json test script now runs node --test \"dist/**/*.test.js\" instead of node --test dist."
+}
