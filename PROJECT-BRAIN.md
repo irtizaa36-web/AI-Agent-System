@@ -38,6 +38,10 @@ It's built to be:
 - **Domain-agnostic at its core** — the engine itself knows nothing about medicine, research, or careers. Domain expertise lives in separate, pluggable "Packs" (Section 5).
 - **Able to grow substantially without repeatedly redesigning the Core** — adding a new domain, model, tool, or external service should mean adding to the system, not rewriting its center.
 
+## Cross-team continuity
+
+Team B is the name for work performed through GitHub Pro/Copilot sessions. This project can alternate between Team B and other teams because the repository is the shared source of truth; the workflow is defined in `docs/agents/team-handoff.md`. Private chat context is never required to continue a task.
+
 ## 2. Future external capabilities the architecture must remain compatible with
 
 None of the following are built. This section exists so that current and future decisions don't accidentally make them hard to add later.
