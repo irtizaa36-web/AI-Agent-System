@@ -6,6 +6,10 @@ The Git repository is the durable source of truth for teams that work at differe
 
 **Team B** is the name for work performed through GitHub Pro/Copilot sessions. Team identity does not change the shared protocol: every team leaves the repository ready for the next one.
 
+## Coordination
+
+PinkyBaby is Team B's Lead Agent. Team B coordinates primarily with Sam, the Team A lead, through committed GitHub state and Issue #1; private chat and session names are not a coordination channel.
+
 ## Starting work
 
 1. Read `PROJECT-BRAIN.md`, this document, and any documentation relevant to the task.
