@@ -140,9 +140,22 @@ export const DASHBOARD_HTML = `<!doctype html>
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow);
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4);
   }
   .card h3 { margin: 0 0 var(--space-2); font-size: 1.02rem; font-weight: 650; }
+  /* Task text is often a full written-out instruction, not a short title —
+     clamp it to a scannable preview instead of letting a card become a
+     wall of text; the full text is one click away via .task-detail. */
+  .kanban-cards h3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  details.task-detail { margin: 0 0 var(--space-2); }
+  details.task-detail summary { cursor: pointer; color: var(--focus); font-size: 0.82rem; font-weight: 600; }
+  details.task-detail p { margin: var(--space-2) 0 0; font-size: 0.9rem; }
   .kanban {
     display: flex;
     gap: var(--space-4);
@@ -208,6 +221,7 @@ export const DASHBOARD_HTML = `<!doctype html>
   .persona-list li { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.3rem 0.4rem; align-items: baseline; }
   .persona-list .persona-name { font-weight: 650; }
   .persona-list .persona-output { color: var(--muted); flex-basis: 100%; }
+  .persona-list details.task-detail { flex-basis: 100%; margin: 0; }
   .recent-update {
     margin: var(--space-3) 0;
     padding: var(--space-3);
@@ -470,25 +484,47 @@ export const DASHBOARD_HTML = `<!doctype html>
     return details;
   }
 
+  /** A short summary label + a collapsed <details> holding the full text — used anywhere free-written text (a task description, a completion note) is too long to show inline without turning a card into a wall of text. Text at or under the threshold renders plainly instead, no toggle needed. */
+  function expandableText(text, summaryLabel, threshold) {
+    if (text.length <= (threshold || 100)) return el("span", null, text);
+    var d = document.createElement("details");
+    d.className = "task-detail";
+    var s = document.createElement("summary");
+    s.textContent = summaryLabel;
+    d.appendChild(s);
+    d.appendChild(el("p", null, text));
+    return d;
+  }
+
   function renderPersonaList(personas) {
     var ul = el("ul", "persona-list");
     personas.forEach(function (ps) {
       var li = document.createElement("li");
       li.appendChild(el("span", "persona-name", ps.persona + ":"));
       li.appendChild(el("span", "persona-status", ps.status));
-      if (ps.output) li.appendChild(el("span", "persona-output", ps.output));
+      if (ps.output) {
+        var out = expandableText(ps.output, "Full output");
+        out.className = (out.className ? out.className + " " : "") + "persona-output";
+        li.appendChild(out);
+      }
       ul.appendChild(li);
     });
     return ul;
   }
 
   function renderRecentUpdate(update) {
-    if (!update) return el("p", "field", "No updates yet.");
     var wrap = el("div", "recent-update");
     wrap.appendChild(el("p", "recent-update-label", "Latest update"));
     wrap.appendChild(el("p", "recent-update-note", update.note));
     wrap.appendChild(el("p", "recent-update-meta", update.by + " \\u00b7 " + new Date(update.at).toLocaleString()));
     return wrap;
+  }
+
+  /** True when mostRecentUpdate is a real posted progress note (the last entry in updateHistory) rather than one synthesized from a dispatch/result event that the persona list below already shows — showing both would just repeat the same status/output twice. */
+  function isExplicitUpdate(p) {
+    var last = p.updateHistory && p.updateHistory[p.updateHistory.length - 1];
+    var u = p.mostRecentUpdate;
+    return !!(last && u && last.at === u.at && last.by === u.by && last.note === u.note);
   }
 
   function renderHistory(updates) {
@@ -512,9 +548,19 @@ export const DASHBOARD_HTML = `<!doctype html>
   function buildProjectCard(p) {
     var li = el("li", "card");
     li.appendChild(el("h3", null, p.name));
-    li.appendChild(el("p", "field", "Assigned to: " + p.assignedTo));
+
+    // The clamped h3 above is a preview; give long task text an explicit
+    // way to read the rest instead of just cutting it off.
+    var titleDetail = expandableText(p.name, "Full task text");
+    if (titleDetail.tagName === "DETAILS") li.appendChild(titleDetail);
+
+    // "Assigned to" only earns its place when it says something the
+    // persona list below doesn't already — i.e. for a "both" task. For a
+    // single assignee, the persona list already names them.
+    if (p.assignedTo === "both") li.appendChild(el("p", "field", "Assigned to: both"));
+
     li.appendChild(renderPersonaList(p.personas || []));
-    li.appendChild(renderRecentUpdate(p.mostRecentUpdate));
+    if (isExplicitUpdate(p)) li.appendChild(renderRecentUpdate(p.mostRecentUpdate));
     var history = renderHistory(p.updateHistory);
     if (history) li.appendChild(history);
     li.appendChild(renderUpdateToggle(p.id));
