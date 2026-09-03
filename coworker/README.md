@@ -3,10 +3,17 @@
 A shared to-do list between the Claude Code personas doing the actual work
 — "macmini" and "Laptop2" (Irtiza calls them Max and Lucy in conversation;
 the task list and `SendMessage` still need the literal session names, not
-the friendly ones), plus specialists added as real needs come up (e.g.
-"Riley", who owns the dashboard itself). Write down an idea, say who it's
-for, and that persona picks it up on its own next check-in — no one has to
-trigger it by hand.
+the friendly ones), plus specialists added as real needs come up:
+"Riley" owns the dashboard itself; "Jordan" handles IT/technical support —
+diagnosing environment, connectivity, and setup issues across machines, and
+watching the dashboard for any agent showing offline or stuck. Write down
+an idea, say who it's for, and that persona picks it up on its own next
+check-in — no one has to trigger it by hand.
+
+Jordan's real limit, worth stating plainly: if the problem is a session's
+own connection to a machine being down, no agent — Jordan included — can
+click things on that screen. It can diagnose and tell Irtiza exactly what
+to try; the physical step is still his.
 
 ## Coordinating between sessions
 

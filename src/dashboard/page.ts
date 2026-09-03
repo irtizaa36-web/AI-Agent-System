@@ -189,6 +189,7 @@ export const DASHBOARD_HTML = `<!doctype html>
           <option value="macmini">macmini</option>
           <option value="Laptop2">Laptop2</option>
           <option value="Riley">Riley</option>
+        <option value="Jordan">Jordan</option>
           <option value="both">Both (macmini &amp; Laptop2)</option>
         </select>
       </div>

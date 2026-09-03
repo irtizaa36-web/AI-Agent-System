@@ -9,7 +9,7 @@ import type { AgentStatus, SelfReportedAgentStatus } from "./agent-status";
 import type { Recommendation } from "./recommendation";
 
 /** Shown even before they've ever self-reported, so the dashboard isn't empty on a fresh checkout. */
-export const DEFAULT_AGENT_NAMES: readonly string[] = ["Coordinator", "macmini", "Laptop2", "Riley"];
+export const DEFAULT_AGENT_NAMES: readonly string[] = ["Coordinator", "macmini", "Laptop2", "Riley", "Jordan"];
 
 /**
  * How long a self-reported status is trusted before the dashboard shows the
