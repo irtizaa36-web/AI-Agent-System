@@ -7,8 +7,10 @@ const ANTHROPIC_VERSION = "2023-06-01";
 // A structured, multi-section response (e.g. career-advisor's fixed 7-section
 // format) routinely needs several thousand tokens — 1024 was cutting real
 // responses off mid-section, silently reported as "succeeded" until the
-// advance() fix below started treating a max_tokens stop as a failure.
-const DEFAULT_MAX_TOKENS = 8192;
+// advance() fix below started treating a max_tokens stop as a failure. 8192
+// itself proved too low for job-search-agent, whose response can include
+// several job-board tool results plus a full tailored resume in the same turn.
+const DEFAULT_MAX_TOKENS = 16000;
 
 interface AnthropicTextBlock {
   readonly type: "text";

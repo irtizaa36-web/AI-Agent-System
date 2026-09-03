@@ -72,7 +72,7 @@ test("parseResponseBody maps a max_tokens stop_reason distinctly, rather than co
 
 test("buildRequestBody defaults max_tokens high enough for a real structured multi-section response", () => {
   const body = buildRequestBody({ model: "claude-sonnet-5", messages: [], tools: [] });
-  assert.equal(body.max_tokens, 8192);
+  assert.equal(body.max_tokens, 16000);
 });
 
 test("createAnthropicProvider throws a clear error when no API key is available", async () => {
