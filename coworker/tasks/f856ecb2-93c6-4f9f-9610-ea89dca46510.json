@@ -1,0 +1,11 @@
+{
+  "id": "f856ecb2-93c6-4f9f-9610-ea89dca46510",
+  "createdAt": "2026-09-03T05:40:51.420Z",
+  "task": "Dashboard feedback from Irtiza: the update/status text on project cards reads as a run-on, hard to parse. Reformat displayed notes, history entries, and per-persona status lines into clean, scannable bullet points instead of concatenated sentences.",
+  "assignedTo": "Riley",
+  "results": {
+    "Riley": {
+      "status": "pending"
+    }
+  }
+}
