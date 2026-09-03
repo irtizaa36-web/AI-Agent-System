@@ -1,0 +1,11 @@
+{
+  "id": "41a4b6f7-00b5-4bfe-81ec-1e084be57a6c",
+  "createdAt": "2026-09-03T06:53:25.109Z",
+  "task": "Cost-reduction: run the git-guardrails-claude-code skill and the fewer-permission-prompts skill on this Mac Mini so their settings.json changes actually get applied here (blocking dangerous git commands, and a safe permission allowlist built from real usage instead of guessed). Report exactly what changed in .claude/settings.json.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  }
+}
