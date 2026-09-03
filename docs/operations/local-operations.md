@@ -34,6 +34,12 @@ It defaults to `http://localhost:4317`. It reads and writes committed coordinati
 
 Issue #1 is the durable coordination fallback when cross-session messaging is unavailable. Use `coworker undispatch <id> --persona <name>` to return work stranded by an interrupted session to the normal pending-task pickup queue.
 
+### Dashboard autostart (desktop window)
+
+To always have the dashboard reachable without manually starting it, `coworker/triggers/dashboard-autostart.sh` runs `node dist/cli/index.js dashboard --port 4317` under a user LaunchAgent (`com.aiagentsystem.dashboard`, `KeepAlive: true`), the same pattern as the Inkbox webhook and the macmini check-in. The `.plist` itself is local-machine-only and not committed - a human loads it once with `launchctl bootstrap gui/<uid> <plist path>`, same as the other two.
+
+Once it's running, `http://localhost:4317` can be pinned as its own Dock window (Safari's "Add to Dock," or the equivalent in another browser) instead of living in a regular browser tab - a real standalone window for handing the coworker system a task, distinct from Claude Desktop's own separate "Cowork" tab.
+
 ## Local-only dependencies
 
 These resources must never be committed or copied into a handoff:
