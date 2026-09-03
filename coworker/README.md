@@ -85,14 +85,20 @@ whatever scheduling this machine has) whose prompt is along these lines:
 > act on anything addressed to you there before moving on. Then run
 > `node dist/cli/index.js coworker list --status pending --for <macmini|Laptop2>`
 > (substitute your own persona name; run `npm run build` first if `dist/`
-> is stale or missing). For each task listed:
+> is stale or missing). If the list is empty:
+> `node dist/cli/index.js agent-status set <you> --status idle` and stop.
+> For each task listed:
 > 1. `node dist/cli/index.js coworker dispatched <id> --persona <you>`
-> 2. Do the actual work described in `task`, using whatever agents,
+> 2. `node dist/cli/index.js agent-status set <you> --status working --task "<id or short description>"`
+> 3. Do the actual work described in `task`, using whatever agents,
 >    skills, tools, and connectors you already have — including this
 >    repo's own `orchestrator run` / `orchestrator dispatch run` if one of
->    its Packs fits better than doing it yourself directly.
-> 3. `node dist/cli/index.js coworker complete <id> --persona <you> --output "<a short summary of what you did/found>"` (add `--failed` if it didn't work out, with the output explaining why).
-> 4. `git add coworker/tasks && git commit -m "..." && git push` (if `push`
+>    its Packs fits better than doing it yourself directly. If you get
+>    genuinely stuck, `agent-status set <you> --status stuck --task "..."`
+>    before moving on, rather than leaving the last status looking like
+>    you're still quietly working.
+> 4. `node dist/cli/index.js coworker complete <id> --persona <you> --output "<a short summary of what you did/found>"` (add `--failed` if it didn't work out, with the output explaining why).
+> 5. `git add coworker/tasks coworker/agents && git commit -m "..." && git push` (if `push`
 >    fails because the remote moved, `git pull --rebase` once and push
 >    again).
 >
@@ -122,6 +128,30 @@ gitignored/local-only on one specific machine — a `.env` API key, a saved
 browser-login session, a personal data file kept out of the repo on
 purpose — it needs that machine's own real local trigger, not a
 cloud-sandbox spawn.
+
+## The dashboard
+
+`node dist/cli/index.js dashboard` (default port 4317; `--port N` to
+change it) serves a local, read-only page at `http://localhost:<port>`
+showing every agent's live status, every project (coworker task) and its
+state, and a running feed of what the dashboard itself has noticed and
+changed. It auto-refreshes every 15 seconds; there's also a manual
+"Refresh now" button. No remote access or login — local only, for now.
+
+It's built entirely from files already described above, plus one small
+addition: `coworker/agents/<name>.json`, one per agent, holding that
+agent's own latest self-report (`orchestrator agent-status set <name>
+--status idle|working|stuck [--task "..."]`). The dashboard derives
+"offline" itself — if an agent's last report is more than a few hours old,
+it shows as offline even though nothing told it "I'm offline" (an agent
+that's actually offline obviously can't report that about itself). Calling
+`agent-status set` is already folded into the recurring check-in recipe
+above; nothing extra to remember day-to-day.
+
+`orchestrator recommend add "<summary>" --scope dashboard|system|<project>`
+and `orchestrator recommend implemented <id> [--details "..."]` log the
+"noticed / did" feed — anyone (any persona, not just the Coordinator) can
+add to it.
 
 ## Safety note
 

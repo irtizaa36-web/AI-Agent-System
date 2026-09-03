@@ -9,6 +9,8 @@ import { FakeInkboxClient } from "../integrations/inkbox/fake-client";
 import { InMemoryForwardingLog } from "../integrations/inkbox/forwarding-log";
 import { InMemoryMessageEventLog } from "../integrations/inkbox/message-event-log";
 import { InMemoryCoworkerTaskStore } from "../coworker/store";
+import { InMemoryAgentStatusStore } from "../dashboard/agent-status-store";
+import { InMemoryRecommendationStore } from "../dashboard/recommendation-store";
 
 function buildDeps(): { stdout: string[]; stderr: string[]; deps: CliDeps } {
   const stdout: string[] = [];
@@ -22,6 +24,8 @@ function buildDeps(): { stdout: string[]; stderr: string[]; deps: CliDeps } {
     forwardingLog: new InMemoryForwardingLog(),
     messageEventLog: new InMemoryMessageEventLog(),
     coworkerStore: new InMemoryCoworkerTaskStore(),
+    agentStatusStore: new InMemoryAgentStatusStore(),
+    recommendationStore: new InMemoryRecommendationStore(),
     stdout: (line: string) => stdout.push(line),
     stderr: (line: string) => stderr.push(line),
   };
