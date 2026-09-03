@@ -55,3 +55,7 @@ _Avoid_: output, response
 **Workflow**:
 A persisted, ordered sequence of Tasks handed to one or more Agents to reach a larger goal. The Dispatcher plans it, and the Workflow Runner executes one Step at a time, pausing when a Run awaits approval or an external reply.
 _Avoid_: pipeline, plan
+
+**Operational update**:
+A concise, timestamped status or handoff authored by a human, Agent, or external operator. It records coordination context without changing a Task's lifecycle or representing a recommendation.
+_Avoid_: task update, alert

@@ -19,6 +19,8 @@ import { runAgentStatusCommand } from "./agent-status-commands";
 import { JsonFileAgentStatusStore } from "../dashboard/agent-status-store";
 import { runRecommendCommand } from "./recommend-commands";
 import { JsonFileRecommendationStore } from "../dashboard/recommendation-store";
+import { runOperationalUpdateCommand } from "./operational-update-commands";
+import { JsonFileOperationalUpdateStore, type OperationalUpdateStore } from "../dashboard/operational-update-store";
 import { runDashboardCommand } from "./dashboard-command";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
@@ -51,6 +53,7 @@ export interface CliDeps {
   readonly agentStatusStore: AgentStatusStore;
   /** The dashboard's own "noticed / did" feed (`orchestrator recommend ...`). */
   readonly recommendationStore: RecommendationStore;
+  readonly operationalUpdateStore?: OperationalUpdateStore;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -71,6 +74,8 @@ function printUsage(stdout: (line: string) => void): void {
       '  orchestrator recommend add "<summary>" --scope <s>          Log something the dashboard noticed',
       "  orchestrator recommend implemented <id> [--details]        Record that a recommendation was acted on",
       "  orchestrator recommend list                                 List logged recommendations",
+      '  orchestrator operational-update add "<summary>" --by <a> --provenance <p> Log a concise operational handoff',
+      "  orchestrator operational-update list                         List operational handoffs",
       "  orchestrator dashboard [--port N]                           Serve the local agents/projects dashboard",
       "  orchestrator help                                           Show this message",
       "",
@@ -256,6 +261,9 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
   if (command === "recommend") {
     return runRecommendCommand(rest, deps);
   }
+  if (command === "operational-update") {
+    return runOperationalUpdateCommand(rest, deps);
+  }
 
   if (command === "dashboard") {
     return runDashboardCommand(rest, deps);
@@ -274,6 +282,7 @@ async function main(): Promise<void> {
   const coworkerStore = new JsonFileCoworkerTaskStore(join(cwd, "coworker", "tasks"));
   const agentStatusStore = new JsonFileAgentStatusStore(join(cwd, "coworker", "agents"));
   const recommendationStore = new JsonFileRecommendationStore(join(cwd, "coworker", "recommendations"));
+  const operationalUpdateStore = new JsonFileOperationalUpdateStore(join(cwd, "coworker", "operational-updates"));
 
   const exitCode = await runCli(process.argv.slice(2), {
     registry,
@@ -286,6 +295,7 @@ async function main(): Promise<void> {
     coworkerStore,
     agentStatusStore,
     recommendationStore,
+    operationalUpdateStore,
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });

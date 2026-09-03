@@ -3,6 +3,8 @@ import { ALL_COWORKER_PERSONAS, createCoworkerTask, withUpdate, type CoworkerAss
 import type { CoworkerTaskStore } from "../coworker/store";
 import type { AgentStatusStore } from "./agent-status-store";
 import type { RecommendationStore } from "./recommendation-store";
+import { createOperationalUpdate, OPERATIONAL_UPDATE_PROVENANCES, type OperationalUpdateProvenance } from "./operational-update";
+import type { OperationalUpdateStore } from "./operational-update-store";
 import { buildDashboardSnapshot } from "./snapshot";
 import { DASHBOARD_HTML } from "./page";
 
@@ -10,6 +12,7 @@ export interface DashboardServerDeps {
   readonly coworkerStore: CoworkerTaskStore;
   readonly agentStatusStore: AgentStatusStore;
   readonly recommendationStore: RecommendationStore;
+  readonly operationalUpdateStore: OperationalUpdateStore;
 }
 
 // A dashboard form submission is tiny; this just bounds abuse from a malformed/huge body.
@@ -98,6 +101,21 @@ async function handleAddUpdate(req: IncomingMessage, res: ServerResponse, deps: 
   sendJson(res, 200, updated);
 }
 
+async function handleCreateOperationalUpdate(req: IncomingMessage, res: ServerResponse, deps: DashboardServerDeps): Promise<void> {
+  const body = await readJsonBody(req);
+  const summary = typeof body["summary"] === "string" ? body["summary"] : "";
+  const by = typeof body["by"] === "string" ? body["by"] : "";
+  const provenance = body["provenance"];
+  const details = typeof body["details"] === "string" ? body["details"] : undefined;
+  if (!summary.trim() || !by.trim() || typeof provenance !== "string" || !OPERATIONAL_UPDATE_PROVENANCES.includes(provenance as OperationalUpdateProvenance)) {
+    sendJson(res, 400, { error: '"summary", "by", and a valid "provenance" are required' });
+    return;
+  }
+  const update = createOperationalUpdate(summary, by, provenance as OperationalUpdateProvenance, details);
+  await deps.operationalUpdateStore.save(update);
+  sendJson(res, 201, update);
+}
+
 /**
  * The local dashboard: one HTML page, a JSON snapshot endpoint it polls,
  * and two small write endpoints (add a task, add a progress note) so the
@@ -115,17 +133,22 @@ export function createDashboardServer(deps: DashboardServerDeps): Server {
       }
 
       if (req.method === "GET" && req.url === "/api/snapshot") {
-        const [tasks, agentStatuses, recommendations] = await Promise.all([
+        const [tasks, agentStatuses, recommendations, operationalUpdates] = await Promise.all([
           deps.coworkerStore.list(),
           deps.agentStatusStore.list(),
           deps.recommendationStore.list(),
+          deps.operationalUpdateStore.list(),
         ]);
-        sendJson(res, 200, buildDashboardSnapshot(tasks, agentStatuses, recommendations));
+        sendJson(res, 200, buildDashboardSnapshot(tasks, agentStatuses, recommendations, undefined, undefined, operationalUpdates));
         return;
       }
 
       if (req.method === "POST" && req.url === "/api/tasks") {
         await handleCreateTask(req, res, deps);
+        return;
+      }
+      if (req.method === "POST" && req.url === "/api/operational-updates") {
+        await handleCreateOperationalUpdate(req, res, deps);
         return;
       }
 

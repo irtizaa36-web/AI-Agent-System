@@ -467,6 +467,20 @@ export const DASHBOARD_HTML = `<!doctype html>
     <h2 id="recs-h">Recommendations &amp; changes</h2>
     <ul id="recommendations" class="plain" aria-live="polite"></ul>
   </section>
+  <section aria-labelledby="operations-h">
+    <h2 id="operations-h">Operational updates</h2>
+    <form id="operational-update-form" class="update-form">
+      <label class="visually-hidden" for="operational-summary">Operational update</label>
+      <input id="operational-summary" name="summary" type="text" placeholder="Concise operational update" required>
+      <label class="visually-hidden" for="operational-by">Author</label>
+      <input id="operational-by" name="by" type="text" placeholder="Your name" required>
+      <label for="operational-provenance">Provenance</label>
+      <select id="operational-provenance" name="provenance"><option value="human">Human</option><option value="agent">Agent</option><option value="external_operator">External operator</option></select>
+      <button type="submit">Post operational update</button>
+      <p id="operational-update-status" class="form-status" role="status" aria-live="polite"></p>
+    </form>
+    <ul id="operational-updates" class="plain" aria-live="polite"></ul>
+  </section>
 </main>
 <script>
 (function () {
@@ -695,7 +709,8 @@ export const DASHBOARD_HTML = `<!doctype html>
     projects
       .filter(function (p) {
         return (statusFilter === "all" || p.overallStatus === statusFilter) &&
-          (assigneeFilter === "all" || p.assignedTo === assigneeFilter);
+          (assigneeFilter === "all" || p.assignedTo === assigneeFilter ||
+            (p.assignedTo === "both" && (assigneeFilter === "macmini" || assigneeFilter === "Laptop2")));
       })
       .forEach(function (p) { (buckets[p.overallStatus] || buckets.pending).push(p); });
 
@@ -723,6 +738,19 @@ export const DASHBOARD_HTML = `<!doctype html>
     });
   }
 
+  function renderOperationalUpdates(updates) {
+    var list = document.getElementById("operational-updates");
+    list.innerHTML = "";
+    if (!updates.length) { list.appendChild(el("li", "empty", "No operational updates yet.")); return; }
+    updates.forEach(function (update) {
+      var li = el("li", "rec");
+      li.appendChild(el("p", "rec-summary", update.summary));
+      li.appendChild(el("p", "field", update.provenance + " · " + update.by + " · " + new Date(update.createdAt).toLocaleString()));
+      if (update.details) li.appendChild(el("p", "field", update.details));
+      list.appendChild(li);
+    });
+  }
+
   function load() {
     document.getElementById("meta").textContent = "Refreshing…";
     fetch("/api/snapshot")
@@ -734,6 +762,7 @@ export const DASHBOARD_HTML = `<!doctype html>
         renderAgents(snap.agents);
         renderProjects(latestProjects);
         renderRecommendations(snap.recommendations);
+        renderOperationalUpdates(snap.operationalUpdates);
         document.getElementById("meta").textContent = "Updated " + new Date(snap.generatedAt).toLocaleTimeString();
       })
       .catch(function () {
@@ -781,6 +810,33 @@ export const DASHBOARD_HTML = `<!doctype html>
       .catch(function (err) {
         addTaskStatus.textContent = err.message;
         addTaskStatus.className = "form-status error";
+      });
+  });
+
+  var operationalForm = document.getElementById("operational-update-form");
+  var operationalStatus = document.getElementById("operational-update-status");
+  operationalForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    operationalStatus.textContent = "Posting…";
+    fetch("/api/operational-updates", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        summary: document.getElementById("operational-summary").value,
+        by: document.getElementById("operational-by").value,
+        provenance: document.getElementById("operational-provenance").value
+      })
+    }).then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.body.error || "couldn't post operational update");
+        operationalStatus.textContent = "Posted.";
+        operationalStatus.className = "form-status ok";
+        document.getElementById("operational-summary").value = "";
+        load();
+      })
+      .catch(function (err) {
+        operationalStatus.textContent = err.message;
+        operationalStatus.className = "form-status error";
       });
   });
 

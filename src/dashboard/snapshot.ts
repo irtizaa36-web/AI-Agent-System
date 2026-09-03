@@ -7,6 +7,7 @@ import {
 } from "../coworker/task";
 import type { AgentStatus, SelfReportedAgentStatus } from "./agent-status";
 import type { Recommendation } from "./recommendation";
+import type { OperationalUpdate } from "./operational-update";
 
 /** Shown even before they've ever self-reported, so the dashboard isn't empty on a fresh checkout. */
 export const DEFAULT_AGENT_NAMES: readonly string[] = ["PinkyBaby", "Coordinator", "macmini", "Laptop2", "Riley", "Jordan"];
@@ -67,6 +68,7 @@ export interface DashboardSnapshot {
   readonly agents: readonly AgentView[];
   readonly projects: readonly ProjectView[];
   readonly attention: readonly AttentionItem[];
+  readonly operationalUpdates: readonly OperationalUpdate[];
   readonly recommendations: readonly Recommendation[];
 }
 
@@ -178,6 +180,7 @@ export function buildDashboardSnapshot(
   recommendations: readonly Recommendation[],
   now: Date = new Date(),
   staleAfterMs: number = DEFAULT_STALE_AFTER_MS,
+  operationalUpdates: readonly OperationalUpdate[] = [],
 ): DashboardSnapshot {
   const statusByName = new Map(agentStatuses.map((s) => [s.name, s]));
   const agentNames = new Set([...DEFAULT_AGENT_NAMES, ...agentStatuses.map((s) => s.name)]);
@@ -194,5 +197,12 @@ export function buildDashboardSnapshot(
 
   const sortedRecommendations = [...recommendations].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  return { generatedAt: now.toISOString(), agents, projects, attention, recommendations: sortedRecommendations };
+  return {
+    generatedAt: now.toISOString(),
+    agents,
+    projects,
+    attention,
+    recommendations: sortedRecommendations,
+    operationalUpdates: [...operationalUpdates].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  };
 }
