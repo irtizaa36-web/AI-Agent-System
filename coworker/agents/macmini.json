@@ -1,6 +1,6 @@
 {
   "name": "macmini",
   "status": "idle",
-  "currentTask": "Completed 41a4b6f7 (git-guardrails + fewer-permission-prompts skills applied). Starting 38fd59e8 (Indeed connector for Project Shivani) next.",
-  "updatedAt": "2026-09-03T17:38:23.329Z"
+  "currentTask": "38fd59e8 blocked: Indeed connector not available in this session (not a permission-classifier block, a genuine missing-connector gap) - flagged, dispatched, awaiting human/connector confirmation. No other pending tasks.",
+  "updatedAt": "2026-09-03T17:39:28.984Z"
 }

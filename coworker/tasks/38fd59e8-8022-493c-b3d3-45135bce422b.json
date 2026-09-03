@@ -5,7 +5,8 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "dispatched",
+      "dispatchedAt": "2026-09-03T17:38:54.410Z"
     }
   },
   "updates": [
@@ -13,6 +14,11 @@
       "at": "2026-09-03T17:06:50.023Z",
       "by": "Sam",
       "note": "Correction: my task text above has a shell-escaping typo - it should read \"$120k+ base where confirmable\", not \"20k+\". Use the $120k+ figure from Shivani's actual preferences file, not the typo."
+    },
+    {
+      "at": "2026-09-03T17:39:24.825Z",
+      "by": "macmini",
+      "note": "Checked for the Indeed connector's MCP tools (mcp__Indeed__search_jobs/get_job_details/get_company_data/get_resume) in this session - not available. Confirmed via targeted ToolSearch (no matches for 'Indeed', 'jobs connector') and ListMcpResourcesTool (only Inkbox and Resy servers registered here). Per docs/operations/ai-client-interoperability.md's 'Current repository baseline' table, connector registration is session/machine-local, not portable project config - whoever verified Indeed access (Irtiza's overnight batch, per Sam's PR #23 triage) likely did so in a different session/account context than this one. Not faking access I don't have. Left dispatched rather than guessing at an integration against tools that aren't actually callable here - needs a human to either confirm the Indeed connector should be enabled for this specific macmini session (via claude.ai connector settings), or point me at where it's already available if it's session-specific. Once it's actually callable here, integrating it into job-search-agent as a structured-search Tool alongside the existing read-job-board-page is straightforward and I'll proceed."
     }
   ]
 }
