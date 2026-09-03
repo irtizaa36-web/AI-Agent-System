@@ -1,0 +1,11 @@
+{
+  "id": "1d60e4af-f711-4aa4-9a97-09d6f8717049",
+  "createdAt": "2026-09-03T17:06:40.257Z",
+  "task": "New connectors available: Twelve_Data and Zacks_Data (real-time/historical quotes, market movers, company financials/news). Add a stock-market widget to the dashboard - this closes Irtiza's earlier 'live feed from stocks' request. Keep it read-only market data display, no trading/order-placement anywhere near it. Pick a small, sensible default watchlist or make it configurable; note in your output which you chose. Cite Zacks per its own citation policy if you surface any of its research/commentary, not just quotes.",
+  "assignedTo": "Riley",
+  "results": {
+    "Riley": {
+      "status": "pending"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "38fd59e8-8022-493c-b3d3-45135bce422b",
+  "createdAt": "2026-09-03T17:06:40.165Z",
+  "task": "New connector available: Indeed (mcp__Indeed__search_jobs, get_job_details, get_company_data, get_resume). Integrate it into Project Shivani / job-search-agent as a real upgrade over today's public-job-board-page scraping - structured search results, company data, and job details instead of parsing HTML. Keep using it within her existing preference filters (role categories, no Director-level, 20k+ base where confirmable). Do not touch payments/purchasing anywhere in this - Indeed's search/data tools are read-only, keep it that way. Post an update on issue #1 (and a coworker update note here) once it's wired in and you've run it against a real search.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  },
+  "updates": [
+    {
+      "at": "2026-09-03T17:06:50.023Z",
+      "by": "Sam",
+      "note": "Correction: my task text above has a shell-escaping typo - it should read \"$120k+ base where confirmable\", not \"20k+\". Use the $120k+ figure from Shivani's actual preferences file, not the typo."
+    }
+  ]
+}
