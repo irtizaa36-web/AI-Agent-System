@@ -1,0 +1,11 @@
+{
+  "id": "d1a489c6-062e-45b5-bf85-f120ce0ac33a",
+  "createdAt": "2026-09-03T06:53:25.187Z",
+  "task": "Cost-reduction investigation: verify (against real, current behavior/docs - not assumption) whether Claude Code Remote Routines can run as fresh, non-context-accumulating sessions (create_new_session_on_fire) instead of bound to a persistent session (self-bind/persistent_session_id, how every one of our current recurring check-ins works). A background research agent claimed Routines are always 'fresh, no context bloat' - that contradicts what we've directly observed (Sam's own persistent-session-bound check-in has accumulated 600k+ tokens of context over one day). If fresh-session-per-fire is real and would actually cut cost without losing anything (our protocol is already stateless - all real state lives in git/GitHub, not conversation memory), propose how to migrate our triggers to it. Report findings plainly either way, including anything you're not fully certain about.",
+  "assignedTo": "Jordan",
+  "results": {
+    "Jordan": {
+      "status": "pending"
+    }
+  }
+}
