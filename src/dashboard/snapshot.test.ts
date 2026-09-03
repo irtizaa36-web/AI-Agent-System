@@ -60,6 +60,25 @@ test("attention explains stuck, stale, and failed local records", () => {
   );
 });
 
+test("attention preserves a stale agent's self-reported stuck signal alongside offline", () => {
+  const staleStuck = createAgentStatus(
+    "Riley",
+    "stuck",
+    "waiting for approval",
+    new Date(NOW.getTime() - 9 * 60 * 60 * 1000).toISOString(),
+  );
+
+  const snap = buildDashboardSnapshot([], [staleStuck], [], NOW);
+
+  assert.deepEqual(
+    snap.attention.map((item) => [item.kind, item.source, item.detail]),
+    [
+      ["stuck", "Agent self-report", "waiting for approval"],
+      ["offline", "Derived from last self-report", "waiting for approval"],
+    ],
+  );
+});
+
 test("an agent not in the default list still appears once it has reported at least once", () => {
   const status = createAgentStatus("NewHelper", "idle", undefined, NOW.toISOString());
   const snap = buildDashboardSnapshot([], [status], [], NOW);

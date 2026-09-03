@@ -25,6 +25,8 @@ export type DisplayAgentStatus = SelfReportedAgentStatus | "offline" | "unknown"
 export interface AgentView {
   readonly name: string;
   readonly status: DisplayAgentStatus;
+  /** The agent's original status, retained when a stale display status is derived from it. */
+  readonly reportedStatus?: SelfReportedAgentStatus;
   readonly currentTask?: string;
   readonly updatedAt?: string;
   /** True when `status` is "offline" specifically because the last report is too old — distinguishes that from never having reported at all. */
@@ -77,6 +79,7 @@ function buildAgentView(name: string, status: AgentStatus | undefined, now: numb
   return {
     name,
     status: stale ? "offline" : status.status,
+    reportedStatus: status.status,
     currentTask: status.currentTask,
     updatedAt: status.updatedAt,
     stale,
@@ -127,27 +130,29 @@ function buildProjectView(task: CoworkerTask): ProjectView {
 
 function buildAttentionItems(agents: readonly AgentView[], tasks: readonly CoworkerTask[]): AttentionItem[] {
   const agentItems = agents.flatMap((agent): AttentionItem[] => {
-    if (agent.status === "stuck" && agent.updatedAt) {
-      return [{
+    if (!agent.updatedAt) return [];
+    const items: AttentionItem[] = [];
+    if (agent.reportedStatus === "stuck") {
+      items.push({
         kind: "stuck",
         subject: agent.name,
         reason: `${agent.name} reported being stuck`,
         source: "Agent self-report",
         at: agent.updatedAt,
         detail: agent.currentTask,
-      }];
+      });
     }
-    if (agent.status === "offline" && agent.updatedAt) {
-      return [{
+    if (agent.status === "offline") {
+      items.push({
         kind: "offline",
         subject: agent.name,
         reason: `${agent.name}'s last report is stale`,
         source: "Derived from last self-report",
         at: agent.updatedAt,
         detail: agent.currentTask,
-      }];
+      });
     }
-    return [];
+    return items;
   });
   const failedResultItems = tasks.flatMap((task): AttentionItem[] =>
     Object.entries(task.results).flatMap(([persona, result]) => {
