@@ -1,6 +1,6 @@
 {
   "name": "macmini",
   "status": "idle",
-  "currentTask": "38fd59e8 blocked: Indeed connector not available in this session (not a permission-classifier block, a genuine missing-connector gap) - flagged, dispatched, awaiting human/connector confirmation. No other pending tasks.",
-  "updatedAt": "2026-09-03T17:39:28.984Z"
+  "currentTask": "a7f3e8c2: Phase 1 baseline complete (read-only), posted findings + one approval question for cache/Downloads cleanup. Task left dispatched - more phases (Keychain, settings, hidden-features doc) pending. No other pending tasks.",
+  "updatedAt": "2026-09-03T17:41:54.308Z"
 }
