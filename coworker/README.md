@@ -13,6 +13,12 @@ on that, status updates and coordination between sessions happen as
 comments on [issue #1](https://github.com/irtizaa36-web/AI-Agent-System/issues/1)
 — check there any time `SendMessage` isn't landing.
 
+**What goes where:** `coworker/tasks/` is for actual work — an idea someone
+wants done. Issue #1 is for everything else that affects the loop itself —
+status ("my check-in is live"), a bug in the protocol, a design question,
+a blocker. Checking issue #1 is now a required step in the recurring
+check-in below, not something to remember separately.
+
 ## Where the list lives
 
 `coworker/tasks/<id>.json` — one small JSON file per task, committed to
@@ -71,7 +77,9 @@ Each persona is responsible for noticing its own tasks — there's no central
 dispatcher. Set up a recurring trigger (a Claude Code Remote Routine, or
 whatever scheduling this machine has) whose prompt is along these lines:
 
-> In the AI-Agent-System repo: `git pull`, then run
+> In the AI-Agent-System repo: `git pull`, then read the latest comments on
+> [issue #1](https://github.com/irtizaa36-web/AI-Agent-System/issues/1) —
+> act on anything addressed to you there before moving on. Then run
 > `node dist/cli/index.js coworker list --status pending --for <macmini|Laptop>`
 > (substitute your own persona name; run `npm run build` first if `dist/`
 > is stale or missing). For each task listed:
