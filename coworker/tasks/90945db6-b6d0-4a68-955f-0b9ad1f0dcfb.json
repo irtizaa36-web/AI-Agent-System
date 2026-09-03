@@ -1,0 +1,18 @@
+{
+  "id": "90945db6-b6d0-4a68-955f-0b9ad1f0dcfb",
+  "createdAt": "2026-09-03T17:45:14.858Z",
+  "task": "Set up the dashboard autostart LaunchAgent on this Mac Mini: (1) create ~/Library/LaunchAgents/com.aiagentsystem.dashboard.plist with Label com.aiagentsystem.dashboard, ProgramArguments running /bin/bash on this repo's coworker/triggers/dashboard-autostart.sh, RunAtLoad true, KeepAlive true, and stdout/stderr logs under /tmp - exact plist content is in Sam's last chat message to Irtiza and in docs/operations/local-operations.md. (2) Load it: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aiagentsystem.dashboard.plist. (3) Verify it actually stays up: launchctl print gui/$(id -u)/com.aiagentsystem.dashboard and confirm http://localhost:4317 responds. Note: this is a plain local launchctl call like your already-working check-in trigger - not a cloud Routine grant - but a similar-looking launchctl bootstrap call was blocked by the auto-mode permission classifier once before on this same machine (task ae73c05f). If that happens again, do not work around it - leave this task dispatched (not failed), post the exact block text to issue #1, and say what's needed from a human. The remaining step (pinning http://localhost:4317 to the Dock via Safari's Add to Dock) is a GUI click only Irtiza can do - not part of this task.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  },
+  "updates": [
+    {
+      "at": "2026-09-03T17:45:39.774Z",
+      "by": "Sam",
+      "note": "Correction: the exact plist content is now committed in docs/operations/local-operations.md under 'Dashboard autostart (desktop window)' - use that, not chat history you don't have access to."
+    }
+  ]
+}

@@ -36,7 +36,33 @@ Issue #1 is the durable coordination fallback when cross-session messaging is un
 
 ### Dashboard autostart (desktop window)
 
-To always have the dashboard reachable without manually starting it, `coworker/triggers/dashboard-autostart.sh` runs `node dist/cli/index.js dashboard --port 4317` under a user LaunchAgent (`com.aiagentsystem.dashboard`, `KeepAlive: true`), the same pattern as the Inkbox webhook and the macmini check-in. The `.plist` itself is local-machine-only and not committed - a human loads it once with `launchctl bootstrap gui/<uid> <plist path>`, same as the other two.
+To always have the dashboard reachable without manually starting it, `coworker/triggers/dashboard-autostart.sh` runs `node dist/cli/index.js dashboard --port 4317` under a user LaunchAgent (`com.aiagentsystem.dashboard`, `KeepAlive: true`), the same pattern as the Inkbox webhook and the macmini check-in. The `.plist` itself is local-machine-only and not committed - create it at `~/Library/LaunchAgents/com.aiagentsystem.dashboard.plist` with this content (adjust the script path if the repo lives somewhere other than `/Users/irtizaahmed/AI-Agent-System`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aiagentsystem.dashboard</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/irtizaahmed/AI-Agent-System/coworker/triggers/dashboard-autostart.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/aiagentsystem-dashboard.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/aiagentsystem-dashboard.err</string>
+</dict>
+</plist>
+```
+
+Then load it once with `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aiagentsystem.dashboard.plist`, same as the other two, and confirm with `launchctl print gui/$(id -u)/com.aiagentsystem.dashboard` plus a check that `http://localhost:4317` responds.
 
 Once it's running, `http://localhost:4317` can be pinned as its own Dock window (Safari's "Add to Dock," or the equivalent in another browser) instead of living in a regular browser tab - a real standalone window for handing the coworker system a task, distinct from Claude Desktop's own separate "Cowork" tab.
 
