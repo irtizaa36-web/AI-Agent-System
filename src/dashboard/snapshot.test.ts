@@ -25,9 +25,18 @@ test("a fresh self-reported status passes through as-is", () => {
   assert.equal(macmini?.stale, false);
 });
 
+test("a six-hour-old report remains current for the documented slowest check-in", () => {
+  const sixHoursAgo = new Date(NOW.getTime() - 6 * 60 * 60 * 1000).toISOString();
+  const status = createAgentStatus("Jordan", "idle", undefined, sixHoursAgo);
+  const snap = buildDashboardSnapshot([], [status], [], NOW);
+  const jordan = snap.agents.find((a) => a.name === "Jordan");
+  assert.equal(jordan?.status, "idle");
+  assert.equal(jordan?.stale, false);
+});
+
 test("a status older than the stale threshold displays as offline", () => {
-  const fourHoursAgo = new Date(NOW.getTime() - 4 * 60 * 60 * 1000).toISOString();
-  const status = createAgentStatus("Laptop2", "idle", undefined, fourHoursAgo);
+  const nineHoursAgo = new Date(NOW.getTime() - 9 * 60 * 60 * 1000).toISOString();
+  const status = createAgentStatus("Laptop2", "idle", undefined, nineHoursAgo);
   const snap = buildDashboardSnapshot([], [status], [], NOW);
   const laptop = snap.agents.find((a) => a.name === "Laptop2");
   assert.equal(laptop?.status, "offline");

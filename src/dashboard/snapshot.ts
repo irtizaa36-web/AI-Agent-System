@@ -14,11 +14,11 @@ export const DEFAULT_AGENT_NAMES: readonly string[] = ["PinkyBaby", "Coordinator
 /**
  * How long a self-reported status is trusted before the dashboard shows the
  * agent as offline instead. A simple heuristic, not a precise health check:
- * generous enough to cover the slowest current check-in (Coordinator's,
- * every 2 hours) with margin, so a normal gap between check-ins never reads
- * as an outage.
+ * generous enough to cover the slowest current check-in (Jordan's, every
+ * 6 hours) with a two-hour margin, so a normal gap between check-ins never
+ * reads as an outage.
  */
-export const DEFAULT_STALE_AFTER_MS = 3 * 60 * 60 * 1000;
+export const DEFAULT_STALE_AFTER_MS = 8 * 60 * 60 * 1000;
 
 export type DisplayAgentStatus = SelfReportedAgentStatus | "offline" | "unknown";
 
