@@ -1,6 +1,6 @@
 {
   "name": "macmini",
-  "status": "stuck",
-  "currentTask": "ae73c05f: local launchd fallback trigger blocked by auto-mode permission classifier on launchctl bootstrap - flagged on issue #1, awaiting human decision",
-  "updatedAt": "2026-09-03T06:52:18.396Z"
+  "status": "idle",
+  "currentTask": "Handled ae73c05f (blocked, flagged on issue #1) and applied the cost-cadence directive (trigger now 3h, fallback plist draft now 4h). No other pending tasks.",
+  "updatedAt": "2026-09-03T06:53:57.988Z"
 }
