@@ -1,0 +1,11 @@
+{
+  "id": "ae73c05f-5c8e-4641-8392-9bbf9b63f497",
+  "createdAt": "2026-09-03T03:05:22.134Z",
+  "task": "Set up a local (cron/launchd) fallback trigger on the physical Mac mini itself, separate from the hourly cloud-sandboxed RemoteTrigger. Needed so any coworker task requiring local-only state (the .env API key, files under .orchestrator/) can actually complete. See the pending 'system' recommendation on the dashboard for the original context.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  }
+}

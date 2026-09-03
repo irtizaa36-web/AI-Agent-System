@@ -1,10 +1,11 @@
 import { parseArgs } from "node:util";
 import {
-  COWORKER_PERSONAS,
+  ALL_COWORKER_PERSONAS,
   coworkerTaskOverallStatus,
   createCoworkerTask,
   withDispatched,
   withResult,
+  withUpdate,
   type CoworkerAssignment,
   type CoworkerPersona,
   type CoworkerTask,
@@ -12,13 +13,13 @@ import {
 import type { CliDeps } from "./index";
 
 function parsePersona(value: string | undefined, usage: string, deps: CliDeps): CoworkerPersona | undefined {
-  if (value && (COWORKER_PERSONAS as readonly string[]).includes(value)) return value as CoworkerPersona;
-  deps.stderr(`--persona must be one of: ${COWORKER_PERSONAS.join(", ")}\n${usage}`);
+  if (value && (ALL_COWORKER_PERSONAS as readonly string[]).includes(value)) return value as CoworkerPersona;
+  deps.stderr(`--persona must be one of: ${ALL_COWORKER_PERSONAS.join(", ")}\n${usage}`);
   return undefined;
 }
 
 function parseAssignment(value: string | undefined, usage: string, deps: CliDeps): CoworkerAssignment | undefined {
-  const allowed = [...COWORKER_PERSONAS, "both"];
+  const allowed = [...ALL_COWORKER_PERSONAS, "both"];
   if (value && allowed.includes(value)) return value as CoworkerAssignment;
   deps.stderr(`--to must be one of: ${allowed.join(", ")}\n${usage}`);
   return undefined;
@@ -74,6 +75,8 @@ async function listCommand(args: readonly string[], deps: CliDeps): Promise<numb
     for (const [persona, result] of Object.entries(task.results)) {
       deps.stdout(`  - ${persona}: ${result?.status}${result?.output ? ` — ${result.output}` : ""}`);
     }
+    const lastUpdate = task.updates?.[task.updates.length - 1];
+    if (lastUpdate) deps.stdout(`  last update (${lastUpdate.by}, ${lastUpdate.at}): ${lastUpdate.note}`);
   }
   return 0;
 }
@@ -134,6 +137,35 @@ async function completeCommand(args: readonly string[], deps: CliDeps): Promise<
   return 0;
 }
 
+/** `coworker update <id> --by <name> --note "<text>"`: a progress note, not a status change — anyone can leave one. */
+async function updateCommand(args: readonly string[], deps: CliDeps): Promise<number> {
+  const usage = 'Usage: orchestrator coworker update <id> --by <name> --note "<text>"';
+  const { values, positionals } = parseArgs({
+    args: [...args],
+    options: { by: { type: "string" }, note: { type: "string" } },
+    allowPositionals: true,
+  });
+  const id = positionals[0];
+  if (!id || !values.by || !values.note) {
+    deps.stderr(usage);
+    return 1;
+  }
+
+  const task = await findTask(deps, id);
+  if (!task) return 1;
+
+  let updated;
+  try {
+    updated = withUpdate(task, values.by, values.note);
+  } catch (error) {
+    deps.stderr((error as Error).message);
+    return 1;
+  }
+  await deps.coworkerStore.save(updated);
+  deps.stdout(`Added an update to task ${id} from ${values.by}.`);
+  return 0;
+}
+
 export async function runCoworkerCommand(args: readonly string[], deps: CliDeps): Promise<number> {
   const [subcommand, ...rest] = args;
   switch (subcommand) {
@@ -145,13 +177,16 @@ export async function runCoworkerCommand(args: readonly string[], deps: CliDeps)
       return dispatchedCommand(rest, deps);
     case "complete":
       return completeCommand(rest, deps);
+    case "update":
+      return updateCommand(rest, deps);
     default:
       deps.stderr(
         [
-          'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop2|both',
-          "                  coworker list [--status pending|in_progress|done] [--for macmini|Laptop2]",
-          "                  coworker dispatched <id> --persona macmini|Laptop2",
-          '                  coworker complete <id> --persona macmini|Laptop2 --output "<text>" [--failed]',
+          'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop2|Riley|both',
+          "                  coworker list [--status pending|in_progress|done] [--for macmini|Laptop2|Riley]",
+          "                  coworker dispatched <id> --persona macmini|Laptop2|Riley",
+          '                  coworker complete <id> --persona macmini|Laptop2|Riley --output "<text>" [--failed]',
+          '                  coworker update <id> --by <name> --note "<text>"',
         ].join("\n"),
       );
       return 1;

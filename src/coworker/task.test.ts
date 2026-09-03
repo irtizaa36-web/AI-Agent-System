@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coworkerTaskOverallStatus, createCoworkerTask, personasFor, withDispatched, withResult } from "./task";
+import { ALL_COWORKER_PERSONAS, coworkerTaskOverallStatus, createCoworkerTask, personasFor, withDispatched, withResult, withUpdate } from "./task";
 
 test("createCoworkerTask rejects empty task text", () => {
   assert.throws(() => createCoworkerTask("   ", "macmini"), /must not be empty/);
@@ -47,4 +47,26 @@ test("withResult records output, success/failure, and a finish time", () => {
   assert.equal(failed.results.macmini?.status, "failed");
   assert.equal(failed.results.macmini?.output, "hit an error");
   assert.ok(failed.results.macmini?.finishedAt);
+});
+
+test("ALL_COWORKER_PERSONAS includes the specialist persona without changing what 'both' means", () => {
+  assert.deepEqual(ALL_COWORKER_PERSONAS, ["macmini", "Laptop2", "Riley"]);
+  assert.deepEqual(personasFor("both"), ["macmini", "Laptop2"]);
+});
+
+test("withUpdate appends progress notes oldest-first, without touching results/status", () => {
+  let task = createCoworkerTask("do a thing", "macmini");
+  task = withUpdate(task, "macmini", "started looking into this");
+  task = withUpdate(task, "Irtiza", "any luck?");
+  assert.equal(task.updates?.length, 2);
+  assert.equal(task.updates?.[0]?.note, "started looking into this");
+  assert.equal(task.updates?.[1]?.by, "Irtiza");
+  assert.equal(coworkerTaskOverallStatus(task), "pending", "an update note is not a status change");
+});
+
+test("withUpdate rejects an empty note, and doesn't require the poster to be an assigned persona", () => {
+  const task = createCoworkerTask("do a thing", "macmini");
+  assert.throws(() => withUpdate(task, "Irtiza", "   "), /must not be empty/);
+  const updated = withUpdate(task, "Irtiza", "checking in");
+  assert.equal(updated.updates?.[0]?.by, "Irtiza");
 });

@@ -104,6 +104,35 @@ test("coworker complete on an unknown task id fails clearly", async () => {
   assert.match(stderr.join("\n"), /No coworker task/);
 });
 
+test("coworker update posts a progress note and shows up in list, without changing status", async () => {
+  const { stdout, deps } = buildDeps();
+  await runCli(["coworker", "add", "do a thing", "--to", "macmini"], deps);
+  const id = stdout[0].match(/task (\S+) for/)?.[1];
+
+  const code = await runCli(["coworker", "update", id!, "--by", "Irtiza", "--note", "checking in"], deps);
+  assert.equal(code, 0);
+
+  const before = stdout.length;
+  await runCli(["coworker", "list"], deps);
+  const text = stdout.slice(before).join("\n");
+  assert.match(text, /\[pending\]/);
+  assert.match(text, /last update \(Irtiza,.*\): checking in/);
+});
+
+test("coworker update on an unknown task id fails clearly", async () => {
+  const { stderr, deps } = buildDeps();
+  const code = await runCli(["coworker", "update", "no-such-id", "--by", "Irtiza", "--note", "hi"], deps);
+  assert.equal(code, 1);
+  assert.match(stderr.join("\n"), /No coworker task/);
+});
+
+test("coworker add accepts the specialist Riley persona", async () => {
+  const { stdout, deps } = buildDeps();
+  const code = await runCli(["coworker", "add", "polish the dashboard", "--to", "Riley"], deps);
+  assert.equal(code, 0);
+  assert.match(stdout.join("\n"), /for Riley/);
+});
+
 test("coworker with no subcommand prints usage", async () => {
   const { stderr, deps } = buildDeps();
   assert.equal(await runCli(["coworker"], deps), 1);
