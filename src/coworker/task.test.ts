@@ -7,9 +7,9 @@ test("createCoworkerTask rejects empty task text", () => {
 });
 
 test("personasFor expands 'both' to both personas, and passes through a single persona", () => {
-  assert.deepEqual(personasFor("both"), ["macmini", "Laptop"]);
+  assert.deepEqual(personasFor("both"), ["macmini", "Laptop2"]);
   assert.deepEqual(personasFor("macmini"), ["macmini"]);
-  assert.deepEqual(personasFor("Laptop"), ["Laptop"]);
+  assert.deepEqual(personasFor("Laptop2"), ["Laptop2"]);
 });
 
 test("createCoworkerTask seeds a pending result for each assigned persona only", () => {
@@ -18,7 +18,7 @@ test("createCoworkerTask seeds a pending result for each assigned persona only",
   assert.equal(single.results.macmini?.status, "pending");
 
   const both = createCoworkerTask("do a thing", "both");
-  assert.deepEqual(Object.keys(both.results).sort(), ["Laptop", "macmini"]);
+  assert.deepEqual(Object.keys(both.results).sort(), ["Laptop2", "macmini"]);
 });
 
 test("coworkerTaskOverallStatus is derived from per-persona results, never stored", () => {
@@ -31,14 +31,14 @@ test("coworkerTaskOverallStatus is derived from per-persona results, never store
   task = withResult(task, "macmini", "done on macmini", true);
   assert.equal(coworkerTaskOverallStatus(task), "in_progress", "laptop hasn't reported yet");
 
-  task = withResult(task, "Laptop", "couldn't do it", false);
+  task = withResult(task, "Laptop2", "couldn't do it", false);
   assert.equal(coworkerTaskOverallStatus(task), "done", "done once every assigned persona has a final result");
 });
 
 test("withDispatched and withResult reject a persona the task isn't assigned to", () => {
   const task = createCoworkerTask("do a thing", "macmini");
-  assert.throws(() => withDispatched(task, "Laptop"), /not assigned/);
-  assert.throws(() => withResult(task, "Laptop", "x", true), /not assigned/);
+  assert.throws(() => withDispatched(task, "Laptop2"), /not assigned/);
+  assert.throws(() => withResult(task, "Laptop2", "x", true), /not assigned/);
 });
 
 test("withResult records output, success/failure, and a finish time", () => {

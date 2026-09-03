@@ -52,7 +52,7 @@ test("coworker add then list shows a pending task for the assigned persona", asy
 test("coworker list --for only shows tasks assigned to that persona or 'both'", async () => {
   const { stdout, deps } = buildDeps();
   await runCli(["coworker", "add", "for macmini only", "--to", "macmini"], deps);
-  await runCli(["coworker", "add", "for laptop only", "--to", "Laptop"], deps);
+  await runCli(["coworker", "add", "for laptop only", "--to", "Laptop2"], deps);
   await runCli(["coworker", "add", "for both", "--to", "both"], deps);
 
   const before = stdout.length;
@@ -88,7 +88,7 @@ test("coworker complete on a persona the task isn't assigned to fails clearly", 
   await runCli(["coworker", "add", "do a thing", "--to", "macmini"], deps);
   const id = stdout[0].match(/task (\S+) for/)?.[1];
 
-  const code = await runCli(["coworker", "complete", id!, "--persona", "Laptop", "--output", "x"], deps);
+  const code = await runCli(["coworker", "complete", id!, "--persona", "Laptop2", "--output", "x"], deps);
   assert.equal(code, 1);
   assert.match(stderr.join("\n"), /not assigned/);
 });

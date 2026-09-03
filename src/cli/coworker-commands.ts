@@ -33,9 +33,9 @@ async function findTask(deps: CliDeps, id: string): Promise<CoworkerTask | undef
   return task;
 }
 
-/** `coworker add "<task>" --to macmini|Laptop|both`: writes down a new idea for a persona to pick up. */
+/** `coworker add "<task>" --to macmini|Laptop2|both`: writes down a new idea for a persona to pick up. */
 async function addCommand(args: readonly string[], deps: CliDeps): Promise<number> {
-  const usage = 'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop|both';
+  const usage = 'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop2|both';
   const { values, positionals } = parseArgs({ args: [...args], options: { to: { type: "string" } }, allowPositionals: true });
   const taskText = positionals[0];
   if (!taskText) {
@@ -52,7 +52,7 @@ async function addCommand(args: readonly string[], deps: CliDeps): Promise<numbe
   return 0;
 }
 
-/** `coworker list [--status pending|in_progress|done] [--for macmini|Laptop]`: the inspectable view of the shared list. */
+/** `coworker list [--status pending|in_progress|done] [--for macmini|Laptop2]`: the inspectable view of the shared list. */
 async function listCommand(args: readonly string[], deps: CliDeps): Promise<number> {
   const { values } = parseArgs({ args: [...args], options: { status: { type: "string" }, for: { type: "string" } } });
   const tasks = await deps.coworkerStore.list();
@@ -78,9 +78,9 @@ async function listCommand(args: readonly string[], deps: CliDeps): Promise<numb
   return 0;
 }
 
-/** `coworker dispatched <id> --persona macmini|Laptop`: the watcher calls this right after actually sending the task via SendMessage. */
+/** `coworker dispatched <id> --persona macmini|Laptop2`: the watcher calls this right after actually sending the task via SendMessage. */
 async function dispatchedCommand(args: readonly string[], deps: CliDeps): Promise<number> {
-  const usage = "Usage: orchestrator coworker dispatched <id> --persona macmini|Laptop";
+  const usage = "Usage: orchestrator coworker dispatched <id> --persona macmini|Laptop2";
   const { values, positionals } = parseArgs({ args: [...args], options: { persona: { type: "string" } }, allowPositionals: true });
   const id = positionals[0];
   const persona = parsePersona(values.persona, usage, deps);
@@ -104,9 +104,9 @@ async function dispatchedCommand(args: readonly string[], deps: CliDeps): Promis
   return 0;
 }
 
-/** `coworker complete <id> --persona macmini|Laptop --output "<text>" [--failed]`: a persona calls this once it has actually done the work. */
+/** `coworker complete <id> --persona macmini|Laptop2 --output "<text>" [--failed]`: a persona calls this once it has actually done the work. */
 async function completeCommand(args: readonly string[], deps: CliDeps): Promise<number> {
-  const usage = 'Usage: orchestrator coworker complete <id> --persona macmini|Laptop --output "<text>" [--failed]';
+  const usage = 'Usage: orchestrator coworker complete <id> --persona macmini|Laptop2 --output "<text>" [--failed]';
   const { values, positionals } = parseArgs({
     args: [...args],
     options: { persona: { type: "string" }, output: { type: "string" }, failed: { type: "boolean" } },
@@ -148,10 +148,10 @@ export async function runCoworkerCommand(args: readonly string[], deps: CliDeps)
     default:
       deps.stderr(
         [
-          'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop|both',
-          "                  coworker list [--status pending|in_progress|done] [--for macmini|Laptop]",
-          "                  coworker dispatched <id> --persona macmini|Laptop",
-          '                  coworker complete <id> --persona macmini|Laptop --output "<text>" [--failed]',
+          'Usage: orchestrator coworker add "<task text>" --to macmini|Laptop2|both',
+          "                  coworker list [--status pending|in_progress|done] [--for macmini|Laptop2]",
+          "                  coworker dispatched <id> --persona macmini|Laptop2",
+          '                  coworker complete <id> --persona macmini|Laptop2 --output "<text>" [--failed]',
         ].join("\n"),
       );
       return 1;

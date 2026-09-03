@@ -1,8 +1,11 @@
 # Coworker task loop
 
 A shared to-do list between the two Claude Code personas ("macmini" and
-"Laptop"). Write down an idea, say who it's for, and that persona picks it
-up on its own next check-in — no one has to trigger it by hand.
+"Laptop2" — Irtiza calls them Max and Lucy in conversation, but the task
+list and `SendMessage` still need the literal session names above; Max/Lucy
+are friendly names, not values `--to`/`--persona` accept). Write down an
+idea, say who it's for, and that persona picks it up on its own next
+check-in — no one has to trigger it by hand.
 
 ## Coordinating between sessions
 
@@ -40,7 +43,7 @@ point of using plain files instead of a database.
   "id": "…",
   "createdAt": "2026-09-03T00:00:00.000Z",
   "task": "the idea/instructions, in plain English",
-  "assignedTo": "macmini | Laptop | both",
+  "assignedTo": "macmini | Laptop2 | both",
   "results": {
     "macmini": { "status": "pending | dispatched | succeeded | failed", "output": "…" }
   }
@@ -54,10 +57,10 @@ two can't drift out of sync. `orchestrator coworker list` shows the derived
 
 ## The commands (`orchestrator coworker ...`)
 
-- `add "<task text>" --to macmini|Laptop|both` — write down a new idea.
-- `list [--status pending|in_progress|done] [--for macmini|Laptop]` — inspect the list.
-- `dispatched <id> --persona macmini|Laptop` — mark that a persona has picked the task up (call this right before starting the work).
-- `complete <id> --persona macmini|Laptop --output "<summary>" [--failed]` — record what happened, once the work is actually done.
+- `add "<task text>" --to macmini|Laptop2|both` — write down a new idea.
+- `list [--status pending|in_progress|done] [--for macmini|Laptop2]` — inspect the list.
+- `dispatched <id> --persona macmini|Laptop2` — mark that a persona has picked the task up (call this right before starting the work).
+- `complete <id> --persona macmini|Laptop2 --output "<summary>" [--failed]` — record what happened, once the work is actually done.
 
 Run `npm run build` once, then call `node dist/cli/index.js coworker ...`
 directly (that's what the recipe below uses). Don't use `npm run cli --
@@ -80,7 +83,7 @@ whatever scheduling this machine has) whose prompt is along these lines:
 > In the AI-Agent-System repo: `git pull`, then read the latest comments on
 > [issue #1](https://github.com/irtizaa36-web/AI-Agent-System/issues/1) —
 > act on anything addressed to you there before moving on. Then run
-> `node dist/cli/index.js coworker list --status pending --for <macmini|Laptop>`
+> `node dist/cli/index.js coworker list --status pending --for <macmini|Laptop2>`
 > (substitute your own persona name; run `npm run build` first if `dist/`
 > is stale or missing). For each task listed:
 > 1. `node dist/cli/index.js coworker dispatched <id> --persona <you>`

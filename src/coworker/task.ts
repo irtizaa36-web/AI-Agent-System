@@ -5,9 +5,9 @@ import { randomUUID } from "node:crypto";
  * exact peer session names — they must match what `SendMessage`'s `to`
  * field expects on the machine dispatching the task, so casing matters.
  */
-export type CoworkerPersona = "macmini" | "Laptop";
+export type CoworkerPersona = "macmini" | "Laptop2";
 
-export const COWORKER_PERSONAS: readonly CoworkerPersona[] = ["macmini", "Laptop"];
+export const COWORKER_PERSONAS: readonly CoworkerPersona[] = ["macmini", "Laptop2"];
 
 export type CoworkerAssignment = CoworkerPersona | "both";
 

@@ -53,7 +53,7 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator browser login <site> <url>                     One-time human login, saves an authenticated session",
       '  orchestrator dispatch run --task "<goal>"                   State a goal in plain English; the Dispatcher plans and runs it',
       "  orchestrator dispatch status|approve|resume <id>            Check on, approve, or resume a paused workflow",
-      '  orchestrator coworker add "<task>" --to <persona>           Add a task to the shared macmini/Laptop coworker list',
+      '  orchestrator coworker add "<task>" --to <persona>           Add a task to the shared macmini/Laptop2 coworker list',
       "  orchestrator coworker list|dispatched|complete              Inspect or update the shared coworker task list",
       "  orchestrator help                                           Show this message",
       "",
