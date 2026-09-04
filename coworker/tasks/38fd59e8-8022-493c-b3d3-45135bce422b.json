@@ -5,8 +5,10 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "dispatched",
-      "dispatchedAt": "2026-09-03T17:38:54.410Z"
+      "status": "failed",
+      "dispatchedAt": "2026-09-03T17:38:54.410Z",
+      "finishedAt": "2026-09-04T01:06:22.961Z",
+      "output": "Retired, not completed: Irtiza is restarting Project Shivani from scratch and cleared its responsibilities. No further work needed on the Indeed integration under the old project - revisit only if/when the new Shivani project explicitly calls for it."
     }
   },
   "updates": [

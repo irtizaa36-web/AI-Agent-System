@@ -60,22 +60,37 @@ Ongoing pieces of work get a short reference name so every team/session means
 the same thing when they mention it, in commit messages, issue #1, the
 dashboard, or conversation with Irtiza:
 
-- **Project Shivani** — the recurring job search + resume tailoring for
-  Irtiza's wife, run via `job-search-agent` against her real resume and
-  stated preferences (`.orchestrator/job-search/shivani-*.txt`, gitignored/
-  local-only) and delivered via iMessage + the shared "Job Search Checkpoint"
-  Google Doc. Not itself a `coworker/tasks/` entry (it's macmini's recurring
-  routine, not dispatched work), but named here so it's referenced
-  consistently anywhere else it comes up (e.g. the dashboard's Projects
-  section, if/when it's wired up as a tracked project rather than only
-  coworker tasks).
-  **Cadence:** checks her iMessage thread a few times a day (currently a
-  session-local scheduled prompt, ~4x/day) rather than continuously, to keep
-  API usage down — real replies still get read and acted on in full, just
-  with more latency than a tight poll. **Must stay a local/session-based
-  trigger, not a cloud RemoteTrigger**: her resume and preferences files are
-  gitignored/local-only, so a cloud-sandboxed routine wouldn't be able to
-  read them (see the "two kinds of trigger" note below).
+- **Project Shivani — RETIRED (2026-09-04), being restarted fresh.** Was the
+  recurring job search + resume tailoring for Irtiza's wife, run via
+  `job-search-agent` against her real resume and stated preferences
+  (`.orchestrator/job-search/shivani-*.txt`, gitignored/local-only) and
+  delivered via iMessage + the shared "Job Search Checkpoint" Google Doc.
+  Irtiza asked to clear all responsibilities for this version of the project
+  and start it new — **macmini should stop its recurring Shivani check-in
+  routine** (the standing "read her iMessage thread a few times a day" prompt)
+  until a new version of this project is defined. Her local resume/preference
+  files and the checkpoint doc are untouched — nothing was deleted, the
+  routine is just paused. Left here for history/reference rather than
+  deleted outright; replace this entry once the new project has a shape.
+
+- **PinkyBaby** — Team B's Lead Agent. Owns triage, integration, durable
+  handoffs, and tasks that require Team B coordination.
+
+## Current focus (2026-09-04)
+
+Per Irtiza's explicit direction: **all projects other than the Dashboard are
+on hold** until further notice. Concretely:
+- **Dashboard** (Riley's ownership, plus anything the dashboard itself
+  depends on, like its autostart LaunchAgent) — stays active, keep working it.
+- **Everything else** (Project Shivani, the Mac Mini optimization pass, new
+  connector integrations, etc.) — pause. Don't pick up new work on these;
+  existing in-flight items should be left in a clean, clearly-described state
+  (an update note, not silence) rather than abandoned mid-task.
+- Two new projects are coming from Irtiza directly; once assigned, they and
+  the Dashboard are the priority (~95% of effort) until he says otherwise.
+- This is a standing instruction until replaced by a newer dated entry here —
+  don't assume it has lapsed just because time has passed; check issue #1 for
+  an explicit "resume" instead.
 
 - **PinkyBaby** — Team B's Lead Agent. Owns triage, integration, durable
   handoffs, and tasks that require Team B coordination.
