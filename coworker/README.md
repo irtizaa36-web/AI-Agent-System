@@ -92,6 +92,12 @@ on hold** until further notice. Concretely:
   don't assume it has lapsed just because time has passed; check issue #1 for
   an explicit "resume" instead.
 
+**Tight usage-credit window through ~Tuesday 2026-09-08** (Irtiza's weekly
+reset): everyone should run leaner than the general cost guidance below until
+then — longer check-in cadences (8h+ where you can set it yourself), terse
+"nothing new" cycles, no speculative subagents/sessions. This is temporary
+and stacks on top of (doesn't replace) the standing cost principles.
+
 - **PinkyBaby** — Team B's Lead Agent. Owns triage, integration, durable
   handoffs, and tasks that require Team B coordination.
 
