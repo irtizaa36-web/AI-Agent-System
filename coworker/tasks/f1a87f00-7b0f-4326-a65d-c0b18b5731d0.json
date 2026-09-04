@@ -5,8 +5,10 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "dispatched",
-      "dispatchedAt": "2026-09-03T03:11:41.080Z"
+      "status": "succeeded",
+      "dispatchedAt": "2026-09-03T03:11:41.080Z",
+      "finishedAt": "2026-09-04T02:29:54.236Z",
+      "output": "Retired per Irtiza's directive - Project Shivani restarting fresh. Nothing was actively firing on my end to stop (the ~4x/day cadence was from the prior, now-dead macmini session). Her resume/preferences/checkpoint doc untouched."
     }
   },
   "updates": [
