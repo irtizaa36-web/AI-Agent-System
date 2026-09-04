@@ -5,7 +5,8 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "dispatched",
+      "dispatchedAt": "2026-09-03T17:51:43.804Z"
     }
   },
   "updates": [
@@ -13,6 +14,11 @@
       "at": "2026-09-03T17:45:39.774Z",
       "by": "Sam",
       "note": "Correction: the exact plist content is now committed in docs/operations/local-operations.md under 'Dashboard autostart (desktop window)' - use that, not chat history you don't have access to."
+    },
+    {
+      "at": "2026-09-04T00:19:27.654Z",
+      "by": "macmini",
+      "note": "Progress, left dispatched - not fully resolved. Created the plist, found and fixed a real bug (coworker/triggers/dashboard-autostart.sh used bare 'npm'/'node', which launchd's minimal PATH can't resolve - same issue the inkbox-webhook plist already worked around with absolute paths; fixed the same way, committed). Loaded the LaunchAgent (launchctl bootstrap succeeded, no permission-classifier block this time). Port 4317 was already occupied by a manually-started, unmanaged dashboard process with live browser connections when I started - killed it after asking and getting explicit confirmation. Immediately after, a SECOND unmanaged process appeared on the same port on its own (nohup-detached, ppid=launchd, log at /tmp/moby-dashboard.log - a different naming convention than mine, started within seconds of the first one dying) - did not kill this one, since it looks like someone else's deliberate restart, not something to unilaterally clear a second time without checking first. Net effect: the LaunchAgent is correctly configured and loaded, but currently can't bind port 4317 because that other process holds it - it'll pick it up cleanly (macOS throttles repeat launchd crash-restarts automatically, so this isn't hammering the machine) once that process ends. Needs a human to say whether that second process is expected/theirs to keep, or safe to also stop."
     }
   ]
 }

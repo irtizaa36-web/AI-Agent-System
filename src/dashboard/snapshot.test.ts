@@ -128,7 +128,7 @@ test("mostRecentUpdate falls back to the latest dispatch/result event when there
 
 test("an explicit progress note newer than the latest result event wins as mostRecentUpdate", () => {
   let task = withResult(withDispatched(createCoworkerTask("do a thing", "macmini", "task-d"), "macmini"), "macmini", "done", true);
-  task = withUpdate(task, "Irtiza", "looks good, thanks!", "2026-09-04T00:00:00.000Z");
+  task = withUpdate(task, "Irtiza", "looks good, thanks!", "2099-01-01T00:00:00.000Z");
   const snap = buildDashboardSnapshot([task], [], [], NOW);
   const project = snap.projects.find((p) => p.id === "task-d");
   assert.equal(project?.mostRecentUpdate?.by, "Irtiza");

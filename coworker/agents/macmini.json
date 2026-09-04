@@ -1,6 +1,6 @@
 {
   "name": "macmini",
-  "status": "idle",
-  "currentTask": "a7f3e8c2: Phase 1 baseline complete (read-only), posted findings + one approval question for cache/Downloads cleanup. Task left dispatched - more phases (Keychain, settings, hidden-features doc) pending. No other pending tasks.",
-  "updatedAt": "2026-09-03T17:41:54.308Z"
+  "status": "stuck",
+  "currentTask": "90945db6: LaunchAgent loaded+fixed, but blocked by a second unmanaged process holding port 4317 - needs human decision, see issue #1",
+  "updatedAt": "2026-09-04T00:20:31.830Z"
 }

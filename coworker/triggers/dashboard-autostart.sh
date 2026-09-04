@@ -10,6 +10,12 @@
 set -euo pipefail
 cd "/Users/irtizaahmed/AI-Agent-System"
 
-npm run build
+# launchd's minimal environment doesn't include Homebrew's bin dir, so
+# "npm"/"node" alone resolve to nothing under launchd (though they work
+# fine in an interactive shell) - use absolute paths, same as
+# com.aiagentsystem.inkbox-webhook.plist already does for node.
+export PATH="/opt/homebrew/bin:$PATH"
 
-exec node dist/cli/index.js dashboard --port 4317
+/opt/homebrew/bin/npm run build
+
+exec /opt/homebrew/bin/node dist/cli/index.js dashboard --port 4317
