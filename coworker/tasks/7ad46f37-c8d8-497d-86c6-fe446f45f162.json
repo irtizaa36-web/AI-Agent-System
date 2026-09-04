@@ -1,0 +1,11 @@
+{
+  "id": "7ad46f37-c8d8-497d-86c6-fe446f45f162",
+  "createdAt": "2026-09-04T01:58:35.634Z",
+  "task": "Set up the anthropics/knowledge-work-plugins marketplace on this machine's Claude Code: (1) claude plugin marketplace add anthropics/knowledge-work-plugins (2) install all 11 role plugins: productivity, sales, customer-support, product-management, marketing, legal, finance, data, enterprise-search, bio-research, cowork-plugin-management - one command each, e.g. claude plugin install productivity@knowledge-work-plugins. This is a local/machine-level claude CLI setting (not something git tracks), so it needs to run directly on this Mac Mini, separate from the Agency Agents roster already committed to .claude/agents/ in this repo. Do NOT authorize/connect any of the plugins' external tool integrations (CRM, data warehouse, Slack, etc.) as part of this task - Irtiza wants to decide those role-by-role separately, this task is just getting the plugins installed and usable standalone. Report back exactly which of the 11 installed cleanly and flag any that failed.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  }
+}
