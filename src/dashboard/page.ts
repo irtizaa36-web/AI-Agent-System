@@ -72,6 +72,7 @@ export const DASHBOARD_HTML = `<!doctype html>
     }
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0;
     background: var(--bg);
@@ -404,6 +405,64 @@ export const DASHBOARD_HTML = `<!doctype html>
   .visually-hidden {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+
+  /* Below this width, a fixed-viewport dashboard would just cram everything
+     into unusably small panels — a phone or a narrow snapped window is
+     better served by the normal scrolling page above. At or above it (half
+     of a typical laptop/desktop screen and up), the whole dashboard fits in
+     the viewport at once: header + "At a glance" take their natural height,
+     everything else becomes bounded panels that scroll internally, the same
+     pattern real ops dashboards (Grafana, Datadog) use so the page itself
+     never needs to scroll. */
+  @media (min-width: 860px) {
+    body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    header { flex: 0 0 auto; position: static; }
+    main {
+      flex: 1 1 auto;
+      min-height: 0;
+      max-width: none;
+      width: 100%;
+      margin: 0;
+      padding: var(--space-3) var(--space-4);
+      display: grid;
+      grid-template-columns: minmax(13rem, 1fr) minmax(30rem, 2.6fr) minmax(13rem, 1fr);
+      grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-areas:
+        "summary   summary  summary"
+        "agents    projects recs"
+        "attention projects ops";
+      gap: var(--space-3);
+      overflow: hidden;
+    }
+    section { margin-bottom: 0; }
+    #summary-section { grid-area: summary; }
+    #agents-section { grid-area: agents; }
+    #attention-section { grid-area: attention; }
+    #projects-section { grid-area: projects; }
+    #recs-section { grid-area: recs; }
+    #operations-section { grid-area: ops; }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: var(--space-3) var(--space-4);
+      overflow: hidden;
+    }
+    .panel > h2 { flex: 0 0 auto; }
+    .panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+    #summary-section { overflow: visible; }
+
+    /* The Kanban board fills the rest of its panel; each column scrolls its
+       own card list independently instead of growing the whole page. */
+    .panel-projects .kanban { flex: 1 1 auto; min-height: 0; }
+    .panel-projects .kanban-column { height: 100%; }
+    .panel-projects .kanban-cards { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 2px; }
   }
 </style>
 </head>
