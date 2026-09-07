@@ -21,6 +21,7 @@ import { createBrowserListFormFieldsTool } from "../tools/browser-list-form-fiel
 import { createBrowserFillFormPreviewTool } from "../tools/browser-fill-form-preview";
 import { createBrowserSubmitFormTool } from "../tools/browser-submit-form";
 import { createReadJobBoardPageTool } from "../tools/read-job-board-page";
+import { withSummarization } from "../tools/with-summarization";
 import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
 import { dispatcherPack } from "../packs/dispatcher/pack";
@@ -81,19 +82,27 @@ export function loadDefaultConfig(
 ): Registry {
   const registry = new Registry();
 
-  registry.registerProvider(createAnthropicProvider());
+  const anthropicProvider = createAnthropicProvider();
+  registry.registerProvider(anthropicProvider);
   registry.registerProvider(createEchoProvider());
 
-  registry.registerTool(readFileTool);
+  // Read-only, informational Tools are wrapped with withSummarization so an
+  // oversized file or page gets condensed by a cheap model before the
+  // expensive agent's turn ever includes it (Spotify's "two cheap
+  // assistants" pattern — see tools/with-summarization.ts). Tools whose
+  // exact output another Tool or an approval gate depends on (send-email,
+  // the browser form tools) are deliberately left unwrapped.
+  const summarization = { provider: anthropicProvider };
+  registry.registerTool(withSummarization(readFileTool, summarization));
   registry.registerTool(createInkboxSearchMailTool(inkboxClient));
   registry.registerTool(createInkboxReadThreadTool(inkboxClient));
   registry.registerTool(createInkboxSaveDraftTool(inkboxClient));
   registry.registerTool(createSendEmailTool(inkboxClient));
-  registry.registerTool(createReadWebPageTool(browserClient));
+  registry.registerTool(withSummarization(createReadWebPageTool(browserClient), summarization));
   registry.registerTool(createBrowserListFormFieldsTool(formFillingClient));
   registry.registerTool(createBrowserFillFormPreviewTool(formFillingClient));
   registry.registerTool(createBrowserSubmitFormTool(formFillingClient));
-  registry.registerTool(createReadJobBoardPageTool(jobBoardClient));
+  registry.registerTool(withSummarization(createReadJobBoardPageTool(jobBoardClient), summarization));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);
