@@ -61,6 +61,14 @@ Every consequential tool must be explicitly approved with the exact input that t
 
 A tool should expose a clear name, description, JSON-compatible input schema, and an `execute` function. Add a test for valid input, invalid input, external failures, and approval behavior. Keep provider and integration I/O outside `src/core/` so the core remains deterministic and easy to test.
 
+## Big Boss continuity handoff
+
+The repository is also the durable source of truth for the user's cross-agent operating system. The central Polar orchestration session, called **Big Boss**, should read the continuity handoff before beginning substantial work:
+
+- [Big Boss continuity handoff](docs/BIG-BOSS-HANDOFF.md)
+
+Big Boss should also inspect `CLAUDE.md`, `CONTEXT.md`, `PROJECT-BRAIN.md`, relevant files under `docs/`, and recent repository changes. Never commit credentials, tokens, cookies, or protected health information.
+
 ## Status
 
 This project is actively evolving. The next priorities are richer lifecycle telemetry, stronger evaluation fixtures, and a production-grade queue/API around the core runtime.
