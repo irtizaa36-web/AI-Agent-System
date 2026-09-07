@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Workflow } from "../core/workflow";
 import { isNotFoundError } from "./run-store";
@@ -35,7 +36,10 @@ export class JsonFileWorkflowStore implements WorkflowStore {
 
   async save(workflow: Workflow): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    await writeFile(this.pathFor(workflow.id), JSON.stringify(workflow, null, 2), "utf-8");
+    const target = this.pathFor(workflow.id);
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    await writeFile(temporary, JSON.stringify(workflow, null, 2), { encoding: "utf-8", flag: "wx" });
+    await rename(temporary, target);
   }
 
   async load(id: string): Promise<Workflow | undefined> {
