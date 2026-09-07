@@ -4,9 +4,11 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createTask } from "../core/task";
 import { runToCompletion } from "../core/orchestrator";
+import { applyConstraints } from "../core/apply-constraints";
 import { loadDefaultConfig, createDefaultInkboxClient } from "../config/load";
 import { JsonFileRunStore } from "../store/run-store";
 import { JsonFileWorkflowStore } from "../store/workflow-store";
+import { JsonFileConstraintsStore, formatConstraintsForPrompt, type ConstraintsStore } from "../store/constraints-store";
 import { JsonFileForwardingLog } from "../integrations/inkbox/forwarding-log";
 import { JsonFileMessageEventLog } from "../integrations/inkbox/message-event-log";
 import { JsonFileDraftStore } from "../integrations/inkbox/draft-store";
@@ -54,6 +56,8 @@ export interface CliDeps {
   /** The dashboard's own "noticed / did" feed (`orchestrator recommend ...`). */
   readonly recommendationStore: RecommendationStore;
   readonly operationalUpdateStore?: OperationalUpdateStore;
+  /** Accumulated corrections (see store/constraints-store.ts), prepended to every `run` command's Agent automatically. Optional so existing callers/tests keep working without one. */
+  readonly constraintsStore?: ConstraintsStore;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -77,6 +81,8 @@ function printUsage(stdout: (line: string) => void): void {
       '  orchestrator operational-update add "<summary>" --by <a> --provenance <p> Log a concise operational handoff',
       "  orchestrator operational-update list                         List operational handoffs",
       "  orchestrator dashboard [--port N]                           Serve the local agents/projects dashboard",
+      '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
+      "  orchestrator constraints list                                List recorded corrections",
       "  orchestrator help                                           Show this message",
       "",
       "inkbox subcommands: draft, review-draft, prepare-send, approve-send, check-replies, review-offer, " +
@@ -191,10 +197,17 @@ async function runTaskCommand(args: readonly string[], deps: CliDeps): Promise<n
   const tools = deps.registry.toolMapFor(agent.toolNames);
   const task = createTask(taskText);
 
+  // Corrections recorded via `orchestrator constraints add` (CONSTRAINTS.md,
+  // in code): loaded once per run and prepended to the agent's system
+  // prompt, so a past mistake never has to be re-discovered — and re-paid
+  // for — on a future run.
+  const constraints = deps.constraintsStore ? await deps.constraintsStore.list() : [];
+  const effectiveAgent = applyConstraints(agent, formatConstraintsForPrompt(constraints));
+
   deps.stdout(`Running task "${task.instructions}" with agent "${agent.name}" (provider: ${agent.providerName})...`);
 
   try {
-    const run = await runToCompletion(task, agent, { provider, tools });
+    const run = await runToCompletion(task, effectiveAgent, { provider, tools });
     await deps.store.save(run);
 
     if (run.status === "succeeded") {
@@ -208,6 +221,42 @@ async function runTaskCommand(args: readonly string[], deps: CliDeps): Promise<n
     deps.stderr(`\nRun failed: ${(error as Error).message}`);
     return 1;
   }
+}
+
+/** `orchestrator constraints add "<text>"` records a correction; `list` shows everything recorded so far. Requires deps.constraintsStore. */
+async function runConstraintsCommand(args: readonly string[], deps: CliDeps): Promise<number> {
+  if (!deps.constraintsStore) {
+    deps.stderr("Constraints are not configured for this CLI invocation.");
+    return 1;
+  }
+
+  const [subcommand, ...rest] = args;
+
+  if (subcommand === "add") {
+    const text = rest.join(" ").trim();
+    if (!text) {
+      deps.stderr('Usage: orchestrator constraints add "<correction text>"');
+      return 1;
+    }
+    const constraint = await deps.constraintsStore.add(text);
+    deps.stdout(`Recorded constraint ${constraint.id}: ${constraint.text}`);
+    return 0;
+  }
+
+  if (subcommand === "list") {
+    const constraints = await deps.constraintsStore.list();
+    if (constraints.length === 0) {
+      deps.stdout("No constraints recorded yet.");
+      return 0;
+    }
+    for (const c of constraints) {
+      deps.stdout(`${c.recordedAt.slice(0, 10)}  ${c.text}`);
+    }
+    return 0;
+  }
+
+  deps.stderr('Usage: orchestrator constraints add "<text>" | orchestrator constraints list');
+  return 1;
 }
 
 /**
@@ -269,6 +318,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return runDashboardCommand(rest, deps);
   }
 
+  if (command === "constraints") {
+    return runConstraintsCommand(rest, deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
@@ -283,6 +336,7 @@ async function main(): Promise<void> {
   const agentStatusStore = new JsonFileAgentStatusStore(join(cwd, "coworker", "agents"));
   const recommendationStore = new JsonFileRecommendationStore(join(cwd, "coworker", "recommendations"));
   const operationalUpdateStore = new JsonFileOperationalUpdateStore(join(cwd, "coworker", "operational-updates"));
+  const constraintsStore = new JsonFileConstraintsStore(join(cwd, ".orchestrator", "constraints.json"));
 
   const exitCode = await runCli(process.argv.slice(2), {
     registry,
@@ -296,6 +350,7 @@ async function main(): Promise<void> {
     agentStatusStore,
     recommendationStore,
     operationalUpdateStore,
+    constraintsStore,
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });
