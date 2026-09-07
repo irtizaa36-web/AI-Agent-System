@@ -14,6 +14,7 @@ import { InMemoryMessageEventLog } from "../integrations/inkbox/message-event-lo
 import { InMemoryCoworkerTaskStore } from "../coworker/store";
 import { InMemoryAgentStatusStore } from "../dashboard/agent-status-store";
 import { InMemoryRecommendationStore } from "../dashboard/recommendation-store";
+import { InMemoryConstraintsStore } from "../store/constraints-store";
 import type { CliDeps } from "./index";
 
 function captureOutput(): { stdout: string[]; stderr: string[]; deps: Omit<CliDeps, "registry" | "store"> } {
@@ -191,4 +192,51 @@ test("getTestStatus refuses to recurse when already inside a status check", () =
     if (original === undefined) delete process.env[guardVar];
     else process.env[guardVar] = original;
   }
+});
+
+test("runCli constraints requires a configured constraintsStore", async () => {
+  const { stderr, deps } = captureOutput();
+  const code = await runCli(["constraints", "list"], { ...deps, registry: loadDefaultConfig(), store: new InMemoryRunStore() });
+
+  assert.equal(code, 1);
+  assert.match(stderr.join("\n"), /not configured/);
+});
+
+test("runCli constraints add then list round-trips through the provided store", async () => {
+  const { stdout, deps } = captureOutput();
+  const constraintsStore = new InMemoryConstraintsStore();
+
+  const addCode = await runCli(["constraints", "add", "Press releases are not independent sources."], {
+    ...deps,
+    registry: loadDefaultConfig(),
+    store: new InMemoryRunStore(),
+    constraintsStore,
+  });
+  const listCode = await runCli(["constraints", "list"], {
+    ...deps,
+    registry: loadDefaultConfig(),
+    store: new InMemoryRunStore(),
+    constraintsStore,
+  });
+
+  assert.equal(addCode, 0);
+  assert.equal(listCode, 0);
+  assert.match(stdout.join("\n"), /Press releases are not independent sources\./);
+});
+
+test("runCli run prepends recorded constraints to the agent's system prompt", async () => {
+  const { stdout, deps } = captureOutput();
+  const constraintsStore = new InMemoryConstraintsStore();
+  await constraintsStore.add("Always answer in one short sentence.");
+  const store = new InMemoryRunStore();
+
+  const code = await runCli(["run", "--task", "say hello", "--agent", "demo"], {
+    ...deps,
+    registry: loadDefaultConfig(),
+    store,
+    constraintsStore,
+  });
+
+  assert.equal(code, 0);
+  assert.match(stdout.join("\n"), /Echo: say hello/);
 });
