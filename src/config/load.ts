@@ -22,6 +22,9 @@ import { createBrowserFillFormPreviewTool } from "../tools/browser-fill-form-pre
 import { createBrowserSubmitFormTool } from "../tools/browser-submit-form";
 import { createReadJobBoardPageTool } from "../tools/read-job-board-page";
 import { withSummarization } from "../tools/with-summarization";
+import { createGraphRecallTool } from "../tools/graph-recall";
+import { createGraphRecordTool } from "../tools/graph-record";
+import { InMemoryGraphStore, type GraphStore } from "../store/graph-store";
 import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
 import { dispatcherPack } from "../packs/dispatcher/pack";
@@ -79,6 +82,7 @@ export function loadDefaultConfig(
   browserClient: BrowserClient = createDefaultBrowserClient("sermo"),
   formFillingClient: FormFillingClient = new RealFormFillingClient(),
   jobBoardClient: BrowserClient = createPublicBrowserClient("job-boards"),
+  graphStore: GraphStore = new InMemoryGraphStore(),
 ): Registry {
   const registry = new Registry();
 
@@ -103,6 +107,8 @@ export function loadDefaultConfig(
   registry.registerTool(createBrowserFillFormPreviewTool(formFillingClient));
   registry.registerTool(createBrowserSubmitFormTool(formFillingClient));
   registry.registerTool(withSummarization(createReadJobBoardPageTool(jobBoardClient), summarization));
+  registry.registerTool(createGraphRecallTool(graphStore));
+  registry.registerTool(createGraphRecordTool(graphStore));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);
