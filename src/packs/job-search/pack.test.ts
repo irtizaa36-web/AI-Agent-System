@@ -11,15 +11,24 @@ import { FakeBrowserClient } from "../../integrations/browser/fake-client";
 import { FakeInkboxClient } from "../../integrations/inkbox/fake-client";
 import { createInkboxSearchMailTool } from "../../tools/inkbox-search-mail";
 import { createInkboxReadThreadTool } from "../../tools/inkbox-read-thread";
+import { createGraphRecallTool } from "../../tools/graph-recall";
+import { createGraphRecordTool } from "../../tools/graph-record";
+import { InMemoryGraphStore, type GraphStore } from "../../store/graph-store";
 import type { Tool } from "../../tools/tool";
 
-function toolsFor(agentToolNames: readonly string[], inkboxClient: FakeInkboxClient = new FakeInkboxClient()): Map<string, Tool> {
+function toolsFor(
+  agentToolNames: readonly string[],
+  inkboxClient: FakeInkboxClient = new FakeInkboxClient(),
+  graphStore: GraphStore = new InMemoryGraphStore(),
+): Map<string, Tool> {
   const jobBoardClient = new FakeBrowserClient("job-boards", new Map([["https://example-jobs.test/search", "Marketing Manager at Acme - Dallas, TX"]]));
   const all = new Map<string, Tool>([
     ["read-file", readFileTool],
     ["read-job-board-page", createReadJobBoardPageTool(jobBoardClient)],
     ["inkbox-search-mail", createInkboxSearchMailTool(inkboxClient)],
     ["inkbox-read-thread", createInkboxReadThreadTool(inkboxClient)],
+    ["graph-recall", createGraphRecallTool(graphStore)],
+    ["graph-record", createGraphRecordTool(graphStore)],
   ]);
   return new Map(agentToolNames.map((name) => [name, all.get(name) as Tool]));
 }
@@ -31,7 +40,7 @@ test("jobSearchPack registers job-search-agent with Claude, read-only tools only
 
   const agent = registry.getAgent("job-search-agent");
   assert.equal(agent.providerName, "claude");
-  assert.deepEqual(agent.toolNames, ["read-file", "read-job-board-page", "inkbox-search-mail", "inkbox-read-thread"]);
+  assert.deepEqual(agent.toolNames, ["read-file", "read-job-board-page", "inkbox-search-mail", "inkbox-read-thread", "graph-recall", "graph-record"]);
   assert.match(agent.systemPrompt, /no ability to apply to a job, contact an employer, or submit anything/);
   assert.match(agent.systemPrompt, /never invent a title, employer, metric, responsibility, or skill/);
   assert.ok(agent.description);
@@ -101,4 +110,41 @@ test("job-search-agent can read a forwarded job-alert email as a second listing 
   assert.equal(run.status, "succeeded");
   assert.match(run.result?.output ?? "", /Acme Corp/);
   assert.match(run.result?.output ?? "", /Globex/);
+});
+
+test("job-search-agent can recall and record a company via the graph tools", async () => {
+  const registry = new Registry();
+  jobSearchPack.register(registry);
+  const agent = registry.getAgent("job-search-agent");
+  const graphStore = new InMemoryGraphStore();
+
+  const provider = new FakeProvider([
+    {
+      content: "checking if Acme is already known",
+      toolCalls: [{ id: "call-1", toolName: "graph-recall", input: { label: "Acme Corp" } }],
+      stopReason: "tool_use",
+    },
+    {
+      content: "logging Acme for next time",
+      toolCalls: [
+        { id: "call-2", toolName: "graph-record", input: { label: "Acme Corp", source: "https://example-jobs.test/search" } },
+      ],
+      stopReason: "tool_use",
+    },
+    {
+      content:
+        "## Jobs Found\n- Marketing Manager at Acme, Dallas, TX - Strong fit.\n\n## Tailored Resume(s)\nNot needed.\n\n## Missing Information\nNone.\n\n## Status\nInformational only.",
+      toolCalls: [],
+      stopReason: "end_turn",
+    },
+  ]);
+
+  const task = createTask("Find marketing jobs in Dallas using https://example-jobs.test/search, matched against my resume.");
+  const run = await runToCompletion(task, agent, { provider, tools: toolsFor(agent.toolNames, new FakeInkboxClient(), graphStore) });
+
+  assert.equal(run.status, "succeeded");
+  const nodes = await graphStore.listNodes();
+  assert.equal(nodes.length, 1);
+  assert.equal(nodes[0].label, "Acme Corp");
+  assert.deepEqual(nodes[0].sources, ["https://example-jobs.test/search"]);
 });
