@@ -17,6 +17,7 @@ in [`team-handoff.md`](../agents/team-handoff.md).
 | GitHub | Git history, pull requests, and Issue #1 | Use Issue #1 for durable cross-session coordination. |
 | GitHub Copilot | [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md) | Repository-wide safety, architecture, and validation guidance is automatically available where GitHub supports repository custom instructions. |
 | Claude Code | [`CLAUDE.md`](../../CLAUDE.md) | Start from the project briefing and linked operating documents. |
+| Claude-compatible task guides | [`docs/claude/`](../claude/README.md) | Use the copy-ready job-search, public-agent, and handoff contracts when moving work between clients. |
 | MCP/connectors | None committed | Connector registration, OAuth state, service health, and credentials remain user- or machine-local. |
 
 The local client inventory may show registered connectors and their current
@@ -27,17 +28,32 @@ establish that another machine, client, or account has the same access.
 ## Shared workflow
 
 1. Update the branch from `origin/main`, inspect `git status`, and read Issue
-   #1 before making decisions.
+ #1 before making decisions.
 2. Read `PROJECT-BRAIN.md`, `CONTEXT.md`, `CLAUDE.md`, and
-   `docs/agents/team-handoff.md`; read `local-operations.md` before touching
-   local operations.
-3. Keep Core model- and I/O-agnostic. Put provider, external-service, and
-   domain behavior behind the established adapter, Tool, and Pack seams.
-4. Keep decisions, results, and handoffs in Git or Issue #1. Never make private
-   chat history, a client-specific memory store, or a local connector state a
-   prerequisite for the next team.
-5. For TypeScript changes, use Node 22 or later and run `npm test`. Documentation
-   changes need a focused review and `git diff --check`.
+ `docs/agents/team-handoff.md`; read `local-operations.md` before touching
+ local operations.
+3. For priority work, read the matching portable guide:
+   - `docs/claude/job-search.md` for job discovery and truthful resume tailoring.
+   - `docs/claude/public-agent-creation.md` for public Agent design and validation.
+   - `docs/claude/portable-handoff.md` when changing clients or sessions.
+4. Keep Core model- and I/O-agnostic. Put provider, external-service, and
+ domain behavior behind the established adapter, Tool, and Pack seams.
+5. Keep decisions, results, and handoffs in Git or Issue #1. Never make private
+ chat history, a client-specific memory store, or a local connector state a
+ prerequisite for the next team.
+6. For TypeScript changes, use Node 22 or later and run `npm test`. Documentation
+ changes need a focused review and `git diff --check`.
+
+## Portable task contracts
+
+The job-search workflow is informational and read-only. It must not apply to
+jobs, contact employers, or submit anything. The public-agent workflow designs
+and validates an Agent definition but does not publish, enable, install,
+authenticate, or change an external account.
+
+When a client lacks a needed Tool, preserve the documented output headings and
+record the limitation under `Missing Information`. Do not invent listings,
+sources, test results, credentials, or completed side effects.
 
 ## Connector change policy
 
@@ -45,14 +61,14 @@ Adding a third-party MCP server, connector, plugin, OAuth grant, or external
 service is not a repository-only change. Before proposing one:
 
 1. Search the Agent Finder and use the official provider documentation to
-   establish the actual capability and required permissions.
+ establish the actual capability and required permissions.
 2. Record a short, source-linked recommendation in Git or Issue #1 that states
-   the purpose, data boundary, permissions, reversible removal path, and exact
-   operator action.
+ the purpose, data boundary, permissions, reversible removal path, and exact
+ operator action.
 3. Wait for explicit human authorization before any installation,
-   authentication, account linking, credential entry, or enablement.
+ authentication, account linking, credential entry, or enablement.
 4. Keep all secrets, local configuration, browser sessions, and personal data
-   outside Git. Do not record connector health as a durable guarantee.
+ outside Git. Do not record connector health as a durable guarantee.
 
 This policy does not prevent local use of an already-authorized connector; it
 prevents silently turning machine-local access into an assumed project
@@ -65,14 +81,14 @@ returned these potentially relevant skills. None was installed or enabled.
 Scores are relevance only, not a trust or safety rating.
 
 1. **CLI Mastery** — `application/ai-skill` —
-   <https://github.com/github/awesome-copilot/blob/main/skills/cli-mastery/SKILL.md>
-   (score: 70).
+ <https://github.com/github/awesome-copilot/blob/main/skills/cli-mastery/SKILL.md>
+ (score: 70).
 2. **Copilot CLI Quickstart** — `application/ai-skill` —
-   <https://github.com/github/awesome-copilot/blob/main/skills/copilot-cli-quickstart/SKILL.md>
-   (score: 70).
+ <https://github.com/github/awesome-copilot/blob/main/skills/copilot-cli-quickstart/SKILL.md>
+ (score: 70).
 3. **Suggest Awesome GitHub Copilot Instructions** — `application/ai-skill` —
-   <https://github.com/github/awesome-copilot/blob/main/skills/suggest-awesome-github-copilot-instructions/SKILL.md>
-   (score: 70).
+ <https://github.com/github/awesome-copilot/blob/main/skills/suggest-awesome-github-copilot-instructions/SKILL.md>
+ (score: 70).
 
 Maintain the concise shared instructions as the project evolves, and add
 path-specific guidance only after a repeated, documented need. Evaluate a new
