@@ -128,7 +128,7 @@ test("runCli status reports agent/provider/tool/pack counts and names", async ()
   assert.match(output, /Providers:\s+2 \(claude, fake\)/);
   assert.match(
     output,
-    /Tools:\s+10 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email, read-web-page, browser-list-form-fields, browser-fill-form-preview, browser-submit-form, read-job-board-page\)/,
+    /Tools:\s+12 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email, read-web-page, browser-list-form-fields, browser-fill-form-preview, browser-submit-form, read-job-board-page, graph-recall, graph-record\)/,
   );
   assert.match(output, /Packs:\s+6 \(core-demo, personal-assistant, dispatcher, career-advisor, ai-research, job-search\)/);
   assert.match(output, /Tests:\s+\S/);
