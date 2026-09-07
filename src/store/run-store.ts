@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Run } from "../core/run";
 
@@ -41,7 +42,10 @@ export class JsonFileRunStore implements RunStore {
 
   async save(run: Run): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    await writeFile(this.pathFor(run.id), JSON.stringify(run, null, 2), "utf-8");
+    const target = this.pathFor(run.id);
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    await writeFile(temporary, JSON.stringify(run, null, 2), { encoding: "utf-8", flag: "wx" });
+    await rename(temporary, target);
   }
 
   async load(id: string): Promise<Run | undefined> {
