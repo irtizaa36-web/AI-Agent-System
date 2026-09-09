@@ -139,6 +139,67 @@ test("advance fails a Run once it exceeds its max steps, without calling the Pro
   assert.equal(Number.isNaN(Date.parse(next.completedAt ?? "")), false);
 });
 
+test("advance converts Provider failures into a failed Run", async () => {
+  const task = createTask("call the model");
+  const run = startRun(task, agent());
+  const provider = {
+    name: "failing-provider",
+    generate: async () => {
+      throw new Error("upstream unavailable");
+    },
+  };
+
+  const next = await advance(run, agent(), { provider, tools: new Map() });
+
+  assert.equal(next.status, "failed");
+  assert.match(next.result?.error ?? "", /Provider failed: upstream unavailable/);
+  assert.equal(Number.isNaN(Date.parse(next.completedAt ?? "")), false);
+});
+
+test("runToCompletion emits updates for the initial and terminal Run states", async () => {
+  const updates: string[] = [];
+  const provider = new FakeProvider([{ content: "done", toolCalls: [], stopReason: "end_turn" }]);
+
+  const run = await runToCompletion(createTask("say hi"), agent(), { provider, tools: new Map() }, {
+    onUpdate: (next) => {
+      updates.push(next.status);
+    },
+  });
+
+  assert.equal(run.status, "succeeded");
+  assert.deepEqual(updates, ["running", "succeeded"]);
+});
+
+test("advance fails instead of dropping additional calls when an approval-gated call is mixed with another call", async () => {
+  const echoTool: Tool = {
+    name: "echo",
+    description: "echoes its input",
+    inputSchema: {},
+    execute: (input) => `echoed:${String(input)}`,
+  };
+  const testAgent = agent({ toolNames: ["send-thing", "echo"] });
+  const run = startRun(createTask("send and echo"), testAgent);
+  const provider = new FakeProvider([
+    {
+      content: "proposing both",
+      toolCalls: [
+        { id: "call-1", toolName: "send-thing", input: { to: "a@b.com" } },
+        { id: "call-2", toolName: "echo", input: "ping" },
+      ],
+      stopReason: "tool_use",
+    },
+  ]);
+
+  const next = await advance(run, testAgent, {
+    provider,
+    tools: new Map([["send-thing", gatedTool()], ["echo", echoTool]]),
+  });
+
+  assert.equal(next.status, "failed");
+  assert.match(next.result?.error ?? "", /multiple tool calls/);
+  assert.equal(next.session.messages.at(-1)?.role, "assistant");
+});
+
 test("runToCompletion drives a multi-step tool-use Run through to success", async () => {
   const echoTool: Tool = {
     name: "echo",

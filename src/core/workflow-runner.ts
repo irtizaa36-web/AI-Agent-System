@@ -91,7 +91,9 @@ async function runStepsFrom(
       : step.instructions;
 
     steps[index] = { ...step, status: "running" };
-    const run = await runToCompletion(createTask(instructions), agent, deps);
+    const run = await runToCompletion(createTask(instructions), agent, deps, {
+      onUpdate: hooks.onRunUpdate,
+    });
     await hooks.onRunUpdate?.(run);
     steps[index] = { ...steps[index], runId: run.id };
 

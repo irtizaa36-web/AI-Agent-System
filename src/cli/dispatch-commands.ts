@@ -6,13 +6,29 @@ import {
   resumeWorkflowWithReply,
   type AgentResolver,
 } from "../core/workflow-runner";
+import { applyConstraints } from "../core/apply-constraints";
+import { formatConstraintsForPrompt } from "../store/constraints-store";
 import type { Workflow } from "../core/workflow";
 import { dispatchableAgents } from "../config/load";
 import type { CliDeps } from "./index";
 
-function resolverFor(deps: CliDeps): AgentResolver {
+/** Loads recorded constraints once per command invocation, formatted for `applyConstraints`. Empty string (a no-op) when there's no store or nothing recorded. */
+async function loadConstraintsBlock(deps: CliDeps): Promise<string> {
+  const constraints = deps.constraintsStore ? await deps.constraintsStore.list() : [];
+  return formatConstraintsForPrompt(constraints);
+}
+
+/**
+ * Resolves an agent + its run dependencies for one workflow step, the same
+ * way `orchestrator run` does: with recorded constraints (ADR-style
+ * corrections in ConstraintsStore) prepended to its system prompt. Each
+ * step starts its own fresh Run (see workflow-runner.ts's runStepsFrom), so
+ * this has to happen on every resolve — a Run only ever reads its Agent's
+ * systemPrompt once, at the moment it starts.
+ */
+function resolverFor(deps: CliDeps, constraintsBlock: string): AgentResolver {
   return (agentName) => {
-    const agent = deps.registry.getAgent(agentName);
+    const agent = applyConstraints(deps.registry.getAgent(agentName), constraintsBlock);
     return {
       agent,
       deps: { provider: deps.registry.getProvider(agent.providerName), tools: deps.registry.toolMapFor(agent.toolNames) },
@@ -56,7 +72,8 @@ async function runCommand(args: readonly string[], deps: CliDeps): Promise<numbe
     return 1;
   }
 
-  const dispatcher = deps.registry.getAgent("dispatcher");
+  const constraintsBlock = await loadConstraintsBlock(deps);
+  const dispatcher = applyConstraints(deps.registry.getAgent("dispatcher"), constraintsBlock);
   const dispatcherDeps = { provider: deps.registry.getProvider(dispatcher.providerName), tools: deps.registry.toolMapFor(dispatcher.toolNames) };
   const availableAgents = dispatchableAgents(deps.registry);
 
@@ -72,7 +89,7 @@ async function runCommand(args: readonly string[], deps: CliDeps): Promise<numbe
   deps.stdout(`Plan (workflow ${workflow.id}):`);
   workflow.steps.forEach((step, index) => deps.stdout(`  ${index + 1}. [${step.agentName}] ${step.instructions}`));
 
-  workflow = await runWorkflowToCompletion(workflow, resolverFor(deps), { onRunUpdate: (run) => deps.store.save(run) });
+  workflow = await runWorkflowToCompletion(workflow, resolverFor(deps, constraintsBlock), { onRunUpdate: (run) => deps.store.save(run) });
   await deps.workflowStore.save(workflow);
 
   return reportWorkflowStatus(workflow, deps);
@@ -160,9 +177,14 @@ async function resumeCommand(args: readonly string[], deps: CliDeps): Promise<nu
     return 1;
   }
 
+  // The paused Run's own session already has its systemPrompt baked in from
+  // when it started (see orchestrator.ts's startRun) — constraints only need
+  // to be (re-)applied for steps that haven't started a Run yet, via the
+  // resolver below.
   const agent = deps.registry.getAgent(run.agentName);
   const runDeps = { provider: deps.registry.getProvider(agent.providerName), tools: deps.registry.toolMapFor(agent.toolNames) };
-  const updated = await resumeWorkflowWithReply(workflow, run, agent, runDeps, values.reply, resolverFor(deps), {
+  const constraintsBlock = await loadConstraintsBlock(deps);
+  const updated = await resumeWorkflowWithReply(workflow, run, agent, runDeps, values.reply, resolverFor(deps, constraintsBlock), {
     onRunUpdate: (r) => deps.store.save(r),
   });
   await deps.workflowStore.save(updated);

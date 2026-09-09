@@ -12,6 +12,7 @@ import { InMemoryCoworkerTaskStore } from "../coworker/store";
 import { InMemoryAgentStatusStore } from "../dashboard/agent-status-store";
 import { InMemoryRecommendationStore } from "../dashboard/recommendation-store";
 import { dispatcherPack } from "../packs/dispatcher/pack";
+import { InMemoryConstraintsStore } from "../store/constraints-store";
 import type { GenerateResult, ModelProvider } from "../providers/provider";
 import type { Tool } from "../tools/tool";
 
@@ -136,4 +137,29 @@ test("dispatch status reports a not-found workflow clearly", async () => {
 
   assert.equal(code, 1);
   assert.match(stderr.join("\n"), /No workflow "no-such-id" found/);
+});
+
+test("dispatch run prepends recorded constraints to both the Dispatcher's planning call and each step's agent", async () => {
+  const seenSystemPrompts: string[] = [];
+  const provider: ModelProvider = {
+    name: "claude",
+    async generate(request) {
+      seenSystemPrompts.push(String(request.messages.find((m) => m.role === "system")?.content ?? ""));
+      if (seenSystemPrompts.length === 1) {
+        return { content: '```json\n[{"agent": "helper", "task": "say hi"}]\n```', toolCalls: [], stopReason: "end_turn" };
+      }
+      return { content: "hi there!", toolCalls: [], stopReason: "end_turn" };
+    },
+  };
+  const constraintsStore = new InMemoryConstraintsStore();
+  await constraintsStore.add("Always answer in one short sentence.");
+  const { deps } = captureOutput({ ...buildDeps(provider), constraintsStore });
+
+  const code = await runCli(["dispatch", "run", "--task", "greet someone"], deps);
+
+  assert.equal(code, 0);
+  assert.equal(seenSystemPrompts.length, 2);
+  for (const prompt of seenSystemPrompts) {
+    assert.match(prompt, /Always answer in one short sentence\./);
+  }
 });

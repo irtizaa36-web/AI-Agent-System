@@ -3,7 +3,7 @@ import type { Task } from "./task";
 import type { AgentDefinition } from "./agent";
 import { createSession, appendMessage } from "./session";
 import type { PendingAction, Run, Step } from "./run";
-import type { ModelProvider } from "../providers/provider";
+import type { GenerateResult, ModelProvider } from "../providers/provider";
 import type { Tool } from "../tools/tool";
 
 const DEFAULT_MAX_STEPS = 10;
@@ -12,6 +12,11 @@ export interface RunDependencies {
   readonly provider: ModelProvider;
   readonly tools: ReadonlyMap<string, Tool>;
   readonly maxSteps?: number;
+}
+
+/** Lifecycle callbacks used by persistence, tracing, and dashboards. */
+export interface RunHooks {
+  readonly onUpdate?: (run: Run) => Promise<void> | void;
 }
 
 /** Creates a queued Run for a Task, seeded with the Agent's system prompt. */
@@ -56,11 +61,22 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
     return tool;
   });
 
-  const response = await deps.provider.generate({
-    model: agent.model,
-    messages: run.session.messages,
-    tools: toolSpecs,
-  });
+  let response: GenerateResult;
+  try {
+    response = await deps.provider.generate({
+      model: agent.model,
+      messages: run.session.messages,
+      tools: toolSpecs,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ...run,
+      status: "failed",
+      result: { status: "failed", output: "", error: `Provider failed: ${message}` },
+      completedAt: new Date().toISOString(),
+    };
+  }
 
   let session = appendMessage(run.session, {
     role: "assistant",
@@ -105,12 +121,31 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
     };
   }
 
-  // A Tool marked requiresApproval never auto-executes (ADR 0004). If any
-  // requested call needs approval, the whole step pauses on the first one —
-  // the assistant's proposal is recorded, but nothing runs, until a human
-  // calls approveAndExecute with the exact same input.
-  const gatedCall = response.toolCalls.find((call) => deps.tools.get(call.toolName)?.requiresApproval);
-  if (gatedCall) {
+  // A Tool marked requiresApproval never auto-executes (ADR 0004). Approval
+  // turns are kept to one tool call so every consequential action can be
+  // reviewed and matched exactly; mixed turns fail instead of dropping calls.
+  const gatedCalls = response.toolCalls.filter((call) => deps.tools.get(call.toolName)?.requiresApproval);
+  if (gatedCalls.length > 0) {
+    // A Run currently stores one pending action. Refuse mixed or multi-action
+    // turns rather than silently dropping calls that were not approved.
+    if (response.toolCalls.length !== 1) {
+      return {
+        ...run,
+        session,
+        steps,
+        status: "failed",
+        result: {
+          status: "failed",
+          output: "",
+          error:
+            "The model requested multiple tool calls including an approval-gated action. " +
+            "Split the actions into separate turns so every consequential action can be reviewed exactly.",
+        },
+        completedAt: new Date().toISOString(),
+      };
+    }
+
+    const gatedCall = gatedCalls[0];
     const pendingAction: PendingAction = {
       toolName: gatedCall.toolName,
       toolCallId: gatedCall.id,
@@ -148,10 +183,13 @@ export async function runToCompletion(
   task: Task,
   agent: AgentDefinition,
   deps: RunDependencies,
+  hooks: RunHooks = {},
 ): Promise<Run> {
   let run: Run = { ...startRun(task, agent), status: "running" };
+  await hooks.onUpdate?.(run);
   while (run.status === "running") {
     run = await advance(run, agent, deps);
+    await hooks.onUpdate?.(run);
   }
   return run;
 }

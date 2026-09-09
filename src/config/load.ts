@@ -21,19 +21,24 @@ import { createBrowserListFormFieldsTool } from "../tools/browser-list-form-fiel
 import { createBrowserFillFormPreviewTool } from "../tools/browser-fill-form-preview";
 import { createBrowserSubmitFormTool } from "../tools/browser-submit-form";
 import { createReadJobBoardPageTool } from "../tools/read-job-board-page";
+import { withSummarization } from "../tools/with-summarization";
+import { createGraphRecallTool } from "../tools/graph-recall";
+import { createGraphRecordTool } from "../tools/graph-record";
+import { InMemoryGraphStore, type GraphStore } from "../store/graph-store";
 import { coreDemoPack } from "../packs/core-demo/pack";
 import { personalAssistantPack } from "../packs/personal-assistant/pack";
 import { dispatcherPack } from "../packs/dispatcher/pack";
 import { careerAdvisorPack } from "../packs/career-advisor/pack";
 import { aiResearchPack } from "../packs/ai-research/pack";
 import { jobSearchPack } from "../packs/job-search/pack";
+import { publicAgentCreationPack } from "../packs/public-agent-creation/pack";
 
 /**
  * Packs enabled by default. A future CLI flag or config file can change
  * which Packs load without touching the engine — this list is the only
  * place that currently decides.
  */
-const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack];
+const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack, publicAgentCreationPack];
 
 /** Agents the Dispatcher should never route a goal to: itself, and utility agents with no real conversational job (ADR 0008). */
 const NOT_DISPATCHABLE = new Set(["dispatcher", "inkbox-send", "demo"]);
@@ -78,22 +83,33 @@ export function loadDefaultConfig(
   browserClient: BrowserClient = createDefaultBrowserClient("sermo"),
   formFillingClient: FormFillingClient = new RealFormFillingClient(),
   jobBoardClient: BrowserClient = createPublicBrowserClient("job-boards"),
+  graphStore: GraphStore = new InMemoryGraphStore(),
 ): Registry {
   const registry = new Registry();
 
-  registry.registerProvider(createAnthropicProvider());
+  const anthropicProvider = createAnthropicProvider();
+  registry.registerProvider(anthropicProvider);
   registry.registerProvider(createEchoProvider());
 
-  registry.registerTool(readFileTool);
+  // Read-only, informational Tools are wrapped with withSummarization so an
+  // oversized file or page gets condensed by a cheap model before the
+  // expensive agent's turn ever includes it (Spotify's "two cheap
+  // assistants" pattern — see tools/with-summarization.ts). Tools whose
+  // exact output another Tool or an approval gate depends on (send-email,
+  // the browser form tools) are deliberately left unwrapped.
+  const summarization = { provider: anthropicProvider };
+  registry.registerTool(withSummarization(readFileTool, summarization));
   registry.registerTool(createInkboxSearchMailTool(inkboxClient));
   registry.registerTool(createInkboxReadThreadTool(inkboxClient));
   registry.registerTool(createInkboxSaveDraftTool(inkboxClient));
   registry.registerTool(createSendEmailTool(inkboxClient));
-  registry.registerTool(createReadWebPageTool(browserClient));
+  registry.registerTool(withSummarization(createReadWebPageTool(browserClient), summarization));
   registry.registerTool(createBrowserListFormFieldsTool(formFillingClient));
   registry.registerTool(createBrowserFillFormPreviewTool(formFillingClient));
   registry.registerTool(createBrowserSubmitFormTool(formFillingClient));
-  registry.registerTool(createReadJobBoardPageTool(jobBoardClient));
+  registry.registerTool(withSummarization(createReadJobBoardPageTool(jobBoardClient), summarization));
+  registry.registerTool(createGraphRecallTool(graphStore));
+  registry.registerTool(createGraphRecordTool(graphStore));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);

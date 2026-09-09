@@ -26,7 +26,9 @@ State plainly that this is informational only: no job application was submitted,
 
 If a preferences file is mentioned in the task (e.g. real stated preferences on target role level, role categories, or how they want results formatted), read it with the file tool and follow it exactly — it reflects the person's own real, previously-stated feedback, not a guess.
 
-You have a tool to read a file (the person's real resume, and, if mentioned, a preferences file), a tool to read a public job-board search-results page, and tools to search and read the mailbox. Reading a job-board page is one source of listings; the other is job-alert emails (e.g. LinkedIn's own daily job-alert emails, forwarded or auto-forwarded into this mailbox) — use inkbox-search-mail to find recent alert emails and inkbox-read-thread to read one in full, then extract only the actual listings it contains (title, company, location, link if present). All are read-only. Never invent a listing that wasn't actually in a page or email you read — if an alert email's format is unclear or a listing's details are incomplete, say so in Missing Information rather than guessing. Use the job-board tool with whatever search URL you're given in the task — don't invent search parameters or guess at a job board's URL structure if you weren't given one.`;
+You have a tool to read a file (the person's real resume, and, if mentioned, a preferences file), a tool to read a public job-board search-results page, and tools to search and read the mailbox. Reading a job-board page is one source of listings; the other is job-alert emails (e.g. LinkedIn's own daily job-alert emails, forwarded or auto-forwarded into this mailbox) — use inkbox-search-mail to find recent alert emails and inkbox-read-thread to read one in full, then extract only the actual listings it contains (title, company, location, link if present). All are read-only. Never invent a listing that wasn't actually in a page or email you read — if an alert email's format is unclear or a listing's details are incomplete, say so in Missing Information rather than guessing. Use the job-board tool with whatever search URL you're given in the task — don't invent search parameters or guess at a job board's URL structure if you weren't given one.
+
+You also have graph-recall and graph-record, which remember companies across runs so repeat searches don't redo the same research. Before writing up a company in "Jobs Found," call graph-recall with its name to see if a past run already logged it — if so, reuse what's already known instead of re-describing the company from scratch. After you finish assessing a listing, call graph-record with the company's name and the job-board URL or email you found it in, so the next run recognizes it immediately. This is bookkeeping only — it never changes what you report to the person, and a recall miss just means "first time seeing this company," not an error.`;
 
 /**
  * The Job Search Pack (ADR 0012): the first Pack in this project for a
@@ -43,9 +45,9 @@ export const jobSearchPack: Pack = {
       providerName: "claude",
       model: "claude-sonnet-5",
       systemPrompt: JOB_SEARCH_SYSTEM_PROMPT,
-      toolNames: ["read-file", "read-job-board-page", "inkbox-search-mail", "inkbox-read-thread"],
+      toolNames: ["read-file", "read-job-board-page", "inkbox-search-mail", "inkbox-read-thread", "graph-recall", "graph-record"],
       description:
-        "Finds job openings from public job-board search results and forwarded job-alert emails (e.g. LinkedIn), assesses fit against a real resume, and tailors the resume for listings that need it - using only real work experience, never invented. Cannot apply to anything or contact an employer.",
+        "Finds job openings from public job-board search results and forwarded job-alert emails (e.g. LinkedIn), assesses fit against a real resume, and tailors the resume for listings that need it - using only real work experience, never invented. Remembers companies across runs so it doesn't re-research the same one. Cannot apply to anything or contact an employer.",
     });
   },
 };
