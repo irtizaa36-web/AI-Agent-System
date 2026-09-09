@@ -5,13 +5,26 @@ import { randomUUID } from "node:crypto";
  * exact peer session names — they must match what `SendMessage`'s `to`
  * field expects on the machine dispatching the task, so casing matters.
  */
-export type CoworkerPersona = "macmini" | "Laptop2" | "Riley" | "Jordan" | "PinkyBaby";
+export type CoworkerPersona = "macmini" | "Laptop2" | "Riley" | "Jordan" | "PinkyBaby" | "PublicTrading";
 
 /** What `"both"` expands to — the original two general-purpose coworkers. Doesn't grow just because a new specialist persona (e.g. Riley, Jordan) joins. */
 export const COWORKER_PERSONAS: readonly CoworkerPersona[] = ["macmini", "Laptop2"];
 
-/** Every persona a task can be individually assigned to, general-purpose or specialist. */
-export const ALL_COWORKER_PERSONAS: readonly CoworkerPersona[] = ["macmini", "Laptop2", "Riley", "Jordan", "PinkyBaby"];
+/**
+ * Every persona a task can be individually assigned to, general-purpose or
+ * specialist. "PublicTrading" is the standalone Public.com monitoring system
+ * (`src/tools/public-trading/`): it runs one recurring daily review, reads and
+ * drafts only, and is deliberately separate from the existing Public.com Agent
+ * in PROJECT-REGISTRY.md §8 — it does not supervise or control that agent.
+ */
+export const ALL_COWORKER_PERSONAS: readonly CoworkerPersona[] = [
+  "macmini",
+  "Laptop2",
+  "Riley",
+  "Jordan",
+  "PinkyBaby",
+  "PublicTrading",
+];
 
 export type CoworkerAssignment = CoworkerPersona | "both";
 

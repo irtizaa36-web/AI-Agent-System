@@ -1,0 +1,11 @@
+{
+  "id": "6a5fe440-5bf9-4575-bdfc-ee4accc795ab",
+  "createdAt": "2026-09-09T08:01:04.807Z",
+  "task": "Daily Public.com monitoring review (standalone system, src/tools/public-trading/). Read docs/operations/public-trading.md for boundaries. Pull get_portfolio + get_history via the Public MCP connector, write them to a scratch JSON, run 'node dist/cli/index.js public-trading review --input <file>', and commit the review under docs/operations/public-trading/. READ-ONLY: never call place_order or any place_*/cancel_* tool, and never touch the existing Public.com Agent's configuration (PROJECT-REGISTRY.md §8). No validated signal is registered, so this run monitors and reports only — it drafts no trades. Flag on issue #1 only if the run surfaces a concentration breach, an infeasible open-order queue, or cost drag materially above the 0.75% baseline.",
+  "assignedTo": "PublicTrading",
+  "results": {
+    "PublicTrading": {
+      "status": "pending"
+    }
+  }
+}
