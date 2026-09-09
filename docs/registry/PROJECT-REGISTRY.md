@@ -40,6 +40,7 @@ Last reconciled: **2026-09-07, Big Boss session (Polar)**.
 - **Dependencies/Blockers:** All 5 personas offline since 2026-09-03/04. Local services (`:4317`, `:8787`) are still up and healthy.
 - **Next checkpoint:** User to decide revive-on-Claude-Code vs. formally park. A lightweight Polar-native equivalent (using Polar scheduled workflows instead of a persona fleet) was discussed as a future option — not being built now per user priority.
 - **Last verified:** 2026-09-07 16:30 CT — dashboard HTTP 200, all personas "Offline"; webhook health endpoint HTTP 200.
+- **2026-09-09 update (Claude/Sam session):** at the user's explicit instruction, all 4 remaining Claude-side recurring triggers (macmini, Jordan, and Sam coworker-loop check-ins, plus one unrelated ticket-watch trigger) were deleted — confirmed zero recurring triggers left enabled. This closes out the credit-conservation concern from Claude's side to match this fleet's "deprioritized" status here. See `docs/handoffs/2026-09-09-claude-to-polar.md` for the full handoff. The user also asked that Claude and Polar coordinate going forward via this shared `docs/registry/` + `docs/handoffs/` format rather than the old task-JSON/trigger fleet.
 
 ## 4. Job search & applications — Irtiza (own)
 
