@@ -4,7 +4,7 @@
 Maintained by Big Boss (Polar). Lifecycle: `Queued -> In progress -> Blocked -> Awaiting approval -> Completed -> Verified`.
 No credentials, tokens, cookies, or personal identifiers are recorded here. Personal, financial, and clinical detail live outside this public repository; this registry holds pointers only.
 
-Last reconciled: **2026-09-07, Big Boss session (Polar)**.
+Last reconciled: **2026-09-09** (§8 and §8a; all other sections last reconciled 2026-09-07, Big Boss session on Polar).
 
 ---
 
@@ -88,13 +88,29 @@ Last reconciled: **2026-09-07, Big Boss session (Polar)**.
 ## 8. Financial / trading automation research — Public.com agents
 
 - **Purpose:** Two automated crypto trading agents (BTC/SOL/ETH; altcoins), built as Public.com Agents.
-- **Phase / Priority:** In progress · **P1 (today's priority #1)**
-- **Source of truth:** Public.com Agents UI (`public.com/agents`), browser-only, no API connector.
-- **Active tasks:** "Altcoin Trading Agent" went live 2026-09-07 15:42 CT. User wants it making active (real-money) trades starting today.
-- **Delegate:** none yet — requires explicit, specific authorization per trade-enabling action (see Decisions/Next Actions).
-- **Dependencies/Blockers:** Per standing safety rule, live trading requires the user's specific authorization for the exact action (budget, coins, risk controls), not a blanket go-ahead. Not yet authorized to a specific parameter set.
-- **Next checkpoint:** Read-only inspection of current agent config and activity log, then confirm exact live-trade parameters with user before any activation.
-- **Last verified:** 2026-09-07 — Gmail confirms agent-live notification, deposit processing, two SoFi crypto orders completed; agent's own run health not yet inspected this session.
+- **Phase / Priority:** In progress · **P1**
+- **Source of truth:** Public.com Agents UI (`public.com/agents`), browser-only, no API connector. Their decision logic is not reachable over any API — only their outcomes are, via trade history.
+- **Active tasks:** "Altcoin Trading Agent" went live 2026-09-07 15:42 CT and has been placing real-money trades continuously since 2026-09-04.
+- **Delegate:** none — these agents run themselves in Public's UI.
+- **Dependencies/Blockers:** none outstanding. **Live trading is authorized as of 2026-09-09**, confirmed by the user in that session. This supersedes the earlier "not yet authorized, pending specific parameter confirmation" status, which was stale: the account had already been trading since 2026-09-04 while both this registry and `CAPABILITY-MATRIX.md` still recorded the activity as unauthorized. Recorded here so a future session neither blocks on a stale flag nor treats the live trading as unsanctioned.
+- **Next checkpoint:** compare these agents' realized results against §8a's reviewed drafts over the coming weeks. Do not decide now whether to wind these down — the comparison is the input to that decision.
+- **Last verified:** 2026-09-09 — `get_portfolio` and `get_history` read directly via the Public MCP connector: $367.10 account value, $14.91 buying power, 20 open positions, 16 open limit buy orders, 5 closed round trips (net −$0.75).
+
+---
+
+## 8a. Public.com monitoring & trade-drafting system (standalone)
+
+- **Purpose:** Independently monitor the Public.com account and, once a signal clears the evidence bar, draft trades for human approval. Reports realized P/L, cost drag, concentration, and open-order feasibility on a daily cadence.
+- **Phase / Priority:** In progress · P2 · **monitoring only** — zero validated signals exist, so it proposes no trades.
+- **Source of truth:** `src/tools/public-trading/` (code), `docs/operations/public-trading.md` (boundaries and protocol), `docs/operations/public-trading/` (per-run reviews).
+- **Relationship to §8:** **fully separate.** Not a supervisor, wrapper, or modifier of the agents above; they keep running as-is. This system does not read their configuration, pause them, or control them, and holds no ability to. Rationale in `BRIEFING.md`, "Relationship to the existing Public.com Agent" — chiefly that the two are kept capital- and log-independent so their results can be compared over the same weeks.
+- **Safety posture:** **cannot place an order.** Its client interface exposes `get_portfolio`, `get_history`, `get_quotes`, `get_price_history` and `preflight_order` and nothing else, so "never `place_order`" holds by construction rather than by runtime guard. Drafting is gated behind an empty validated-signal registry; enabling it is a reviewable diff that must state its evidence.
+- **Active tasks:** daily review via `coworker/triggers/public-trading-checkin.sh` (persona `PublicTrading`). Cadence is daily because the signal research is on daily bars and every reported metric is cumulative — revisit if a validated signal makes entry timing matter.
+- **Delegate:** `PublicTrading` coworker persona.
+- **Dependencies/Blockers:** no validated signal. Until one clears the backtest + random-baseline bar in `.agents/skills/crypto-signal-eval/SKILL.md`, this system monitors and reports only. The volume-expansion breakout is settled as having no edge and must not be resurrected.
+- **Note on review contents:** reviews record account value, positions, buying power and realized P/L, and this repository is public. That was a deliberate, confirmed choice for cross-session durability. It is a knowing exception to this registry's own "financial detail lives outside this public repository" convention, recorded here rather than left implicit — if repository visibility assumptions change, `docs/operations/public-trading/` is the first thing to revisit.
+- **Next checkpoint:** accumulate closed round trips and refine the cost-drag baseline. First run measured 2.07% realized round-trip drag against the 0.75% assumption.
+- **Last verified:** 2026-09-09 — built, 417 tests passing, first review generated from live connector data at `docs/operations/public-trading/2026-09-09.md`.
 
 ---
 

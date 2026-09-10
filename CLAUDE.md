@@ -30,6 +30,10 @@ Issues live in this repo's GitHub Issues, managed via the `gh` CLI. See `docs/ag
 
 Default five canonical labels (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
 
+### Public.com monitoring
+
+A standalone monitoring and trade-drafting system lives in `src/tools/public-trading/`. Read `docs/operations/public-trading.md` before touching it. Two boundaries hold without exception: it never places an order (its client interface exposes no method that could), and it is separate from — not a supervisor of — the Public.com Agents in `docs/registry/PROJECT-REGISTRY.md` §8.
+
 ### Domain docs
 
 Single-context layout (`CONTEXT.md` + `docs/adr/` at repo root). See `docs/agents/domain.md`.

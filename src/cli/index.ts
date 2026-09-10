@@ -24,6 +24,7 @@ import { JsonFileRecommendationStore } from "../dashboard/recommendation-store";
 import { runOperationalUpdateCommand } from "./operational-update-commands";
 import { JsonFileOperationalUpdateStore, type OperationalUpdateStore } from "../dashboard/operational-update-store";
 import { runDashboardCommand } from "./dashboard-command";
+import { runPublicTradingCommand } from "./public-trading-commands";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { WorkflowStore } from "../store/workflow-store";
@@ -80,6 +81,7 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator recommend list                                 List logged recommendations",
       '  orchestrator operational-update add "<summary>" --by <a> --provenance <p> Log a concise operational handoff',
       "  orchestrator operational-update list                         List operational handoffs",
+      "  orchestrator public-trading review --input <file|->         Write a Public.com monitoring review (read-only, drafts only)",
       "  orchestrator dashboard [--port N]                           Serve the local agents/projects dashboard",
       '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
       "  orchestrator constraints list                                List recorded corrections",
@@ -312,6 +314,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
   }
   if (command === "operational-update") {
     return runOperationalUpdateCommand(rest, deps);
+  }
+
+  if (command === "public-trading") {
+    return runPublicTradingCommand(rest, deps);
   }
 
   if (command === "dashboard") {
