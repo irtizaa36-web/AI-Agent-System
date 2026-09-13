@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runPipeline } from "../jobsearch/pipeline";
-import { renderDigest, digestPayload } from "../jobsearch/digest";
+import { renderDigest, digestPayload, type RunSummary } from "../jobsearch/digest";
 import { sourcesFromWatchlist } from "../jobsearch/sources/registry";
 import { JsonFileJobStore } from "../store/job-store";
 import { createScoringClientFromEnv } from "../jobsearch/scoring-client";
@@ -10,6 +10,8 @@ import { createJobsDashboardServer } from "../jobsearch/dashboard";
 import { createAlertMailSource } from "../jobsearch/sources/alert-mail";
 import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
 import type { Source } from "../jobsearch/sources/source";
+import { createSmsClientFromEnv, SmsRecipientBlockedError } from "../jobsearch/sms-client";
+import { formatDigestSms } from "../jobsearch/digest-sms";
 import {
   COST_LOG_PATH,
   DATA_DIR,
@@ -122,6 +124,8 @@ async function runJobsRun(root: string, deps: JobsCommandDeps): Promise<number> 
   deps.stdout("");
   deps.stdout(`Digest written to ${join(digestDir, "latest.md")}`);
 
+  await sendDigestSmsIfConfigured(summary, deps);
+
   // A run where every source broke is a failure worth a non-zero exit, so a
   // scheduled job surfaces it rather than looking like a quiet success.
   const allBroken = summary.health.length > 0 && summary.health.every((entry) => entry.state === "degraded");
@@ -193,6 +197,51 @@ async function printCosts(root: string, deps: JobsCommandDeps): Promise<number> 
   deps.stdout("");
   deps.stdout(`${runs.length} run(s), $${total.toFixed(2)} total.`);
   return 0;
+}
+
+/**
+ * Texts the digest, when — and only when — every one of these is explicitly
+ * set: an SMS client can be built from the environment (INKBOX_API_KEY +
+ * INKBOX_SMS_PHONE_NUMBER_ID), a destination number is configured
+ * (DIGEST_SMS_TO), and DIGEST_SMS_ENABLED is exactly "true". Three separate
+ * gates on purpose — having the credentials configured for testing must
+ * never be the same thing as live automated sends being turned on for a
+ * real person's phone.
+ *
+ * A failure here (most commonly: the destination hasn't been recorded as
+ * opted in with Inkbox yet) is reported and never fails the run — the
+ * digest itself was already written successfully before this runs.
+ */
+async function sendDigestSmsIfConfigured(summary: RunSummary, deps: JobsCommandDeps): Promise<void> {
+  if (process.env["DIGEST_SMS_ENABLED"] !== "true") return;
+
+  const to = process.env["DIGEST_SMS_TO"];
+  if (!to) {
+    deps.stderr("DIGEST_SMS_ENABLED is true but DIGEST_SMS_TO is not set — skipping the text.");
+    return;
+  }
+
+  const client = createSmsClientFromEnv();
+  if (!client) {
+    deps.stderr("DIGEST_SMS_ENABLED is true but INKBOX_API_KEY/INKBOX_SMS_PHONE_NUMBER_ID are not both set — skipping the text.");
+    return;
+  }
+
+  const maxRoles = Number.parseInt(process.env["DIGEST_SMS_MAX_ROLES"] ?? "5", 10);
+  const text = formatDigestSms(summary, Number.isFinite(maxRoles) && maxRoles > 0 ? maxRoles : 5);
+
+  try {
+    await client.send(to, text);
+    deps.stdout(`Digest texted to ${to}.`);
+  } catch (error) {
+    if (error instanceof SmsRecipientBlockedError) {
+      deps.stderr(
+        `Could not text the digest: ${error.message} Check that this number has been recorded as opted in through Inkbox before expecting this to work.`,
+      );
+    } else {
+      deps.stderr(`Could not text the digest: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 }
 
 /** Serves the review queue. Read-only: no endpoint here can act on the outside world. */
