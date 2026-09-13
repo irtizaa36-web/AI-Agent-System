@@ -38,9 +38,32 @@ Anything about what she wants that is not a mechanical filter — the kind of te
 she does well on, what she is trying to move away from, a company she would drop
 everything for. It is appended to the scoring prompt as her own words.
 
+Its contents are pasted **verbatim** into the scoring prompt, so treat it the
+way you'd treat the resume: facts only, and nothing half-written left sitting in
+it. `notes.template.md` exists for exactly that reason — draft there, then
+rename to `notes.md` when it's real.
+
 Mechanical constraints (titles, salary floor, excluded industries) do **not**
 belong here — those go in `config/job-search/preferences.json`, where they run
 as free code filters before any model call.
+
+## Getting LinkedIn content in
+
+LinkedIn cannot be fetched automatically, and this project does not try. A plain
+request to a public profile URL returns **HTTP 999** (their anti-automation
+status), and ADR 0013 rules out working around that — not because the block is
+hard to defeat, but because defeating it is what risks restricting the real
+account of someone who is job-hunting while employed.
+
+Two manual routes, both sanctioned by LinkedIn:
+
+- **Fast:** open her profile while logged in, copy the About section plus any
+  role detail the one-page resume had to cut, paste into `notes.md`.
+- **Complete:** Settings → Data Privacy → *Get a copy of your data* → request
+  the archive. It arrives as a zip of CSVs (`Profile.csv`, `Positions.csv`,
+  `Skills.csv`, `Recommendations_Received.csv`, …). This is LinkedIn's own
+  export feature, no automation involved, and it is the better source for the
+  Phase 2 accomplishment bank.
 
 ## What must never go here
 
