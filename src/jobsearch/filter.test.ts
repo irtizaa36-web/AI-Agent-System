@@ -17,6 +17,8 @@ function job(overrides: Partial<JobRecord> = {}): JobRecord {
     salaryMax: null,
     salaryCurrency: null,
     postedAt: null,
+    experienceYearsMin: null,
+    experienceYearsMax: null,
     firstSeenAt: "2026-09-13T08:00:00.000Z",
     lastSeenAt: "2026-09-13T08:00:00.000Z",
     sources: [],
@@ -169,4 +171,71 @@ test("the level cap also catches Director, VP (and its SVP/EVP/AVP variants), an
 
 test('the level cap catches "Vice President" spelled out, via the "president" entry', () => {
   assert.equal(applyFilters(job({ title: "Vice President, Marketing" }), levelCapPrefs).passed, false);
+});
+
+// Experience-years band, per Shivani's feedback: her resume shows 5 years,
+// and she wants roles asking for 3-6 years — not a step up in seniority
+// requirement, and not a step down into entry-level.
+const experiencePrefs: Preferences = { ...prefs, experienceYearsFloor: 3, experienceYearsCeiling: 6 };
+
+test("a posting wanting more experience than the ceiling is rejected", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: 8, experienceYearsMax: null }), experiencePrefs);
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /8\+ years.*above the 6-year ceiling/);
+});
+
+test("a posting wanting less experience than the floor is rejected", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: 0, experienceYearsMax: 1 }), experiencePrefs);
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /at most 1 years.*below the 3-year floor/);
+});
+
+test("a posting whose range overlaps her band at all survives — this is an overlap check, not an exact match", () => {
+  // "3-8 years" overlaps [3,6] even though 8 is above her ceiling — someone
+  // wanting a floor of 3 would still consider a 5-year candidate.
+  assert.equal(applyFilters(job({ experienceYearsMin: 3, experienceYearsMax: 8 }), experiencePrefs).passed, true);
+});
+
+test("a posting stating no years requirement at all is never rejected — same rule as the salary floor", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: null, experienceYearsMax: null }), experiencePrefs);
+  assert.equal(outcome.passed, true, "silence about years is not evidence of a mismatch");
+});
+
+test("the experience band is a no-op when neither floor nor ceiling is configured", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: 15, experienceYearsMax: null }), prefs);
+  assert.equal(outcome.passed, true);
+});
+
+// Recency, per Shivani's feedback: surface recently posted roles.
+test("a posting older than the age limit is rejected, with its age in the reason", () => {
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  const outcome = applyFilters(
+    job({ postedAt: "2026-08-01T00:00:00.000Z" }),
+    { ...prefs, maxPostingAgeDays: 14 },
+    now,
+  );
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /43 days ago, older than the 14-day limit/);
+});
+
+test("a posting within the age limit passes", () => {
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  const outcome = applyFilters(
+    job({ postedAt: "2026-09-10T00:00:00.000Z" }),
+    { ...prefs, maxPostingAgeDays: 14 },
+    now,
+  );
+  assert.equal(outcome.passed, true);
+});
+
+test("a posting with no stated date is never rejected by the age limit — same 'don't guess' rule", () => {
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  const outcome = applyFilters(job({ postedAt: null }), { ...prefs, maxPostingAgeDays: 14 }, now);
+  assert.equal(outcome.passed, true);
+});
+
+test("the age limit is a no-op when not configured", () => {
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  const outcome = applyFilters(job({ postedAt: "2020-01-01T00:00:00.000Z" }), prefs, now);
+  assert.equal(outcome.passed, true);
 });

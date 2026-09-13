@@ -195,6 +195,51 @@ function toAmount(raw: string | undefined): number | null {
   return value >= 10000 ? value : null;
 }
 
+export interface ParsedExperience {
+  readonly min: number | null;
+  readonly max: number | null;
+}
+
+const NO_EXPERIENCE: ParsedExperience = { min: null, max: null };
+
+/**
+ * Pulls a stated years-of-experience requirement out of posting text.
+ * Returns nulls when the posting states nothing — the same discipline as
+ * `parseSalary`: absence of a stated requirement is not itself a signal, and
+ * the filter that uses this must never reject on a guess.
+ *
+ * Tries patterns in order of how much they actually say: an explicit range
+ * ("3-6 years") first, then an open floor ("5+ years", "minimum of 5
+ * years"), then a bare figure ("5 years of experience"), which is read as a
+ * floor with no stated ceiling — the same convention "5+" uses, since a
+ * posting rarely means "exactly 5 and not one year more."
+ */
+export function parseExperienceYears(text: string): ParsedExperience {
+  const range = /(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})\+?\s*years?/i.exec(text);
+  if (range) {
+    const min = Number.parseInt(range[1] as string, 10);
+    const max = Number.parseInt(range[2] as string, 10);
+    if (min <= max) return { min, max };
+  }
+
+  const floorPhrase = /(?:minimum(?:\s+of)?|at least|min\.?)\s*(\d{1,2})\+?\s*years?/i.exec(text);
+  if (floorPhrase) {
+    return { min: Number.parseInt(floorPhrase[1] as string, 10), max: null };
+  }
+
+  const plus = /(\d{1,2})\+\s*years?/.exec(text);
+  if (plus) {
+    return { min: Number.parseInt(plus[1] as string, 10), max: null };
+  }
+
+  const bare = /(\d{1,2})\s*years?\s*(?:of\s+)?(?:relevant\s+|professional\s+)?experience/i.exec(text);
+  if (bare) {
+    return { min: Number.parseInt(bare[1] as string, 10), max: null };
+  }
+
+  return NO_EXPERIENCE;
+}
+
 /** Lowercase, punctuation-free, suffix-free company name — the half of the dedupe key that varies most between sources. */
 export function normalizeCompany(company: string): string {
   return company
@@ -270,6 +315,7 @@ export function toJobRecord(raw: RawPosting, options: NormalizeOptions): JobReco
   const locationClass = classifyLocation(raw.location, text);
   const remoteRegion = classifyRemoteRegion(raw.location);
   const salary = parseSalary(text);
+  const experience = parseExperienceYears(text);
 
   return {
     id: randomUUID(),
@@ -284,6 +330,8 @@ export function toJobRecord(raw: RawPosting, options: NormalizeOptions): JobReco
     salaryMax: salary.max,
     salaryCurrency: salary.currency,
     postedAt: raw.postedAt,
+    experienceYearsMin: experience.min,
+    experienceYearsMax: experience.max,
     firstSeenAt: options.now,
     lastSeenAt: options.now,
     sources: [{ sourceId: raw.sourceId, url: raw.url, fetchedAt: raw.fetchedAt }],

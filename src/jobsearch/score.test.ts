@@ -21,6 +21,8 @@ function job(id: string, overrides: Partial<JobRecord> = {}): JobRecord {
     salaryMax: null,
     salaryCurrency: null,
     postedAt: null,
+    experienceYearsMin: null,
+    experienceYearsMax: null,
     firstSeenAt: "2026-09-13T08:00:00.000Z",
     lastSeenAt: "2026-09-13T08:00:00.000Z",
     sources: [],

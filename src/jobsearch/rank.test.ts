@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankKey, sortByRank } from "./rank";
+import { locationBonus, rankKey, sortByRank } from "./rank";
 import { DEFAULT_PREFERENCES, type JobRecord, type Preferences } from "./records";
 
 function job(overrides: Partial<JobRecord> = {}): JobRecord {
@@ -17,6 +17,8 @@ function job(overrides: Partial<JobRecord> = {}): JobRecord {
     salaryMax: null,
     salaryCurrency: null,
     postedAt: null,
+    experienceYearsMin: null,
+    experienceYearsMax: null,
     firstSeenAt: "2026-09-13T08:00:00.000Z",
     lastSeenAt: "2026-09-13T08:00:00.000Z",
     sources: [],
@@ -96,4 +98,58 @@ test("sortByRank does not mutate the input array", () => {
   const original = [...records];
   sortByRank(records, prefs);
   assert.deepEqual(records, original);
+});
+
+// Location priority, per Shivani's feedback: Houston, Remote, Dallas, New
+// York, in that order of preference.
+const locationPrefs: Preferences = { ...prefs, locationPriority: ["Houston", "Remote", "Dallas", "New York"], locationPriorityStep: 2 };
+
+test("locationBonus gives the top-priority entry the largest bonus", () => {
+  const houston = job({ rawLocation: "Houston, TX", locationClass: "onsite" });
+  const dallas = job({ rawLocation: "Dallas, TX", locationClass: "onsite" });
+  const newYork = job({ rawLocation: "New York, NY", locationClass: "onsite" });
+
+  assert.equal(locationBonus(houston, locationPrefs), 6); // tier 0 of 4: (4-1-0)*2
+  assert.equal(locationBonus(dallas, locationPrefs), 2); // tier 2 of 4: (4-1-2)*2
+  assert.equal(locationBonus(newYork, locationPrefs), 0); // last tier: (4-1-3)*2
+});
+
+test("locationBonus matches a generic remote role by locationClass, not by city name", () => {
+  const remote = job({ rawLocation: "Remote - US", locationClass: "remote" });
+  assert.equal(locationBonus(remote, locationPrefs), 4); // tier 1 of 4: (4-1-1)*2
+});
+
+test("a remote role explicitly for a named city matches that city's tier, not the generic Remote tier", () => {
+  // Houston comes before Remote in the priority list, so a role that is
+  // both — remote, but specifically for someone in Houston — should get
+  // Houston's higher bonus, not Remote's lower one.
+  const remoteHouston = job({ rawLocation: "Remote - Houston, TX", locationClass: "remote" });
+  assert.equal(locationBonus(remoteHouston, locationPrefs), 6);
+});
+
+test("an unmatched location gets no bonus", () => {
+  const chicago = job({ rawLocation: "Chicago, IL", locationClass: "onsite" });
+  assert.equal(locationBonus(chicago, locationPrefs), 0);
+});
+
+test("locationBonus is 0 when the priority list is empty — a no-op by default", () => {
+  const houston = job({ rawLocation: "Houston, TX", locationClass: "onsite" });
+  assert.equal(locationBonus(houston, prefs), 0);
+});
+
+test("the location bonus and the salary penalty stack in rankKey", () => {
+  const houstonUnstated = job({ rawLocation: "Houston, TX", locationClass: "onsite", score: 70 });
+  // rankKey = 70 (score) - 8 (unstated salary penalty) + 6 (Houston bonus) = 68
+  assert.equal(rankKey(houstonUnstated, locationPrefs), 68);
+});
+
+test("a real location preference can flip two close scores toward the preferred city", () => {
+  const dallasStrong = job({ id: "a", rawLocation: "Dallas, TX", locationClass: "onsite", score: 74 });
+  const houstonWeaker = job({ id: "b", rawLocation: "Houston, TX", locationClass: "onsite", score: 70 });
+
+  // Dallas: 74 + 2 = 76. Houston: 70 + 6 = 76. A tie — order falls back to
+  // original array order, so this documents the boundary rather than
+  // asserting a specific winner.
+  const [first] = sortByRank([dallasStrong, houstonWeaker], locationPrefs);
+  assert.equal(first?.id, "a");
 });

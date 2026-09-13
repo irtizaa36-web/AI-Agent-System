@@ -17,6 +17,8 @@ function job(overrides: Partial<JobRecord> = {}): JobRecord {
     salaryMax: null,
     salaryCurrency: null,
     postedAt: null,
+    experienceYearsMin: null,
+    experienceYearsMax: null,
     firstSeenAt: "2026-09-13T08:00:00.000Z",
     lastSeenAt: "2026-09-13T08:00:00.000Z",
     sources: [{ sourceId: "greenhouse:acme", url: "https://a.test/1", fetchedAt: "2026-09-13T08:00:00.000Z" }],

@@ -8,6 +8,7 @@ import {
   identityKeyFor,
   normalizeCompany,
   normalizeTitle,
+  parseExperienceYears,
   parseSalary,
   stripBoilerplate,
   toJobRecord,
@@ -140,6 +141,28 @@ test("parseSalary returns nulls when no salary is stated, never a guess", () => 
 
 test("parseSalary ignores an hourly-looking figure rather than treating it as annual", () => {
   assert.deepEqual(parseSalary("$45 per hour"), { min: null, max: null, currency: null });
+});
+
+test("parseExperienceYears reads an explicit range", () => {
+  assert.deepEqual(parseExperienceYears("3-6 years of experience required"), { min: 3, max: 6 });
+  assert.deepEqual(parseExperienceYears("You have 5 to 8 years of relevant experience"), { min: 5, max: 8 });
+});
+
+test("parseExperienceYears reads an open floor as a floor with no stated ceiling", () => {
+  assert.deepEqual(parseExperienceYears("5+ years of experience"), { min: 5, max: null });
+  assert.deepEqual(parseExperienceYears("Minimum of 7 years experience"), { min: 7, max: null });
+  assert.deepEqual(parseExperienceYears("At least 4 years"), { min: 4, max: null });
+});
+
+test("parseExperienceYears reads a bare figure as a floor, not an exact match", () => {
+  assert.deepEqual(parseExperienceYears("5 years of experience in program management"), { min: 5, max: null });
+});
+
+test("parseExperienceYears returns nulls when nothing is stated, never a guess", () => {
+  assert.deepEqual(parseExperienceYears("Own the roadmap and drive cross-functional execution."), {
+    min: null,
+    max: null,
+  });
 });
 
 test("normalizeCompany strips legal suffixes and punctuation", () => {

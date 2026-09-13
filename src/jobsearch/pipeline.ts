@@ -81,11 +81,13 @@ export async function runPipeline(deps: PipelineDeps): Promise<RunSummary> {
   const known = await deps.store.listJobs();
   const { fresh, merged, duplicateCount } = dedupe(normalized, known);
 
-  // Stage 6 — the free filters.
+  // Stage 6 — the free filters. One `now` shared across the whole batch, so
+  // recency comparisons are consistent within a single run.
   const passed: JobRecord[] = [];
   const rejected: JobRecord[] = [];
+  const filterNow = new Date(now);
   for (const record of fresh) {
-    const outcome = applyFilters(record, deps.prefs);
+    const outcome = applyFilters(record, deps.prefs, filterNow);
     if (outcome.passed) {
       passed.push(record);
     } else {

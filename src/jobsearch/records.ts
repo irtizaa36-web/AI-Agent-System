@@ -67,6 +67,9 @@ export interface JobRecord {
   readonly salaryMax: number | null;
   readonly salaryCurrency: string | null;
   readonly postedAt: string | null;
+  /** Years of experience the posting states it wants. `null` on either side means that bound was not stated — never guessed. */
+  readonly experienceYearsMin: number | null;
+  readonly experienceYearsMax: number | null;
   readonly firstSeenAt: string;
   readonly lastSeenAt: string;
   /** Every place this one role was found. Four entries here means one record, four links. */
@@ -153,6 +156,34 @@ export interface Preferences {
   /** Metro names that re-admit non-remote roles. Empty means remote-only, full stop. */
   readonly metros: readonly string[];
   /**
+   * Ranks `metros` (and the literal entry `"Remote"`) by preference — a role
+   * matching an earlier entry outranks one matching a later entry, even at
+   * an equal score. Purely a display-order nudge (see `rank.ts`): it never
+   * excludes a role and never changes the stored score. Empty means every
+   * matching location ranks the same.
+   */
+  readonly locationPriority: readonly string[];
+  /** Points per priority-list position, applied in `rank.ts`. Kept small on purpose — a real score difference should still win. */
+  readonly locationPriorityStep: number;
+  /**
+   * A posting's stated experience-years requirement must overlap this
+   * [floor, ceiling] band to survive stage 6 (an OVERLAP check, not an exact
+   * match — a posting asking for "3-8 years" still overlaps a [3,6] band).
+   * Either side `null` disables that bound. A posting that states no years
+   * requirement at all is NEVER rejected by this — same "don't guess" rule
+   * as the salary floor. Named differently from JobRecord's
+   * experienceYearsMin/Max on purpose: those are what a POSTING states;
+   * these are what SHE wants.
+   */
+  readonly experienceYearsFloor: number | null;
+  readonly experienceYearsCeiling: number | null;
+  /**
+   * Reject a posting whose stated post date is older than this many days.
+   * `null` disables the check. A posting with no stated date at all is
+   * never rejected by this — same "don't guess" rule as everywhere else.
+   */
+  readonly maxPostingAgeDays: number | null;
+  /**
    * When true, a `remote` posting is rejected if it names a specific
    * non-US country and no US option (`RemoteRegion` `"non-us"`) — e.g.
    * "Remote - India" or "Remote - Netherlands". A posting naming no country
@@ -192,6 +223,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   salaryCurrency: "USD",
   remoteOnly: true,
   metros: [],
+  locationPriority: [],
+  locationPriorityStep: 2,
+  experienceYearsFloor: null,
+  experienceYearsCeiling: null,
+  maxPostingAgeDays: null,
   usRemoteOnly: false,
   industryExclusions: [],
   companyExclusions: [],

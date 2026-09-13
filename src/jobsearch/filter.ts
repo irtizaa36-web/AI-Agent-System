@@ -22,7 +22,7 @@ export interface FilterOutcome {
 
 const PASSED: FilterOutcome = { passed: true, reason: null };
 
-export function applyFilters(record: JobRecord, prefs: Preferences): FilterOutcome {
+export function applyFilters(record: JobRecord, prefs: Preferences, now: Date = new Date()): FilterOutcome {
   const title = normalizeTitle(record.title);
   const company = normalizeCompany(record.company);
   const haystack = `${record.title}\n${record.company}\n${record.summary}`.toLowerCase();
@@ -60,6 +60,12 @@ export function applyFilters(record: JobRecord, prefs: Preferences): FilterOutco
   const regionOutcome = checkRemoteRegion(record, prefs);
   if (!regionOutcome.passed) return regionOutcome;
 
+  const experienceOutcome = checkExperience(record, prefs);
+  if (!experienceOutcome.passed) return experienceOutcome;
+
+  const recencyOutcome = checkRecency(record, prefs, now);
+  if (!recencyOutcome.passed) return recencyOutcome;
+
   return checkSalary(record, prefs);
 }
 
@@ -95,6 +101,62 @@ function checkRemoteRegion(record: JobRecord, prefs: Preferences): FilterOutcome
   return {
     passed: false,
     reason: `Remote, but not eligible from the US (${record.rawLocation || "a specific non-US region"})`,
+  };
+}
+
+/**
+ * Rejects a posting only when its stated experience-years requirement
+ * cannot possibly overlap her target band — e.g. a floor/ceiling both
+ * configured as [3, 6] rejects a posting that says "8+ years" (min 8 is
+ * past the ceiling) and one that says "0-1 years" (max 1 is short of the
+ * floor). A posting whose stated range still overlaps the band at all
+ * (e.g. "3-8 years" against a [3,6] band) survives — this is an overlap
+ * check, not an exact match. A posting that states no years requirement is
+ * NEVER rejected: same "don't guess" rule as the salary floor.
+ */
+function checkExperience(record: JobRecord, prefs: Preferences): FilterOutcome {
+  if (prefs.experienceYearsFloor === null && prefs.experienceYearsCeiling === null) return PASSED;
+  if (record.experienceYearsMin === null && record.experienceYearsMax === null) return PASSED;
+
+  if (prefs.experienceYearsCeiling !== null && record.experienceYearsMin !== null) {
+    if (record.experienceYearsMin > prefs.experienceYearsCeiling) {
+      return {
+        passed: false,
+        reason: `Wants ${record.experienceYearsMin}+ years, above the ${prefs.experienceYearsCeiling}-year ceiling`,
+      };
+    }
+  }
+
+  if (prefs.experienceYearsFloor !== null && record.experienceYearsMax !== null) {
+    if (record.experienceYearsMax < prefs.experienceYearsFloor) {
+      return {
+        passed: false,
+        reason: `Wants at most ${record.experienceYearsMax} years, below the ${prefs.experienceYearsFloor}-year floor`,
+      };
+    }
+  }
+
+  return PASSED;
+}
+
+/**
+ * Rejects a posting only when a post date is actually stated and it's past
+ * the age limit. A posting with no stated date passes — the same "don't
+ * guess" rule as the salary floor: silence is not evidence of staleness.
+ */
+function checkRecency(record: JobRecord, prefs: Preferences, now: Date): FilterOutcome {
+  if (prefs.maxPostingAgeDays === null) return PASSED;
+  if (record.postedAt === null) return PASSED;
+
+  const posted = new Date(record.postedAt);
+  if (Number.isNaN(posted.getTime())) return PASSED;
+
+  const ageDays = (now.getTime() - posted.getTime()) / (24 * 60 * 60 * 1000);
+  if (ageDays <= prefs.maxPostingAgeDays) return PASSED;
+
+  return {
+    passed: false,
+    reason: `Posted ${Math.floor(ageDays)} days ago, older than the ${prefs.maxPostingAgeDays}-day limit`,
   };
 }
 
