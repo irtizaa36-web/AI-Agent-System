@@ -62,6 +62,19 @@ test("two close scores favor the pay-transparent one", () => {
   assert.equal(first?.id, "b", "75 - 8 = 67, which is below the stated role's 72");
 });
 
+test("the default penalty (3) preserves a real 4-point gap — the Snowflake/Notion case that prompted weakening it", () => {
+  // First live run used penalty 8: Snowflake's GTM & Enablement PM (82,
+  // unstated) got outranked by Notion's Partner Marketing Manager (78,
+  // $235k-260k stated) — an 82 vs 78 gap is real signal, not noise, and
+  // Irtiza asked to weaken the nudge so it doesn't override that. At the
+  // default of 3, Snowflake's rank key (79) stays above Notion's (78).
+  const snowflakeUnstated = job({ id: "snowflake", score: 82 });
+  const notionStated = job({ id: "notion", score: 78, salaryMin: 235000, salaryMax: 260000 });
+
+  const [first] = sortByRank([snowflakeUnstated, notionStated], DEFAULT_PREFERENCES);
+  assert.equal(first?.id, "snowflake", "a 4-point quality gap should still win on merit at the weakened penalty");
+});
+
 test("a penalty of 0 disables de-prioritization entirely — pure score order", () => {
   const off: Preferences = { ...prefs, unstatedSalaryRankPenalty: 0 };
   const unstated = job({ id: "a", score: 75 });

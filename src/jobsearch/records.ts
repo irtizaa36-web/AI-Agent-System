@@ -196,7 +196,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   industryExclusions: [],
   companyExclusions: [],
   scoreCutoff: 65,
-  unstatedSalaryRankPenalty: 8,
+  unstatedSalaryRankPenalty: 3,
   digestLimit: 8,
   postingTokenBudget: 600,
   scoringBatchSize: 15,
