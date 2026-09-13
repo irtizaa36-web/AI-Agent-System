@@ -35,9 +35,36 @@ Irtiza is a physician. This search is for **paid clinical-expertise work on AI/g
 
 ## Where things stand (update this section as things change)
 
-- Profile `irtiza` is scaffolded but **empty**: `config/job-search/irtiza/preferences.json`, `watchlist.json`, and `profile/irtiza/resume.md` all still need real content before a run does anything useful.
-- The prior Polar-browser system tracked BeMo (assessment done, awaiting interview invite), Mercor (two interviews outstanding), Turing (~16 min interview), Handshake AI (ID + payout blocking $200/hr work), AJE (staged at reCAPTCHA), scholr (follow-up on a contact named Kyle). None of that state has been imported here yet — treat it as unverified until it's in `.orchestrator/jobs/irtiza/` from a real source, not from a chat transcript.
-- That Polar system auto-submitted applications on a schedule. **This one does not and will not** — when importing anything from it, import the tracked state and the judgment rules, never the submit behavior.
+**Last verified from Google Drive + Gmail on 2026-09-13.**
+
+### Resume
+- `profile/irtiza/resume.md` is populated from `Irtiza_Ahmed_CV` (Google Drive, last modified 2026-09-07). Irtiza Ahmed, MD — PGY-2 Internal Medicine at Houston Methodist. USMLE Step 3 passed 2026. ACLS certified through Oct 2026. Prior: Clinical Trial Coordinator (Medpace), COVID-19 clinic manager, UT Southwestern research fellowship.
+- `config/job-search/irtiza/preferences.json` still needs real hourly rate target and platform list before a pipeline run is meaningful.
+
+### Active applications — confirmed via Gmail
+All records are in `.orchestrator/jobs/irtiza/applications/`.
+
+| Role | Platform | Status | Next action |
+|---|---|---|---|
+| MD/DO Admissions Consultant | BeMo Academic Consulting | **Interview Wed Sep 16 10:15 AM Central** | Attend Zoom interview |
+| Medical School Admissions Consultant - Resident Physician | Inspira Education Group | **Interview Mon Sep 15 1:45 PM** (confirmed) | Attend interview (TODAY +2 days) |
+| Pharmacologist | Mercor | Submitted Sep 7 (Polar) | Awaiting match/review |
+| Applied Health & Medicine Benchmark Specialist | Mercor | Submitted Sep 7 (Polar) | Awaiting match/review |
+| Medical Writer | Mercor | Submitted Sep 7 (Polar) | Awaiting match/review |
+| Medical Safety Expert | Mercor | Submitted Sep 7 (Polar) | Awaiting match/review |
+| Medical Content Specialist (Contract) | Everlywell (Lever) | Submitted Sep 7 (Polar) | Awaiting review |
+| Veterinary De-ID task ($35/hr) | Centaur Labs | Task accepted Sep 11 | Confirm completion; check for follow-on tasks |
+
+### Not yet confirmed in Gmail (unverified from Polar transcripts)
+- Turing (~16 min interview) — no confirmation email found in Gmail. Status unknown.
+- Handshake AI (ID + payout blocking $200/hr) — Handshake account active (OTP Sep 10), but no AJE-style application found.
+- AJE (staged at reCAPTCHA) — not found in Gmail. Status unknown.
+- scholr / Kyle follow-up (~Sep 12) — not found in Gmail. Status unknown.
+
+### Mercor profile
+- Profile live in Physician Talent Network as of Sep 7 2026. Phone verified.
+
+That Polar system auto-submitted applications on a schedule. **This one does not and will not** — import the tracked state and the judgment rules, never the submit behavior.
 
 ## Working style
 
