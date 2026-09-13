@@ -1,13 +1,28 @@
 {
   "_comment": "Deterministic filters. Edit this file, not the code. Every value here runs before any model call, so tightening these is the cheapest way to improve the digest.",
 
-  "titles": ["marketing program manager", "program manager", "vendor manager", "gtm manager", "go-to-market manager", "marketing operations manager"],
-  "_titles": "Drafted from Shivani's actual resume (Marketing Program Manager at AWS, Vendor Manager at Amazon, GTM/marketing-ops background) — this is a starting cluster, not a final answer. Adjust freely; a posting must match one of these to survive stage 6.",
+  "titles": [
+    "program manager",
+    "marketing program manager",
+    "field marketing manager",
+    "business operations manager",
+    "strategy & operations analyst",
+    "gtm manager",
+    "gtm program manager",
+    "go-to-market manager",
+    "content operations manager",
+    "integrated marketing manager",
+    "marketing operations manager",
+    "partner marketing manager",
+    "program manager, executive engagement",
+    "vendor manager"
+  ],
+  "_titles": "Merged from her resume (Marketing Program Manager, Vendor Manager) and her own ChatGPT-suggested title list. An earlier draft dropped the bare 'program manager' on the theory that it matched irrelevant Technical/Federal PM postings too — true, but re-checked against a live run and reversed: title matching runs BEFORE the location/salary filters, so an irrelevant onsite match costs nothing in tokens, it's rejected before any model call. Removing it had a real cost with no real saving: it silently dropped two genuinely good GitLab matches ('Senior Program Manager, Enterprise Technology & AI', 'Principal Program Manager, Go-To-Market') whose titles don't contain any of the more specific phrases below, because substring matching is literal and word order varies. Kept broad on purpose now.",
 
   "titleExclusions": ["intern", "internship", "co-op", "contractor", "temporary"],
 
-  "salaryFloor": null,
-  "_salaryFloor": "TODO Irtiza: the compensation floor as a plain number, e.g. 120000. A posting that states no salary is NEVER rejected by this — it passes, flagged as unknown, and the scorer is told.",
+  "salaryFloor": 120000,
+  "_salaryFloor": "Set to $120,000. A posting that states no salary is NEVER rejected by this — it passes, flagged as unknown, and the scorer is told.",
   "salaryCurrency": "USD",
 
   "remoteOnly": true,
