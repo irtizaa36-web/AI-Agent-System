@@ -353,11 +353,18 @@ async function sendDigestImessageIfConfigured(summary: RunSummary, deps: JobsCom
     return;
   }
 
+  const identityId = process.env["INKBOX_IDENTITY_ID"];
+  if (!identityId) {
+    deps.stderr("DIGEST_IMESSAGE_ENABLED is true but INKBOX_IDENTITY_ID is not set — skipping iMessage.");
+    return;
+  }
+
   const maxRoles = Number.parseInt(process.env["DIGEST_IMESSAGE_MAX_ROLES"] ?? "5", 10);
   const text = formatDigestSms(summary, Number.isFinite(maxRoles) && maxRoles > 0 ? maxRoles : 5);
 
   try {
-    const response = await fetch("https://inkbox.ai/api/v1/imessages", {
+    const url = `https://inkbox.ai/api/v1/imessage/messages?agent_identity_id=${encodeURIComponent(identityId)}`;
+    const response = await fetch(url, {
       method: "POST",
       headers: { "X-API-Key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ to, text, send_style: "regular" }),
