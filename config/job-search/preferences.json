@@ -42,7 +42,7 @@
   "_experienceYears": "Per Shivani's direct feedback: her resume shows 5 years since graduating, and she wants roles asking for 3-6 years — not a step up in required seniority, and not a step down into entry-level. This is an OVERLAP check against a posting's stated range, not an exact match (a posting asking for '3-8 years' still overlaps this band). A posting stating no years requirement at all is never rejected by it — same 'don't guess' rule as the salary floor.",
 
   "maxPostingAgeDays": 14,
-  "_maxPostingAgeDays": "Per Shivani's feedback: surface recently posted roles. A posting with no stated post date is never rejected by this — same 'don't guess' rule as everywhere else. 14 days is a starting point given the twice-daily cadence; tighten or loosen freely.",
+  "_maxPostingAgeDays": "Per Shivani's feedback: surface recently posted roles. A posting with no stated post date is never rejected by this — same 'don't guess' rule as everywhere else. 14 days is a starting point given the once-daily weekday cadence (scripts/com.mobyai.jobsearch.plist); tighten or loosen freely.",
 
   "industryExclusions": [],
   "companyExclusions": [],

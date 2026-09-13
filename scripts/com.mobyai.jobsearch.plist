@@ -1,6 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Twice-daily job-search pipeline (08:00 and 18:00 local).
+  Job-search pipeline, once daily at 10:00 AM Central, Monday-Friday only.
+
+  launchd's StartCalendarInterval fires on the Mac's LOCAL system clock, not
+  a fixed UTC offset — so "10:00" below means 10:00 AM CST in the winter and
+  10:00 AM CDT in the summer automatically, correctly tracking the DST
+  switch, PROVIDED the Mac mini's system timezone is actually set to a US
+  Central zone (System Settings -> General -> Date & Time -> Time Zone;
+  "Chicago" or "Set time zone automatically" from a Central-time location).
+  If the machine is ever set to a different timezone, this fires at 10:00 in
+  THAT zone instead — check `date` on the machine if the fire time ever
+  looks wrong.
+
+  Weekday 1-5 = Monday-Friday (launchd convention: 0 and 7 both mean Sunday).
+  Five separate dictionaries below because StartCalendarInterval's Weekday
+  key takes one integer each, not a range.
 
   Install:
     1. Edit REPO_PATH below to the absolute path of this repository.
@@ -30,12 +44,29 @@
   <key>StartCalendarInterval</key>
   <array>
     <dict>
-      <key>Hour</key><integer>8</integer>
+      <key>Hour</key><integer>10</integer>
       <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>1</integer>
     </dict>
     <dict>
-      <key>Hour</key><integer>18</integer>
+      <key>Hour</key><integer>10</integer>
       <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>2</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>3</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>4</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>5</integer>
     </dict>
   </array>
 

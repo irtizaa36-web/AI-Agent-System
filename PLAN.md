@@ -214,3 +214,5 @@ Three things differ from what is written above, each for a reason found while bu
 3. **Location classification gives the employer's stated location precedence over the description prose.** Found by running against real boards: Figma's product copy ("work together from anywhere in the world") was promoting an onsite Tel Aviv role into a remote-only search.
 
 Still open from Q1-Q5: the API key is configured and verified; the titles, salary floor and watchlist (Q2) are still placeholders in `config/job-search/`; the resume (Q3) still needs its one-time conversion into `profile/resume.md`; Q4 is answered above; Q5 defaults to 90 days and is a config value.
+
+**Cadence changed from the original "twice daily" answer to Q13**: Irtiza later asked for once a day, weekdays only, at 10:00 AM Central — `scripts/com.mobyai.jobsearch.plist` is the current source of truth for the actual schedule; treat any "twice a day" language elsewhere in this document or in ADR 0014/0015 as describing the cadence at the time each was written, not the live schedule.

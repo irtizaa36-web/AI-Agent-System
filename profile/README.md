@@ -69,9 +69,9 @@ Two manual routes, both sanctioned by LinkedIn:
 
 This is a different thing from the section above — that one is about mining
 her profile once for source material; this is about the pipeline's own
-scheduled runs seeing LinkedIn/Indeed postings at all, twice a day, without
-anyone touching it. See ADR 0013 and ADR 0015 for the full reasoning; here's
-what actually needs doing, in order.
+scheduled runs seeing LinkedIn/Indeed postings at all, on the pipeline's own
+schedule, without anyone touching it. See ADR 0013 and ADR 0015 for the full
+reasoning; here's what actually needs doing, in order.
 
 1. **Sign up for Inkbox** (inkbox.ai or wherever their current signup is) and
    get an API key and a mailbox address (something like
@@ -83,8 +83,9 @@ what actually needs doing, in order.
    INKBOX_MAILBOX_ADDRESS=yourname@inkboxmail.com
    ```
    Nothing else from `.env.example`'s Inkbox block is needed for this —
-   the pipeline only polls for mail twice a day, so the webhook
-   receiver/signing key (for real-time inbound push) can stay blank.
+   the pipeline only polls for mail once per scheduled run (see
+   `scripts/com.mobyai.jobsearch.plist` for the actual cadence), so the
+   webhook receiver/signing key (for real-time inbound push) can stay blank.
 3. **Confirm it's live**: `orchestrator jobs sources` will check the
    `inkbox:alert-mail` source alongside the ATS boards once the two env vars
    above are set, and report it healthy or broken by name.
