@@ -57,6 +57,9 @@ export function applyFilters(record: JobRecord, prefs: Preferences): FilterOutco
   const locationOutcome = checkLocation(record, prefs);
   if (!locationOutcome.passed) return locationOutcome;
 
+  const regionOutcome = checkRemoteRegion(record, prefs);
+  if (!regionOutcome.passed) return regionOutcome;
+
   return checkSalary(record, prefs);
 }
 
@@ -74,6 +77,25 @@ function checkLocation(record: JobRecord, prefs: Preferences): FilterOutcome {
     return { passed: false, reason: "Location not stated and no remote signal found" };
   }
   return { passed: false, reason: `Not remote (${record.locationClass})` };
+}
+
+/**
+ * A stricter version of the remote check: not just remote, but remote from
+ * the US. Only fires on a posting that actively excludes the US (a specific
+ * non-US country/region and no US option) — a bare "Remote" with no country
+ * stated passes, the same way an unpublished salary passes the floor. That
+ * asymmetry is deliberate: rejecting every unlabeled "Remote" would throw
+ * away a large share of US-based postings that simply didn't spell it out.
+ */
+function checkRemoteRegion(record: JobRecord, prefs: Preferences): FilterOutcome {
+  if (!prefs.usRemoteOnly) return PASSED;
+  if (record.locationClass !== "remote") return PASSED;
+  if (record.remoteRegion !== "non-us") return PASSED;
+
+  return {
+    passed: false,
+    reason: `Remote, but not eligible from the US (${record.rawLocation || "a specific non-US region"})`,
+  };
 }
 
 function checkSalary(record: JobRecord, prefs: Preferences): FilterOutcome {

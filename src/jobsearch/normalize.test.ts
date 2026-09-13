@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyLocation,
+  classifyRemoteRegion,
   contentHashFor,
   htmlToText,
   identityKeyFor,
@@ -75,6 +76,46 @@ test("a placeholder location falls through to the body instead of counting as a 
 
 test("a stated remote location wins even when the body mentions an office", () => {
   assert.equal(classifyLocation("Remote - US", "Visit our San Francisco office sometimes."), "remote");
+});
+
+test("classifyRemoteRegion reads an explicit US marker", () => {
+  assert.equal(classifyRemoteRegion("Remote - US"), "us");
+  assert.equal(classifyRemoteRegion("Remote (US)"), "us");
+  assert.equal(classifyRemoteRegion("United States - Remote"), "us");
+});
+
+test("classifyRemoteRegion reads a US state as a US marker — the real Databricks case", () => {
+  assert.equal(classifyRemoteRegion("Remote - California; Remote - New York"), "us");
+  assert.equal(classifyRemoteRegion("Remote - Massachusetts; Remote - New York; Tennessee"), "us");
+});
+
+test("classifyRemoteRegion rejects a specific non-US country with no US option — the real Databricks case", () => {
+  assert.equal(classifyRemoteRegion("Remote - India"), "non-us");
+  assert.equal(classifyRemoteRegion("Remote - United Kingdom"), "non-us");
+});
+
+test("classifyRemoteRegion rejects a multi-country EMEA listing with no US seat", () => {
+  assert.equal(
+    classifyRemoteRegion("EMEA; Germany; London, United Kingdom; Paris, France; Remote - Netherlands"),
+    "non-us",
+  );
+});
+
+test("classifyRemoteRegion treats a listing naming both a US state and a non-US country as US-eligible", () => {
+  // The role is open to a US-based candidate even though it also lists other
+  // countries — she isn't excluded just because someone in Canada could also apply.
+  assert.equal(classifyRemoteRegion("Remote - US; Remote - Canada"), "us");
+});
+
+test("classifyRemoteRegion never guesses — a bare Remote with no country is unspecified, not us", () => {
+  assert.equal(classifyRemoteRegion("Remote"), "unspecified");
+  assert.equal(classifyRemoteRegion(""), "unspecified");
+});
+
+test('classifyRemoteRegion does not false-positive on "us" appearing inside an unrelated word', () => {
+  // A word-boundary slip here would misclassify almost every posting that
+  // happens to mention "focus", "campus", "onboarding", etc.
+  assert.equal(classifyRemoteRegion("Remote - Mauritius"), "unspecified");
 });
 
 test("parseSalary reads a dollar range", () => {
@@ -151,6 +192,7 @@ test("toJobRecord produces a seen record with the raw body kept out of the summa
 
   assert.equal(record.state, "seen");
   assert.equal(record.locationClass, "remote");
+  assert.equal(record.remoteRegion, "us");
   assert.equal(record.salaryMin, 130000);
   assert.equal(record.salaryMax, 160000);
   assert.equal(record.sources.length, 1);

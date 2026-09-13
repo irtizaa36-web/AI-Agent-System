@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { JobRecord, LocationClass, RawPosting } from "./records";
+import type { JobRecord, LocationClass, RawPosting, RemoteRegion } from "./records";
 
 /**
  * Stage 3-5 of the pipeline: turn a raw posting into a JobRecord, hash it so
@@ -105,6 +105,49 @@ export function classifyLocation(rawLocation: string, body: string): LocationCla
 function namesAPlace(stated: string): boolean {
   if (stated.length === 0) return false;
   return !/^(various|multiple|flexible|anywhere|worldwide|global|n\/?a|tbd|unspecified)$/i.test(stated);
+}
+
+// Word-boundary markers for "this listing includes a US option": a full
+// country name/abbreviation, or a US state. Checked BEFORE the non-US list —
+// a listing spanning several offices ("Remote - US; Remote - Canada") still
+// has a real US seat available, so it counts as `"us"` even though Canada is
+// also named. Matched against the raw location field only, deliberately —
+// the same lesson as classifyLocation: a description can mention a dozen
+// unrelated cities ("visit our London R&D office"), so region, like
+// location, comes from the employer's structured field, not the prose.
+const US_MARKERS = /\b(united states|u\.s\.a?\.?|usa|conus)\b|(?:^|[\s,;/(-])us(?:[\s,;/)-]|$)/i;
+
+const US_STATE_NAMES = [
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware",
+  "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky",
+  "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi",
+  "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico",
+  "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania",
+  "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont",
+  "virginia", "washington", "west virginia", "wisconsin", "wyoming", "washington dc", "washington, d.c.",
+  "district of columbia",
+];
+const US_STATE_PATTERN = new RegExp(`\\b(${US_STATE_NAMES.map((s) => s.replace(/[.,]/g, "\\$&")).join("|")})\\b`, "i");
+
+// Countries and regions that mean "not the US" when named on their own.
+// "Georgia" (the US state vs. the country) is the one real ambiguity here;
+// US_MARKERS is checked first specifically so a listing that also names a US
+// state or "United States" resolves to `"us"` regardless.
+const NON_US_MARKERS =
+  /\b(india|canada|mexico|brazil|argentina|chile|colombia|peru|philippines|poland|germany|france|netherlands|spain|italy|ireland|united kingdom|\buk\b|australia|new zealand|singapore|japan|china|hong kong|taiwan|south korea|\bkorea\b|vietnam|indonesia|malaysia|thailand|pakistan|nigeria|kenya|egypt|israel|\buae\b|dubai|saudi arabia|romania|ukraine|portugal|sweden|norway|denmark|finland|switzerland|austria|belgium|czech|hungary|greece|turkey|russia|\bemea\b|\bapac\b|\blatam\b|international|worldwide|outside (the )?us\b)/i;
+
+/**
+ * Which country a remote seat has to sit in, when the posting's location
+ * field says. A bare "Remote" with no country resolves to `"unspecified"`,
+ * never assumed to be `"us"` — assuming would be exactly the guess the
+ * salary-floor logic refuses to make about an unpublished number.
+ */
+export function classifyRemoteRegion(rawLocation: string): RemoteRegion {
+  const stated = rawLocation.trim();
+  if (stated.length === 0) return "unspecified";
+  if (US_MARKERS.test(stated) || US_STATE_PATTERN.test(stated)) return "us";
+  if (NON_US_MARKERS.test(stated)) return "non-us";
+  return "unspecified";
 }
 
 export interface ParsedSalary {
@@ -225,6 +268,7 @@ export function toJobRecord(raw: RawPosting, options: NormalizeOptions): JobReco
   const text = stripBoilerplate(htmlToText(raw.body));
   const summary = truncateToBudget(text, options.tokenBudget);
   const locationClass = classifyLocation(raw.location, text);
+  const remoteRegion = classifyRemoteRegion(raw.location);
   const salary = parseSalary(text);
 
   return {
@@ -235,6 +279,7 @@ export function toJobRecord(raw: RawPosting, options: NormalizeOptions): JobReco
     company: raw.company.trim(),
     rawLocation: raw.location.trim(),
     locationClass,
+    remoteRegion,
     salaryMin: salary.min,
     salaryMax: salary.max,
     salaryCurrency: salary.currency,

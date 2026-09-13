@@ -144,6 +144,55 @@ test("a non-remote role is filtered before any model call", async () => {
   assert.equal(summary.costUsd, 0);
 });
 
+test("a remote role with no US option is filtered under usRemoteOnly, before any model call", async () => {
+  const store = new InMemoryJobStore();
+  const client = new FakeScoringClient(["[]"]);
+  const usRemotePrefs: Preferences = { ...prefs, usRemoteOnly: true };
+
+  const summary = await runPipeline({
+    sources: [source("greenhouse:acme", [posting({ location: "Remote - India" })])],
+    store,
+    prefs: usRemotePrefs,
+    profile,
+    scoringClient: client,
+    costLogPath: LEDGER,
+    politeDelay: false,
+  });
+
+  assert.equal(summary.filteredCount, 1);
+  assert.equal(client.requests.length, 0, "the model was never called");
+});
+
+test("a remote role that states a US option clears usRemoteOnly and reaches scoring", async () => {
+  const store = new InMemoryJobStore();
+  const usRemotePrefs: Preferences = { ...prefs, usRemoteOnly: true };
+
+  const client = new (class extends FakeScoringClient {
+    constructor() {
+      super([]);
+    }
+    async complete(request: Parameters<FakeScoringClient["complete"]>[0]) {
+      this.requests.push(request);
+      const ids = [...request.user.matchAll(/"id": "([^"]+)"/g)].map((match) => match[1]);
+      const body = ids.map((id) => `{"id":"${id}","score":90,"confidence":"high","rationale":"Good.","gaps":[]}`);
+      return { text: `[${body.join(",")}]`, usage: { inputTokens: 800, outputTokens: 100 } };
+    }
+  })();
+
+  const summary = await runPipeline({
+    sources: [source("greenhouse:acme", [posting({ location: "Remote - US" })])],
+    store,
+    prefs: usRemotePrefs,
+    profile,
+    scoringClient: client,
+    costLogPath: LEDGER,
+    politeDelay: false,
+  });
+
+  assert.equal(summary.filteredCount, 0);
+  assert.equal(summary.shortlisted.length, 1);
+});
+
 test("with no scoring client the run still discovers and says plainly why nothing was scored", async () => {
   const store = new InMemoryJobStore();
 

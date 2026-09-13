@@ -26,6 +26,15 @@ export interface RawPosting {
 export type LocationClass = "remote" | "hybrid" | "onsite" | "unknown";
 
 /**
+ * Which country a *remote* seat has to sit in, when the posting says. Only
+ * meaningful when `locationClass` is `"remote"` — an onsite role's country is
+ * just its location. `"unspecified"` means the posting named no country at
+ * all (a bare "Remote"); it is never treated as `"us"` by assumption, the
+ * same way an unpublished salary is never treated as adequate.
+ */
+export type RemoteRegion = "us" | "non-us" | "unspecified";
+
+/**
  * Where a posting is in the pipeline. Transitions are made by code, never by
  * a model: `seen` on first sight, `filtered` when a deterministic rule
  * rejected it, `scored` once a model has judged it, `shortlisted` above the
@@ -51,6 +60,8 @@ export interface JobRecord {
   readonly company: string;
   readonly rawLocation: string;
   readonly locationClass: LocationClass;
+  /** Only meaningful when `locationClass` is `"remote"`. See `RemoteRegion`. */
+  readonly remoteRegion: RemoteRegion;
   /** `null` means the posting did not state it. Never inferred, never averaged. */
   readonly salaryMin: number | null;
   readonly salaryMax: number | null;
@@ -141,6 +152,15 @@ export interface Preferences {
   readonly remoteOnly: boolean;
   /** Metro names that re-admit non-remote roles. Empty means remote-only, full stop. */
   readonly metros: readonly string[];
+  /**
+   * When true, a `remote` posting is rejected if it names a specific
+   * non-US country and no US option (`RemoteRegion` `"non-us"`) — e.g.
+   * "Remote - India" or "Remote - Netherlands". A posting naming no country
+   * at all (`"unspecified"`) is never rejected on this alone: the same
+   * "don't guess" rule that applies to an unstated salary applies here.
+   * Meaningless when `remoteOnly` is false.
+   */
+  readonly usRemoteOnly: boolean;
   readonly industryExclusions: readonly string[];
   readonly companyExclusions: readonly string[];
   /** Minimum score to reach the digest's main list. */
@@ -164,6 +184,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   salaryCurrency: "USD",
   remoteOnly: true,
   metros: [],
+  usRemoteOnly: false,
   industryExclusions: [],
   companyExclusions: [],
   scoreCutoff: 65,

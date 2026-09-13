@@ -12,6 +12,7 @@ function job(overrides: Partial<JobRecord> = {}): JobRecord {
     company: "Acme",
     rawLocation: "Remote",
     locationClass: "remote",
+    remoteRegion: "unspecified",
     salaryMin: null,
     salaryMax: null,
     salaryCurrency: null,
@@ -93,4 +94,47 @@ test("an industry exclusion matches on the posting body", () => {
   });
   assert.equal(outcome.passed, false);
   assert.match(outcome.reason ?? "", /Industry excluded/);
+});
+
+test("usRemoteOnly rejects a remote posting with a specific non-US region and no US option", () => {
+  const outcome = applyFilters(job({ rawLocation: "Remote - India", remoteRegion: "non-us" }), {
+    ...prefs,
+    usRemoteOnly: true,
+  });
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /not eligible from the US/);
+  assert.match(outcome.reason ?? "", /Remote - India/);
+});
+
+test("usRemoteOnly passes a remote posting that states a US region", () => {
+  const outcome = applyFilters(job({ rawLocation: "Remote - US", remoteRegion: "us" }), {
+    ...prefs,
+    usRemoteOnly: true,
+  });
+  assert.equal(outcome.passed, true);
+});
+
+test("usRemoteOnly never rejects on a guess — a bare Remote with no stated country still passes", () => {
+  const outcome = applyFilters(job({ rawLocation: "Remote", remoteRegion: "unspecified" }), {
+    ...prefs,
+    usRemoteOnly: true,
+  });
+  assert.equal(outcome.passed, true, "an unlabeled remote posting is not evidence it excludes the US");
+});
+
+test("usRemoteOnly has no effect on an onsite role — that's the plain remote-only gate's job", () => {
+  const outcome = applyFilters(job({ locationClass: "onsite", rawLocation: "Chicago, IL", remoteRegion: "unspecified" }), {
+    ...prefs,
+    usRemoteOnly: true,
+  });
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /Not remote/, "rejected for not being remote, not for region");
+});
+
+test("usRemoteOnly is a no-op when turned off, even on a non-US remote role", () => {
+  const outcome = applyFilters(job({ rawLocation: "Remote - India", remoteRegion: "non-us" }), {
+    ...prefs,
+    usRemoteOnly: false,
+  });
+  assert.equal(outcome.passed, true);
 });

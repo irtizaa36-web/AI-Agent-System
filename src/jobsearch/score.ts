@@ -70,7 +70,7 @@ export function buildSystemPrompt(profile: CandidateProfile, prefs: Preferences)
 ${targets}
 
 ## Location requirement
-${prefs.remoteOnly ? "Remote roles only." : "Remote or onsite."}${prefs.metros.length > 0 ? ` Onsite acceptable in: ${prefs.metros.join(", ")}.` : ""}
+${prefs.remoteOnly ? "Remote roles only." : "Remote or onsite."}${prefs.metros.length > 0 ? ` Onsite acceptable in: ${prefs.metros.join(", ")}.` : ""}${prefs.usRemoteOnly ? " Remote seat must be based in the US." : ""}
 
 ## Compensation floor
 ${floor}

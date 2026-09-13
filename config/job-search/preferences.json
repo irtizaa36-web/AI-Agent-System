@@ -14,6 +14,9 @@
   "metros": [],
   "_metros": "Remote-only is the hard gate, per the interview. Adding a metro here re-admits onsite and hybrid roles in that place.",
 
+  "usRemoteOnly": true,
+  "_usRemoteOnly": "Set per Irtiza's follow-up: US-remote, not remote-anywhere. Rejects a posting that names a specific non-US country/region with no US option (e.g. 'Remote - India', 'Remote - Netherlands'). A bare 'Remote' with no country stated still passes — never rejected on a guess, same rule as the salary floor.",
+
   "industryExclusions": [],
   "companyExclusions": [],
 

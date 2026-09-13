@@ -29,6 +29,11 @@ export function mergeSighting(existing: JobRecord, incoming: JobRecord): JobReco
     ...existing,
     lastSeenAt: incoming.lastSeenAt > existing.lastSeenAt ? incoming.lastSeenAt : existing.lastSeenAt,
     sources: [...existing.sources, ...addedSources],
+    // Same "prefer the more specific answer" rule as salary: a board that
+    // stated no country and one that named "Remote - US" describe the same
+    // role, and the specific answer wins regardless of which sighting arrived
+    // first.
+    remoteRegion: existing.remoteRegion !== "unspecified" ? existing.remoteRegion : incoming.remoteRegion,
     // A posting that first appeared without a salary and later states one is
     // new information worth keeping. The reverse — a stated salary being
     // replaced by null — is not, so nulls never overwrite a real figure.

@@ -16,6 +16,7 @@ function job(id: string, overrides: Partial<JobRecord> = {}): JobRecord {
     company: "Acme",
     rawLocation: "Remote",
     locationClass: "remote",
+    remoteRegion: "unspecified",
     salaryMin: null,
     salaryMax: null,
     salaryCurrency: null,
