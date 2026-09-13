@@ -7,6 +7,9 @@ import { JsonFileJobStore } from "../store/job-store";
 import { createScoringClientFromEnv } from "../jobsearch/scoring-client";
 import { readLedger } from "../jobsearch/cost";
 import { createJobsDashboardServer } from "../jobsearch/dashboard";
+import { createAlertMailSource } from "../jobsearch/sources/alert-mail";
+import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
+import type { Source } from "../jobsearch/sources/source";
 import {
   COST_LOG_PATH,
   DATA_DIR,
@@ -63,9 +66,12 @@ export async function runJobsCommand(args: readonly string[], deps: JobsCommandD
 async function runJobsRun(root: string, deps: JobsCommandDeps): Promise<number> {
   const prefs = await loadPreferences(root);
   const watchlist = await loadWatchlist(root);
+  const inkboxClient = createInkboxClientFromEnv();
 
-  if (watchlist.length === 0) {
-    deps.stderr("No sources configured. Add companies to config/job-search/watchlist.json and run again.");
+  if (watchlist.length === 0 && !inkboxClient) {
+    deps.stderr(
+      "No sources configured: config/job-search/watchlist.json is empty and Inkbox (for LinkedIn/Indeed alerts) is not set up. Add at least one.",
+    );
     return 1;
   }
 
@@ -89,8 +95,14 @@ async function runJobsRun(root: string, deps: JobsCommandDeps): Promise<number> 
   }
   if (profileMissing) deps.stderr(profileMissing);
 
+  // Adds LinkedIn/Indeed coverage via forwarded alert emails (ADR 0013,
+  // ADR 0015) when Inkbox is configured. Silently absent otherwise — never
+  // a half-configured source, same pattern as the scoring client above.
+  const sources: Source[] = [...sourcesFromWatchlist(watchlist)];
+  if (inkboxClient) sources.push(createAlertMailSource(inkboxClient));
+
   const summary = await runPipeline({
-    sources: sourcesFromWatchlist(watchlist),
+    sources,
     store: new JsonFileJobStore(join(root, DATA_DIR)),
     prefs,
     profile,
@@ -129,13 +141,21 @@ async function printLatestDigest(root: string, deps: JobsCommandDeps): Promise<n
 
 async function listSources(root: string, deps: JobsCommandDeps): Promise<number> {
   const watchlist = await loadWatchlist(root);
-  if (watchlist.length === 0) {
-    deps.stderr("No sources configured in config/job-search/watchlist.json.");
+  const sources: Source[] = [...sourcesFromWatchlist(watchlist)];
+
+  const inkboxClient = createInkboxClientFromEnv();
+  if (inkboxClient) {
+    sources.push(createAlertMailSource(inkboxClient));
+  } else {
+    deps.stdout("(LinkedIn/Indeed alert-mail source not checked — INKBOX_API_KEY/INKBOX_MAILBOX_ADDRESS not set)");
+  }
+
+  if (sources.length === 0) {
+    deps.stderr("No sources configured in config/job-search/watchlist.json, and Inkbox is not set up.");
     return 1;
   }
 
-  deps.stdout(`${watchlist.length} source(s) configured. Checking each...`);
-  const sources = sourcesFromWatchlist(watchlist);
+  deps.stdout(`${sources.length} source(s) configured. Checking each...`);
   let broken = 0;
 
   for (const source of sources) {

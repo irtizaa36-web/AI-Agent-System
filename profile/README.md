@@ -65,6 +65,49 @@ Two manual routes, both sanctioned by LinkedIn:
   export feature, no automation involved, and it is the better source for the
   Phase 2 accomplishment bank.
 
+## Getting LinkedIn (and Indeed) job listings into the automated digest
+
+This is a different thing from the section above — that one is about mining
+her profile once for source material; this is about the pipeline's own
+scheduled runs seeing LinkedIn/Indeed postings at all, twice a day, without
+anyone touching it. See ADR 0013 and ADR 0015 for the full reasoning; here's
+what actually needs doing, in order.
+
+1. **Sign up for Inkbox** (inkbox.ai or wherever their current signup is) and
+   get an API key and a mailbox address (something like
+   `yourname@inkboxmail.com`). This is a real third-party signup — nothing in
+   this repo can do it for you.
+2. **Put the two values in `.env`** (gitignored, never committed):
+   ```
+   INKBOX_API_KEY=...
+   INKBOX_MAILBOX_ADDRESS=yourname@inkboxmail.com
+   ```
+   Nothing else from `.env.example`'s Inkbox block is needed for this —
+   the pipeline only polls for mail twice a day, so the webhook
+   receiver/signing key (for real-time inbound push) can stay blank.
+3. **Confirm it's live**: `orchestrator jobs sources` will check the
+   `inkbox:alert-mail` source alongside the ATS boards once the two env vars
+   above are set, and report it healthy or broken by name.
+4. **Turn on LinkedIn's own Job Alerts** on her account for the searches that
+   matter to her (title + location, same as any saved LinkedIn search) — a
+   completely normal, sanctioned LinkedIn feature, not automation.
+5. **Forward those alert emails to the Inkbox address.** LinkedIn sends
+   alerts to whatever email is on her account, and doesn't let you redirect
+   them elsewhere directly — so this is a filter/forwarding rule set up in
+   *her real inbox* (Gmail: Settings → Filters and Blocked Addresses → new
+   filter, from `jobalerts-noreply@linkedin.com` → Forward to →
+   `yourname@inkboxmail.com`). Repeat for Indeed's own job-alert sender if
+   she wants that coverage too.
+6. **Check the first real batch by hand.** The email-parsing logic
+   (`src/jobsearch/sources/alert-mail.ts`) was built from the publicly known
+   general shape of a LinkedIn alert, not a captured real sample — it is
+   honest about that in its own code comments. Once real alerts start
+   arriving, look at what `orchestrator jobs run` actually extracted from
+   the first one or two and compare against the source email. If titles,
+   companies, or locations come out wrong or blank, that's the parser
+   needing a real fixture to tune against — not a sign the whole approach
+   is broken.
+
 ## What must never go here
 
 API keys, passwords, or browser session state. Credentials live in `.env`;
