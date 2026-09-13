@@ -22,6 +22,22 @@ The response states whether bearer authentication is required but never reveals 
 
 Use the health endpoint and `launchctl print gui/<uid>/com.aiagentsystem.inkbox-webhook` for read-only inspection. A service update requires human review because it may change a live process using real communication credentials.
 
+## Job-search pipeline: texting the digest
+
+Off by default. Turning it on for real requires all four values in
+`.env.example`'s "texting the daily digest" block, and — separately from
+anything this repo can configure — the destination number recorded as
+opted in through Inkbox directly (Inkbox's own `smsOptIns.optIn`, which
+itself needs an active 10DLC campaign on the account). See ADR 0016 for
+why this is three independent gates rather than one, and
+`src/jobsearch/sms-client.ts` for what each failure mode actually reports.
+
+`orchestrator jobs run` sends the text as its last step, after the digest
+file is already written — a failed or skipped text never fails the run
+itself. Check `INKBOX_SMS_PHONE_NUMBER_ID` against the phone number
+actually assigned to this identity in Inkbox before assuming it's right;
+nothing here can look that value up on its own.
+
 ## Dashboard and coworker loop
 
 The dashboard is local-only and starts with:

@@ -1,0 +1,241 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { applyFilters, salaryUnknown } from "./filter";
+import { DEFAULT_PREFERENCES, type JobRecord, type Preferences } from "./records";
+
+function job(overrides: Partial<JobRecord> = {}): JobRecord {
+  return {
+    id: "job-1",
+    contentHash: "hash-1",
+    identityKey: "acme::marketing manager::remote",
+    title: "Marketing Manager",
+    company: "Acme",
+    rawLocation: "Remote",
+    locationClass: "remote",
+    remoteRegion: "unspecified",
+    salaryMin: null,
+    salaryMax: null,
+    salaryCurrency: null,
+    postedAt: null,
+    experienceYearsMin: null,
+    experienceYearsMax: null,
+    firstSeenAt: "2026-09-13T08:00:00.000Z",
+    lastSeenAt: "2026-09-13T08:00:00.000Z",
+    sources: [],
+    applyUrl: "https://a.test/1",
+    descriptionPath: "/tmp/1.html",
+    summary: "Own demand generation for the growth team.",
+    state: "seen",
+    filterReason: null,
+    score: null,
+    confidence: null,
+    rationale: null,
+    gaps: [],
+    ...overrides,
+  };
+}
+
+const prefs: Preferences = { ...DEFAULT_PREFERENCES, titles: ["marketing manager", "growth manager"] };
+
+test("a remote role with a matching title passes", () => {
+  assert.equal(applyFilters(job(), prefs).passed, true);
+});
+
+test("a title outside the cluster is rejected before any model call", () => {
+  const outcome = applyFilters(job({ title: "Staff Backend Engineer" }), prefs);
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /outside the target cluster/);
+});
+
+test("an empty titles list lets everything through rather than rejecting the whole market", () => {
+  const outcome = applyFilters(job({ title: "Staff Backend Engineer" }), { ...prefs, titles: [] });
+  assert.equal(outcome.passed, true);
+});
+
+test("an onsite role is rejected under remote-only", () => {
+  const outcome = applyFilters(job({ locationClass: "onsite", rawLocation: "Chicago, IL" }), prefs);
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /Not remote/);
+});
+
+test("a named metro re-admits an onsite role", () => {
+  const outcome = applyFilters(job({ locationClass: "onsite", rawLocation: "Chicago, IL" }), {
+    ...prefs,
+    metros: ["Chicago"],
+  });
+  assert.equal(outcome.passed, true);
+});
+
+test("a posting below the stated salary floor is rejected with the numbers in the reason", () => {
+  const outcome = applyFilters(job({ salaryMin: 70000, salaryMax: 80000, salaryCurrency: "USD" }), {
+    ...prefs,
+    salaryFloor: 120000,
+  });
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /80,000/);
+  assert.match(outcome.reason ?? "", /120,000/);
+});
+
+test("a posting that states NO salary passes the floor and is flagged unknown, never guessed", () => {
+  const record = job();
+  const outcome = applyFilters(record, { ...prefs, salaryFloor: 120000 });
+
+  assert.equal(outcome.passed, true, "silence about pay is not evidence of low pay");
+  assert.equal(salaryUnknown(record), true);
+});
+
+test("an excluded title and an excluded company are both rejected", () => {
+  assert.equal(applyFilters(job({ title: "Marketing Manager Intern" }), prefs).passed, false);
+  assert.equal(applyFilters(job(), { ...prefs, companyExclusions: ["Acme Inc."] }).passed, false);
+});
+
+test("an industry exclusion matches on the posting body", () => {
+  const outcome = applyFilters(job({ summary: "Own demand gen for our sports betting brand." }), {
+    ...prefs,
+    industryExclusions: ["sports betting"],
+  });
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /Industry excluded/);
+});
+
+test("usRemoteOnly rejects a remote posting with a specific non-US region and no US option", () => {
+  const outcome = applyFilters(job({ rawLocation: "Remote - India", remoteRegion: "non-us" }), {
+    ...prefs,
+    usRemoteOnly: true,
+  });
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /not eligible from the US/);
+  assert.match(outcome.reason ?? "", /Remote - India/);
+});
+
+test("usRemoteOnly passes a remote posting that states a US region", () => {
+  const outcome = applyFilters(job({ rawLocation: "Remote - US", remoteRegion: "us" }), {
+    ...prefs,
+    usRemoteOnly: true,
+  });
+  assert.equal(outcome.passed, true);
+});
+
+test("usRemoteOnly never rejects on a guess — a bare Remote with no stated country still passes", () => {
+  const outcome = applyFilters(job({ rawLocation: "Remote", remoteRegion: "unspecified" }), {
+    ...prefs,
+    usRemoteOnly: true,
+  });
+  assert.equal(outcome.passed, true, "an unlabeled remote posting is not evidence it excludes the US");
+});
+
+test("usRemoteOnly has no effect on an onsite role — that's the plain remote-only gate's job", () => {
+  const outcome = applyFilters(job({ locationClass: "onsite", rawLocation: "Chicago, IL", remoteRegion: "unspecified" }), {
+    ...prefs,
+    usRemoteOnly: true,
+  });
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /Not remote/, "rejected for not being remote, not for region");
+});
+
+test("usRemoteOnly is a no-op when turned off, even on a non-US remote role", () => {
+  const outcome = applyFilters(job({ rawLocation: "Remote - India", remoteRegion: "non-us" }), {
+    ...prefs,
+    usRemoteOnly: false,
+  });
+  assert.equal(outcome.passed, true);
+});
+
+// The level cap Irtiza asked for after reviewing the first real digest: cap
+// at Senior/current level by rejecting a step above it. These are the exact
+// two titles that made him ask for it, plus a check that Senior itself
+// still passes.
+const levelCapPrefs: Preferences = {
+  ...prefs,
+  titleExclusions: ["intern", "internship", "co-op", "contractor", "temporary", "principal", "director", "vp", "president", "head of", "chief"],
+};
+
+test("the level cap rejects the two real Principal-level roles that prompted it", () => {
+  const gitlabRole = job({ title: "Principal Program Manager, Go-To-Market" });
+  const snowflakeRole = job({ title: "Principal Business Operations Manager, Ops & AI Tooling" });
+
+  assert.equal(applyFilters(gitlabRole, levelCapPrefs).passed, false);
+  assert.equal(applyFilters(snowflakeRole, levelCapPrefs).passed, false);
+});
+
+test("the level cap leaves Senior — her current level — untouched", () => {
+  const outcome = applyFilters(job({ title: "Senior Marketing Manager" }), levelCapPrefs);
+  assert.equal(outcome.passed, true);
+});
+
+test("the level cap also catches Director, VP (and its SVP/EVP/AVP variants), and Chief", () => {
+  for (const title of ["Director of Marketing", "VP, Marketing", "SVP, Marketing", "Chief Marketing Officer"]) {
+    assert.equal(applyFilters(job({ title }), levelCapPrefs).passed, false, `expected "${title}" to be rejected`);
+  }
+});
+
+test('the level cap catches "Vice President" spelled out, via the "president" entry', () => {
+  assert.equal(applyFilters(job({ title: "Vice President, Marketing" }), levelCapPrefs).passed, false);
+});
+
+// Experience-years band, per Shivani's feedback: her resume shows 5 years,
+// and she wants roles asking for 3-6 years — not a step up in seniority
+// requirement, and not a step down into entry-level.
+const experiencePrefs: Preferences = { ...prefs, experienceYearsFloor: 3, experienceYearsCeiling: 6 };
+
+test("a posting wanting more experience than the ceiling is rejected", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: 8, experienceYearsMax: null }), experiencePrefs);
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /8\+ years.*above the 6-year ceiling/);
+});
+
+test("a posting wanting less experience than the floor is rejected", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: 0, experienceYearsMax: 1 }), experiencePrefs);
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /at most 1 years.*below the 3-year floor/);
+});
+
+test("a posting whose range overlaps her band at all survives — this is an overlap check, not an exact match", () => {
+  // "3-8 years" overlaps [3,6] even though 8 is above her ceiling — someone
+  // wanting a floor of 3 would still consider a 5-year candidate.
+  assert.equal(applyFilters(job({ experienceYearsMin: 3, experienceYearsMax: 8 }), experiencePrefs).passed, true);
+});
+
+test("a posting stating no years requirement at all is never rejected — same rule as the salary floor", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: null, experienceYearsMax: null }), experiencePrefs);
+  assert.equal(outcome.passed, true, "silence about years is not evidence of a mismatch");
+});
+
+test("the experience band is a no-op when neither floor nor ceiling is configured", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: 15, experienceYearsMax: null }), prefs);
+  assert.equal(outcome.passed, true);
+});
+
+// Recency, per Shivani's feedback: surface recently posted roles.
+test("a posting older than the age limit is rejected, with its age in the reason", () => {
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  const outcome = applyFilters(
+    job({ postedAt: "2026-08-01T00:00:00.000Z" }),
+    { ...prefs, maxPostingAgeDays: 14 },
+    now,
+  );
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /43 days ago, older than the 14-day limit/);
+});
+
+test("a posting within the age limit passes", () => {
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  const outcome = applyFilters(
+    job({ postedAt: "2026-09-10T00:00:00.000Z" }),
+    { ...prefs, maxPostingAgeDays: 14 },
+    now,
+  );
+  assert.equal(outcome.passed, true);
+});
+
+test("a posting with no stated date is never rejected by the age limit — same 'don't guess' rule", () => {
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  const outcome = applyFilters(job({ postedAt: null }), { ...prefs, maxPostingAgeDays: 14 }, now);
+  assert.equal(outcome.passed, true);
+});
+
+test("the age limit is a no-op when not configured", () => {
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  const outcome = applyFilters(job({ postedAt: "2020-01-01T00:00:00.000Z" }), prefs, now);
+  assert.equal(outcome.passed, true);
+});

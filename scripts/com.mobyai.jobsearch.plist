@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Job-search pipeline, once daily at 10:00 AM Central, Monday-Friday only.
+
+  launchd's StartCalendarInterval fires on the Mac's LOCAL system clock, not
+  a fixed UTC offset — so "10:00" below means 10:00 AM CST in the winter and
+  10:00 AM CDT in the summer automatically, correctly tracking the DST
+  switch, PROVIDED the Mac mini's system timezone is actually set to a US
+  Central zone (System Settings -> General -> Date & Time -> Time Zone;
+  "Chicago" or "Set time zone automatically" from a Central-time location).
+  If the machine is ever set to a different timezone, this fires at 10:00 in
+  THAT zone instead — check `date` on the machine if the fire time ever
+  looks wrong.
+
+  Weekday 1-5 = Monday-Friday (launchd convention: 0 and 7 both mean Sunday).
+  Five separate dictionaries below because StartCalendarInterval's Weekday
+  key takes one integer each, not a range.
+
+  Install:
+    1. Edit REPO_PATH below to the absolute path of this repository.
+    2. cp scripts/com.mobyai.jobsearch.plist ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.mobyai.jobsearch.plist
+    4. launchctl start com.mobyai.jobsearch     (to test it immediately)
+
+  Check on it:
+    launchctl list | grep mobyai
+    tail -f REPO_PATH/logs/jobsearch.out
+
+  The run is idempotent, so a missed or repeated firing is harmless — every
+  posting is content-hashed and anything already seen costs nothing.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mobyai.jobsearch</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd REPO_PATH &amp;&amp; /usr/bin/env npm run pipeline</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>1</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>2</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>3</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>4</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>0</integer>
+      <key>Weekday</key><integer>5</integer>
+    </dict>
+  </array>
+
+  <key>StandardOutPath</key>
+  <string>REPO_PATH/logs/jobsearch.out</string>
+  <key>StandardErrorPath</key>
+  <string>REPO_PATH/logs/jobsearch.err</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
