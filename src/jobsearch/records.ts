@@ -165,6 +165,14 @@ export interface Preferences {
   readonly companyExclusions: readonly string[];
   /** Minimum score to reach the digest's main list. */
   readonly scoreCutoff: number;
+  /**
+   * Points subtracted from a role's DISPLAY-ORDER rank (never from its
+   * stored `score`, and never from whether it clears `scoreCutoff`) when it
+   * doesn't state a salary. Nudges pay-transparent roles toward the top of
+   * the digest without excluding or re-scoring the rest — per Irtiza's
+   * "de-prioritize, don't exclude" call.
+   */
+  readonly unstatedSalaryRankPenalty: number;
   /** How many roles the digest shows before collapsing the rest into "also seen". */
   readonly digestLimit: number;
   /** Token budget per posting handed to the scorer. */
@@ -188,6 +196,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   industryExclusions: [],
   companyExclusions: [],
   scoreCutoff: 65,
+  unstatedSalaryRankPenalty: 8,
   digestLimit: 8,
   postingTokenBudget: 600,
   scoringBatchSize: 15,

@@ -138,3 +138,35 @@ test("usRemoteOnly is a no-op when turned off, even on a non-US remote role", ()
   });
   assert.equal(outcome.passed, true);
 });
+
+// The level cap Irtiza asked for after reviewing the first real digest: cap
+// at Senior/current level by rejecting a step above it. These are the exact
+// two titles that made him ask for it, plus a check that Senior itself
+// still passes.
+const levelCapPrefs: Preferences = {
+  ...prefs,
+  titleExclusions: ["intern", "internship", "co-op", "contractor", "temporary", "principal", "director", "vp", "president", "head of", "chief"],
+};
+
+test("the level cap rejects the two real Principal-level roles that prompted it", () => {
+  const gitlabRole = job({ title: "Principal Program Manager, Go-To-Market" });
+  const snowflakeRole = job({ title: "Principal Business Operations Manager, Ops & AI Tooling" });
+
+  assert.equal(applyFilters(gitlabRole, levelCapPrefs).passed, false);
+  assert.equal(applyFilters(snowflakeRole, levelCapPrefs).passed, false);
+});
+
+test("the level cap leaves Senior — her current level — untouched", () => {
+  const outcome = applyFilters(job({ title: "Senior Marketing Manager" }), levelCapPrefs);
+  assert.equal(outcome.passed, true);
+});
+
+test("the level cap also catches Director, VP (and its SVP/EVP/AVP variants), and Chief", () => {
+  for (const title of ["Director of Marketing", "VP, Marketing", "SVP, Marketing", "Chief Marketing Officer"]) {
+    assert.equal(applyFilters(job({ title }), levelCapPrefs).passed, false, `expected "${title}" to be rejected`);
+  }
+});
+
+test('the level cap catches "Vice President" spelled out, via the "president" entry', () => {
+  assert.equal(applyFilters(job({ title: "Vice President, Marketing" }), levelCapPrefs).passed, false);
+});

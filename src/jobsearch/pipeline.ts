@@ -5,6 +5,7 @@ import { jitter, mapWithConcurrency } from "./sources/source";
 import { toJobRecord } from "./normalize";
 import { dedupe } from "./dedupe";
 import { applyFilters } from "./filter";
+import { sortByRank } from "./rank";
 import { scoreRecords, type CandidateProfile } from "./score";
 import type { ScoringClient } from "./scoring-client";
 import { CostLedger } from "./cost";
@@ -112,8 +113,10 @@ export async function runPipeline(deps: PipelineDeps): Promise<RunSummary> {
 
   await deps.store.saveJobs([...scored, ...unscored, ...rejected, ...merged]);
 
-  // Stage 9 — rank and cut.
-  const ranked = [...scored].sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+  // Stage 9 — rank and cut. The cutoff compares the model's actual score;
+  // the sort order is a separate, tunable display concern (rank.ts) — a role
+  // with no stated salary is never excluded by it, only shown lower.
+  const ranked = sortByRank(scored, deps.prefs);
   const aboveCutoff = ranked.filter((record) => (record.score ?? 0) >= deps.prefs.scoreCutoff);
   const shortlisted = aboveCutoff.slice(0, deps.prefs.digestLimit);
   const alsoSeen = ranked.filter((record) => !shortlisted.includes(record));

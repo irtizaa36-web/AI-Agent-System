@@ -19,7 +19,8 @@
   ],
   "_titles": "Merged from her resume (Marketing Program Manager, Vendor Manager) and her own ChatGPT-suggested title list. An earlier draft dropped the bare 'program manager' on the theory that it matched irrelevant Technical/Federal PM postings too — true, but re-checked against a live run and reversed: title matching runs BEFORE the location/salary filters, so an irrelevant onsite match costs nothing in tokens, it's rejected before any model call. Removing it had a real cost with no real saving: it silently dropped two genuinely good GitLab matches ('Senior Program Manager, Enterprise Technology & AI', 'Principal Program Manager, Go-To-Market') whose titles don't contain any of the more specific phrases below, because substring matching is literal and word order varies. Kept broad on purpose now.",
 
-  "titleExclusions": ["intern", "internship", "co-op", "contractor", "temporary"],
+  "titleExclusions": ["intern", "internship", "co-op", "contractor", "temporary", "principal", "director", "vp", "president", "head of", "chief"],
+  "_titleExclusions": "Caps the search at Senior/current level, per Irtiza's review of the first real digest: 'principal'/'director'/'vp'/'president'/'head of'/'chief' reject a step-above-current-level title (this substring-catches 'SVP'/'EVP'/'AVP' too via 'vp', and 'vice president' via 'president'). This is what removed the two Principal-level GitLab/Snowflake roles from that digest ('Principal Program Manager, Go-To-Market', 'Principal Business Operations Manager, Ops & AI Tooling'). 'Senior' is deliberately NOT excluded — that's her current level.",
 
   "salaryFloor": 120000,
   "_salaryFloor": "Set to $120,000. A posting that states no salary is NEVER rejected by this — it passes, flagged as unknown, and the scorer is told.",
@@ -36,6 +37,8 @@
   "companyExclusions": [],
 
   "scoreCutoff": 65,
+  "unstatedSalaryRankPenalty": 8,
+  "_unstatedSalaryRankPenalty": "Per Irtiza: de-prioritize roles with no stated salary, don't exclude them. Subtracted from a role's DISPLAY-ORDER rank only — never from the score shown, and never from whether it clears scoreCutoff — so a strong unstated-pay match still beats a weak stated-pay one, but two close scores now favor the one that's pay-transparent. 0 disables this.",
   "digestLimit": 8,
 
   "postingTokenBudget": 600,
