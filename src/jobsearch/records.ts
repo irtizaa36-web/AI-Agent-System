@@ -134,7 +134,7 @@ export interface CompanyRecord {
   readonly enrichmentTtlDays: number;
 }
 
-/** One entry in config/job-search/watchlist.json. */
+/** One entry in a profile's config/job-search/<profile>/watchlist.json. */
 export interface WatchlistEntry {
   readonly company: string;
   readonly atsType: AtsType;
@@ -142,7 +142,7 @@ export interface WatchlistEntry {
   readonly boardToken: string;
 }
 
-/** config/job-search/preferences.json — the deterministic filters, as data. */
+/** config/job-search/<profile>/preferences.json — the deterministic filters, as data. */
 export interface Preferences {
   /** The target title cluster. A posting must match one of these to survive stage 6. */
   readonly titles: readonly string[];

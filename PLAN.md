@@ -64,7 +64,7 @@ The rule this table enforces: **a model is allowed only where judgment or langua
 
 ## 4. Data model
 
-Three record types, persisted as JSON files under `.orchestrator/jobs/` (already gitignored), following the same one-file-per-record shape as the existing `JsonFileRunStore`.
+Three record types, persisted as JSON files under `.orchestrator/jobs/<key>/` (already gitignored), following the same one-file-per-record shape as the existing `JsonFileRunStore`.
 
 ### JobRecord
 | Field | Type | Notes |
@@ -117,19 +117,19 @@ src/jobsearch/
   health.ts                # per-source health ledger, degrade-don't-crash
   cost.ts                  # logs/costs.jsonl ledger
 src/store/job-store.ts     # JobRecord / ApplicationRecord / CompanyRecord
-src/cli/jobs-commands.ts   # orchestrator jobs run | digest | sources | status
-config/job-search/
+src/cli/jobs-commands.ts   # orchestrator jobs run | digest | sources | profiles
+config/job-search/<key>/   # one directory per person (ADR 0017)
   preferences.json         # titles, comp floor, exclusions, score cutoff  (committed)
   watchlist.json           # 20-50 companies + ATS type + board token      (committed)
-profile/                   # GITIGNORED — resume.md, accomplishments.json
-.orchestrator/jobs/        # GITIGNORED — records, raw HTML, digests
+profile/<key>/             # GITIGNORED — resume.md, accomplishments.json
+.orchestrator/jobs/<key>/  # GITIGNORED — records, raw HTML, digests
 logs/costs.jsonl           # GITIGNORED — per-run cost ledger
 scripts/com.mobyai.jobsearch.plist   # launchd schedule
 ```
 
 Tests colocated as `*.test.ts`, run by the existing `npm test` (`node --test` over `dist/`). Every pure stage (normalize, dedupe, filter, truncate, score-parse, digest) is unit-testable with zero network and zero model calls — which is most of the system.
 
-**Runtime schedule:** `launchd` fires `npm run pipeline` at 08:00 and 18:00 local. The run is idempotent and safe to re-execute; re-running the same day costs near zero because the content-hash delta finds nothing new. `npm run pipeline` reproduces a full run by hand at any time.
+**Runtime schedule:** `launchd` fires `npm run pipeline -- --all` once a day at 10:00 local, Monday to Friday, running every configured profile in turn against its own config and its own data. The run is idempotent and safe to re-execute; re-running the same day costs near zero because the content-hash delta finds nothing new. `npm run pipeline -- --profile <key>` reproduces one person's run by hand at any time.
 
 ---
 
@@ -141,7 +141,7 @@ Sources (Greenhouse + Lever + Ashby + RSS feeds + watchlist) → normalize → h
 *Deliberately excluded from Phase 1:* no enrichment, no tailoring, no browser, no outreach. **No large model in the steady-state path at all** — Haiku produces the score, the confidence, and the two-line rationale in the same batched call, which is exactly what the definition of done asks for and keeps a run at a few cents.
 
 ### Phase 2 — materials and enrichment
-Company enrichment cache; salary signals; PDF resume parsed once into `profile/resume.md`; accomplishment-bank-driven resume variants and cover letters via `claude-opus-5`, human-triggered from the dashboard, never scheduled; the daily approval queue.
+Company enrichment cache; salary signals; PDF resume parsed once into `profile/<key>/resume.md`; accomplishment-bank-driven resume variants and cover letters via `claude-opus-5`, human-triggered from the dashboard, never scheduled; the daily approval queue.
 
 ### Phase 3 — browser prefill
 Playwright form prefill on shortlisted roles, reusing the existing gated form-filling tools (ADR 0011): list fields → preview-fill → **stop**. Submission stays a human click, always. Needs `npx playwright install` once.
@@ -189,7 +189,7 @@ The seven things holding that line: never re-process a posting (content hash); r
 
 **Q2 — Inputs I don't have yet.** The 3-6 target titles; the compensation floor number; the 20-50 watchlist companies (or say the word and I'll propose a starter list from her resume and her stated targets for you to approve); any industry exclusions. Phase 1 ships with these as config files, so they can land after the code — but the first real digest is only as good as they are.
 
-**Q3 — The PDF.** Nothing in Node's standard library reads PDF, and adding a parser means breaking the zero-dependency ADR for a file we convert exactly once. I propose a one-time human-assisted conversion into `profile/resume.md`, cached forever, with the accomplishment bank imported as-is. Tell me if you'd rather I add a parser.
+**Q3 — The PDF.** Nothing in Node's standard library reads PDF, and adding a parser means breaking the zero-dependency ADR for a file we convert exactly once. I propose a one-time human-assisted conversion into `profile/<key>/resume.md`, cached forever, with the accomplishment bank imported as-is. Tell me if you'd rather I add a parser.
 
 **Q4 — Dashboard placement.** A new "Jobs" section inside the existing dashboard at `src/dashboard/`, or a separate server on its own port? I'd add it to the existing one.
 
@@ -213,6 +213,6 @@ Three things differ from what is written above, each for a reason found while bu
 2. **`ScoringClient` is a new port** rather than a reuse of the orchestrator's `ModelProvider`, which exposes neither token usage nor prompt caching — both of which this pipeline needs. Reasoning in ADR 0014.
 3. **Location classification gives the employer's stated location precedence over the description prose.** Found by running against real boards: Figma's product copy ("work together from anywhere in the world") was promoting an onsite Tel Aviv role into a remote-only search.
 
-Still open from Q1-Q5: the API key is configured and verified; the titles, salary floor and watchlist (Q2) are still placeholders in `config/job-search/`; the resume (Q3) still needs its one-time conversion into `profile/resume.md`; Q4 is answered above; Q5 defaults to 90 days and is a config value.
+Still open from Q1-Q5: the API key is configured and verified; the titles, salary floor and watchlist (Q2) are still placeholders in `config/job-search/<key>/`; the resume (Q3) still needs its one-time conversion into `profile/<key>/resume.md`; Q4 is answered above; Q5 defaults to 90 days and is a config value.
 
 **Cadence changed from the original "twice daily" answer to Q13**: Irtiza later asked for once a day, weekdays only, at 10:00 AM Central — `scripts/com.mobyai.jobsearch.plist` is the current source of truth for the actual schedule; treat any "twice a day" language elsewhere in this document or in ADR 0014/0015 as describing the cadence at the time each was written, not the live schedule.

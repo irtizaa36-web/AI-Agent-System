@@ -1,14 +1,26 @@
-# profile/ — her actual data, never committed
+# profile/ — real personal data, never committed
 
 Everything in this folder except this README is gitignored. That is deliberate:
 this is the one place in the repository that holds real personal data, and it
 stays on the machine that runs the pipeline.
 
+## One subdirectory per person
+
+Each job search has its own profile key, and the files below live under
+`profile/<key>/` — `profile/shivani/resume.md`, `profile/irtiza/resume.md`, and
+so on. Nothing loads from `profile/` directly, and no code path can read one
+person's resume while scoring another's postings: the profile key is a required
+argument everywhere (ADR 0017). The matching config lives in
+`config/job-search/<key>/` and the run's own state in `.orchestrator/jobs/<key>/`.
+
+The rest of this file describes what goes in one person's subdirectory. Paths
+are written as `profile/<key>/…`; substitute the actual key.
+
 ## What goes here
 
 ### `resume.md` (required for scoring)
 
-Her base resume as Markdown. The pipeline reads it once per run and sends it to
+The base resume as Markdown. The pipeline reads it once per run and sends it to
 Anthropic's API as the cached prefix of the scoring prompt — nowhere else, and
 no other third party.
 
@@ -16,9 +28,10 @@ The base resume is a PDF, and Node has no built-in PDF reader. Rather than add
 a parsing dependency for a file that gets converted exactly once, convert it by
 hand and save the result here:
 
-- Easiest: open the PDF, select all, paste into `profile/resume.md`, fix the
-  headings. Five minutes, once.
-- Or, with poppler installed: `pdftotext -layout resume.pdf profile/resume.md`
+- Easiest: open the PDF, select all, paste into `profile/<key>/resume.md`, fix
+  the headings. Five minutes, once.
+- Or, with poppler installed:
+  `pdftotext -layout resume.pdf profile/<key>/resume.md`
 
 Formatting does not need to be pretty. The scorer reads it as text; what matters
 is that every real role, employer, date and metric is present and accurate.
@@ -28,15 +41,15 @@ says plainly in the digest that nothing was scored and why.
 
 ### `accomplishments.json` (Phase 2)
 
-Her existing structured accomplishment bank. Not read yet; Phase 2's resume
+An existing structured accomplishment bank. Not read yet; Phase 2's resume
 tailoring and cover letters draw from it, and from nothing else, so that every
-tailored bullet traces back to something she actually did.
+tailored bullet traces back to something they actually did.
 
 ### `notes.md` (optional)
 
-Anything about what she wants that is not a mechanical filter — the kind of team
-she does well on, what she is trying to move away from, a company she would drop
-everything for. It is appended to the scoring prompt as her own words.
+Anything wanted that is not a mechanical filter — the kind of team they do well
+on, what they are trying to move away from, a company they would drop everything
+for. It is appended to the scoring prompt in their own words.
 
 Its contents are pasted **verbatim** into the scoring prompt, so treat it the
 way you'd treat the resume: facts only, and nothing half-written left sitting in
@@ -44,8 +57,8 @@ it. `notes.template.md` exists for exactly that reason — draft there, then
 rename to `notes.md` when it's real.
 
 Mechanical constraints (titles, salary floor, excluded industries) do **not**
-belong here — those go in `config/job-search/preferences.json`, where they run
-as free code filters before any model call.
+belong here — those go in `config/job-search/<key>/preferences.json`, where they
+run as free code filters before any model call.
 
 ## Getting LinkedIn content in
 
@@ -86,7 +99,7 @@ reasoning; here's what actually needs doing, in order.
    the pipeline only polls for mail once per scheduled run (see
    `scripts/com.mobyai.jobsearch.plist` for the actual cadence), so the
    webhook receiver/signing key (for real-time inbound push) can stay blank.
-3. **Confirm it's live**: `orchestrator jobs sources` will check the
+3. **Confirm it's live**: `orchestrator jobs sources --profile <key>` will check the
    `inkbox:alert-mail` source alongside the ATS boards once the two env vars
    above are set, and report it healthy or broken by name.
 4. **Turn on LinkedIn's own Job Alerts** on her account for the searches that

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Job-search pipeline, once daily at 10:00 AM Central, Monday-Friday only.
+  Runs every configured profile via the "all profiles" flag: currently
+  shivani and irtiza, each with its own config, data and digest. ADR 0017.
 
   launchd's StartCalendarInterval fires on the Mac's LOCAL system clock, not
   a fixed UTC offset — so "10:00" below means 10:00 AM CST in the winter and
@@ -38,7 +40,7 @@
   <array>
     <string>/bin/bash</string>
     <string>-lc</string>
-    <string>cd REPO_PATH &amp;&amp; /usr/bin/env npm run pipeline</string>
+    <string>cd REPO_PATH &amp;&amp; /usr/bin/env npm run pipeline -- --all</string>
   </array>
 
   <key>StartCalendarInterval</key>

@@ -13,8 +13,12 @@ import type { Source } from "../jobsearch/sources/source";
 import { createSmsClientFromEnv, SmsRecipientBlockedError } from "../jobsearch/sms-client";
 import { formatDigestSms } from "../jobsearch/digest-sms";
 import {
+  assertValidProfile,
+  CONFIG_ROOT,
+  configDirFor,
   COST_LOG_PATH,
-  DATA_DIR,
+  dataDirFor,
+  listProfiles,
   loadPreferences,
   loadProfile,
   loadWatchlist,
@@ -36,53 +40,136 @@ export interface JobsCommandDeps {
 }
 
 const USAGE = [
-  "jobs subcommands:",
-  "  run              Fetch, dedupe, filter, score, and write today's digest",
-  "  digest           Print the most recent digest without running the pipeline",
-  "  sources          List the configured sources and check each one's health",
-  "  costs            Show what recent runs have cost",
-  "  dashboard        Serve the local review queue (default port 8899)",
+  "jobs subcommands (every one takes --profile <name>, or --all where noted):",
+  "  run --profile <name>|--all   Fetch, dedupe, filter, score, and write today's digest",
+  "  digest --profile <name>      Print the most recent digest without running the pipeline",
+  "  sources --profile <name>     List the configured sources and check each one's health",
+  "  costs                        Show what recent runs have cost (shared ledger)",
+  "  profiles                     List every configured profile",
+  "  dashboard --profile <name>   Serve the local review queue (default port 8899)",
+  "",
+  "Two people search through this one pipeline and their data never mixes —",
+  "there is no default profile on purpose. See ADR 0017.",
 ].join("\n");
+
+/** Reads `--profile <name>` out of an argument list. Absent is a real answer (undefined), not a guess. */
+export function parseProfileFlag(args: readonly string[]): string | undefined {
+  const index = args.indexOf("--profile");
+  if (index === -1) return undefined;
+  const value = args[index + 1];
+  return value && !value.startsWith("--") ? value : undefined;
+}
+
+/**
+ * Resolves which profiles a command should act on. Deliberately refuses to
+ * pick one for you: with two real people's searches in one repo, guessing
+ * wrong means showing or writing the wrong person's data.
+ */
+async function resolveProfiles(
+  args: readonly string[],
+  root: string,
+  deps: JobsCommandDeps,
+  allowAll: boolean,
+): Promise<readonly string[] | undefined> {
+  const known = await listProfiles(root);
+
+  if (allowAll && args.includes("--all")) {
+    if (known.length === 0) {
+      deps.stderr(`No profiles configured. Create ${CONFIG_ROOT}/<name>/preferences.json first.`);
+      return undefined;
+    }
+    return known;
+  }
+
+  const requested = parseProfileFlag(args);
+  if (!requested) {
+    deps.stderr(
+      `Which profile? Pass --profile <name>${allowAll ? " or --all" : ""}. ` +
+        (known.length > 0 ? `Configured: ${known.join(", ")}.` : `None configured yet under ${CONFIG_ROOT}/.`),
+    );
+    return undefined;
+  }
+
+  try {
+    assertValidProfile(requested);
+  } catch (error) {
+    deps.stderr(error instanceof Error ? error.message : String(error));
+    return undefined;
+  }
+
+  if (!known.includes(requested)) {
+    deps.stderr(
+      `No profile named "${requested}". ` +
+        (known.length > 0 ? `Configured: ${known.join(", ")}.` : `None configured yet under ${CONFIG_ROOT}/.`),
+    );
+    return undefined;
+  }
+
+  return [requested];
+}
 
 export async function runJobsCommand(args: readonly string[], deps: JobsCommandDeps): Promise<number> {
   const root = deps.root ?? ".";
-  const [subcommand] = args;
+  const [subcommand, ...rest] = args;
 
   switch (subcommand) {
-    case "run":
-      return runJobsRun(root, deps);
-    case "digest":
-      return printLatestDigest(root, deps);
-    case "sources":
-      return listSources(root, deps);
+    case "run": {
+      const profiles = await resolveProfiles(rest, root, deps, true);
+      if (!profiles) return 1;
+      let worst = 0;
+      for (const profile of profiles) {
+        if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
+        worst = Math.max(worst, await runJobsRun(profile, root, deps));
+      }
+      return worst;
+    }
+    case "digest": {
+      const profiles = await resolveProfiles(rest, root, deps, false);
+      if (!profiles) return 1;
+      return printLatestDigest(profiles[0] as string, root, deps);
+    }
+    case "sources": {
+      const profiles = await resolveProfiles(rest, root, deps, false);
+      if (!profiles) return 1;
+      return listSources(profiles[0] as string, root, deps);
+    }
     case "costs":
       return printCosts(root, deps);
-    case "dashboard":
-      return serveDashboard(args.slice(1), root, deps);
+    case "profiles": {
+      const known = await listProfiles(root);
+      if (known.length === 0) deps.stdout(`No profiles configured yet under ${CONFIG_ROOT}/.`);
+      else for (const profile of known) deps.stdout(profile);
+      return 0;
+    }
+    case "dashboard": {
+      const profiles = await resolveProfiles(rest, root, deps, false);
+      if (!profiles) return 1;
+      return serveDashboard(rest, profiles[0] as string, root, deps);
+    }
     default:
       deps.stdout(USAGE);
       return subcommand === undefined || subcommand === "help" ? 0 : 1;
   }
 }
 
-async function runJobsRun(root: string, deps: JobsCommandDeps): Promise<number> {
-  const prefs = await loadPreferences(root);
-  const watchlist = await loadWatchlist(root);
+async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+  const prefs = await loadPreferences(profile, root);
+  const watchlist = await loadWatchlist(profile, root);
   const inkboxClient = createInkboxClientFromEnv();
 
   if (watchlist.length === 0 && !inkboxClient) {
     deps.stderr(
-      "No sources configured: config/job-search/watchlist.json is empty and Inkbox (for LinkedIn/Indeed alerts) is not set up. Add at least one.",
+      `No sources configured for ${profile}: ${join(configDirFor(profile), "watchlist.json")} is empty and Inkbox (for LinkedIn/Indeed alerts) is not set up. Add at least one.`,
     );
     return 1;
   }
 
   // A missing resume stops scoring, not the run: discovery and filtering are
   // still worth doing, and the digest says plainly why nothing was scored.
-  let profile: CandidateProfile = { resume: "", notes: "" };
+  let candidate: CandidateProfile = { resume: "", notes: "" };
   let profileMissing: string | null = null;
   try {
-    profile = await loadProfile(root);
+    candidate = await loadProfile(profile, root);
   } catch (error) {
     if (error instanceof MissingProfileError) {
       profileMissing = error.message;
@@ -105,15 +192,15 @@ async function runJobsRun(root: string, deps: JobsCommandDeps): Promise<number> 
 
   const summary = await runPipeline({
     sources,
-    store: new JsonFileJobStore(join(root, DATA_DIR)),
+    store: new JsonFileJobStore(join(root, dataDirFor(profile))),
     prefs,
-    profile,
+    profile: candidate,
     scoringClient,
     costLogPath: join(root, COST_LOG_PATH),
   });
 
   const markdown = renderDigest(summary);
-  const digestDir = join(root, DATA_DIR, "digests");
+  const digestDir = join(root, dataDirFor(profile), "digests");
   await mkdir(digestDir, { recursive: true });
   const stamp = summary.startedAt.replace(/[:.]/g, "-");
   await writeFile(join(digestDir, `${stamp}.md`), markdown, "utf8");
@@ -132,19 +219,19 @@ async function runJobsRun(root: string, deps: JobsCommandDeps): Promise<number> 
   return allBroken ? 1 : 0;
 }
 
-async function printLatestDigest(root: string, deps: JobsCommandDeps): Promise<number> {
+async function printLatestDigest(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
   const { readFile } = await import("node:fs/promises");
   try {
-    deps.stdout(await readFile(join(root, DATA_DIR, "digests", "latest.md"), "utf8"));
+    deps.stdout(await readFile(join(root, dataDirFor(profile), "digests", "latest.md"), "utf8"));
     return 0;
   } catch {
-    deps.stderr("No digest yet. Run `orchestrator jobs run` first.");
+    deps.stderr(`No digest yet for ${profile}. Run \`orchestrator jobs run --profile ${profile}\` first.`);
     return 1;
   }
 }
 
-async function listSources(root: string, deps: JobsCommandDeps): Promise<number> {
-  const watchlist = await loadWatchlist(root);
+async function listSources(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+  const watchlist = await loadWatchlist(profile, root);
   const sources: Source[] = [...sourcesFromWatchlist(watchlist)];
 
   const inkboxClient = createInkboxClientFromEnv();
@@ -155,7 +242,7 @@ async function listSources(root: string, deps: JobsCommandDeps): Promise<number>
   }
 
   if (sources.length === 0) {
-    deps.stderr("No sources configured in config/job-search/watchlist.json, and Inkbox is not set up.");
+    deps.stderr(`No sources configured in ${join(configDirFor(profile), "watchlist.json")}, and Inkbox is not set up.`);
     return 1;
   }
 
@@ -245,7 +332,7 @@ async function sendDigestSmsIfConfigured(summary: RunSummary, deps: JobsCommandD
 }
 
 /** Serves the review queue. Read-only: no endpoint here can act on the outside world. */
-async function serveDashboard(args: readonly string[], root: string, deps: JobsCommandDeps): Promise<number> {
+async function serveDashboard(args: readonly string[], profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
   const portIndex = args.indexOf("--port");
   const port = portIndex >= 0 ? Number.parseInt(args[portIndex + 1] ?? "", 10) : 8899;
   if (!Number.isFinite(port) || port <= 0) {
@@ -253,9 +340,9 @@ async function serveDashboard(args: readonly string[], root: string, deps: JobsC
     return 1;
   }
 
-  const server = createJobsDashboardServer({ dataDir: join(root, DATA_DIR) });
+  const server = createJobsDashboardServer({ dataDir: join(root, dataDirFor(profile)) });
   await new Promise<void>((resolve) => server.listen(port, resolve));
-  deps.stdout(`Job queue: http://localhost:${port}  (ctrl-c to stop)`);
+  deps.stdout(`Job queue for ${profile}: http://localhost:${port}  (ctrl-c to stop)`);
 
   await new Promise<void>((resolve) => {
     const stop = (): void => {

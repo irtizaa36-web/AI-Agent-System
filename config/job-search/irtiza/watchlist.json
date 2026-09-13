@@ -1,0 +1,5 @@
+[
+  {
+    "_comment": "EMPTY ON PURPOSE. The platforms in this search (Mercor, Turing, Handshake AI, AJE, BeMo, scholr) are gig/marketplace sites, not Greenhouse/Lever/Ashby ATS boards — none of the existing source adapters can read them, and adding a fake entry here would produce a source that silently returns nothing. Each platform that's worth polling needs its own adapter, verified live before being trusted, exactly like every ATS adapter was. Until then this search runs on tracking, not discovery."
+  }
+]

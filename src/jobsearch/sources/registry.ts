@@ -6,7 +6,7 @@ import { createAshbySource } from "./ashby";
 import { createFeedSource } from "./feed";
 
 /**
- * Turns config/job-search/watchlist.json into live Sources. Adding a company
+ * Turns a profile's watchlist.json into live Sources. Adding a company
  * to the watchlist is a config edit, never a code change — which is the
  * point: the person who knows which employers matter is not the person who
  * writes TypeScript.

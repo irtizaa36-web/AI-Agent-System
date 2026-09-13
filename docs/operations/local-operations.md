@@ -22,6 +22,30 @@ The response states whether bearer authentication is required but never reveals 
 
 Use the health endpoint and `launchctl print gui/<uid>/com.aiagentsystem.inkbox-webhook` for read-only inspection. A service update requires human review because it may change a live process using real communication credentials.
 
+## Job-search pipeline: two profiles, one engine
+
+Two searches run through the same pipeline with entirely separate data:
+`shivani` (marketing/program-management roles on ATS boards) and `irtiza`
+(clinical-expertise gig platforms). A profile key names three directories —
+`config/job-search/<key>/`, `profile/<key>/` and `.orchestrator/jobs/<key>/` —
+and every command takes the key explicitly. See ADR 0017.
+
+```text
+node dist/cli/index.js jobs profiles              # what's configured
+node dist/cli/index.js jobs run --profile shivani # one person's run
+node dist/cli/index.js jobs run --all             # every profile, what launchd runs
+node dist/cli/index.js jobs digest --profile irtiza
+```
+
+There is deliberately no default profile: `jobs run` with no `--profile` refuses
+and lists the configured keys rather than guessing. The failure mode that avoids
+is not a crash — it is a run that quietly scores one person's postings against
+the other's resume and produces a plausible-looking digest anyway.
+
+The launchd job (`scripts/com.mobyai.jobsearch.plist`) runs `--all` at 10:00
+local, Monday to Friday. Each profile gets its own digest file; a profile whose
+config is empty reports that plainly instead of failing the whole run.
+
 ## Job-search pipeline: texting the digest
 
 Off by default. Turning it on for real requires all four values in
@@ -32,7 +56,7 @@ itself needs an active 10DLC campaign on the account). See ADR 0016 for
 why this is three independent gates rather than one, and
 `src/jobsearch/sms-client.ts` for what each failure mode actually reports.
 
-`orchestrator jobs run` sends the text as its last step, after the digest
+`orchestrator jobs run --profile <key>` sends the text as its last step, after the digest
 file is already written — a failed or skipped text never fails the run
 itself. Check `INKBOX_SMS_PHONE_NUMBER_ID` against the phone number
 actually assigned to this identity in Inkbox before assuming it's right;
