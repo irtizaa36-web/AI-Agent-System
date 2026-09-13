@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Job-search pipeline, once daily at 10:00 AM Central, Monday-Friday only.
+  Job-search pipeline, once daily at 11:00 AM Central, Monday-Friday only.
   Runs every configured profile via the "all profiles" flag: currently
   shivani and irtiza, each with its own config, data and digest. ADR 0017.
 
   launchd's StartCalendarInterval fires on the Mac's LOCAL system clock, not
-  a fixed UTC offset — so "10:00" below means 10:00 AM CST in the winter and
-  10:00 AM CDT in the summer automatically, correctly tracking the DST
+  a fixed UTC offset — so "11:00" below means 11:00 AM CST in the winter and
+  11:00 AM CDT in the summer automatically, correctly tracking the DST
   switch, PROVIDED the Mac mini's system timezone is actually set to a US
   Central zone (System Settings -> General -> Date & Time -> Time Zone;
   "Chicago" or "Set time zone automatically" from a Central-time location).
@@ -46,27 +46,27 @@
   <key>StartCalendarInterval</key>
   <array>
     <dict>
-      <key>Hour</key><integer>10</integer>
+      <key>Hour</key><integer>11</integer>
       <key>Minute</key><integer>0</integer>
       <key>Weekday</key><integer>1</integer>
     </dict>
     <dict>
-      <key>Hour</key><integer>10</integer>
+      <key>Hour</key><integer>11</integer>
       <key>Minute</key><integer>0</integer>
       <key>Weekday</key><integer>2</integer>
     </dict>
     <dict>
-      <key>Hour</key><integer>10</integer>
+      <key>Hour</key><integer>11</integer>
       <key>Minute</key><integer>0</integer>
       <key>Weekday</key><integer>3</integer>
     </dict>
     <dict>
-      <key>Hour</key><integer>10</integer>
+      <key>Hour</key><integer>11</integer>
       <key>Minute</key><integer>0</integer>
       <key>Weekday</key><integer>4</integer>
     </dict>
     <dict>
-      <key>Hour</key><integer>10</integer>
+      <key>Hour</key><integer>11</integer>
       <key>Minute</key><integer>0</integer>
       <key>Weekday</key><integer>5</integer>
     </dict>

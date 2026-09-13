@@ -212,6 +212,7 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
   deps.stdout(`Digest written to ${join(digestDir, "latest.md")}`);
 
   await sendDigestSmsIfConfigured(summary, deps);
+  await sendDigestImessageIfConfigured(summary, deps);
 
   // A run where every source broke is a failure worth a non-zero exit, so a
   // scheduled job surfaces it rather than looking like a quiet success.
@@ -328,6 +329,53 @@ async function sendDigestSmsIfConfigured(summary: RunSummary, deps: JobsCommandD
     } else {
       deps.stderr(`Could not text the digest: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+}
+
+/**
+ * Sends the digest as an iMessage, when — and only when — DIGEST_IMESSAGE_ENABLED
+ * is exactly "true", DIGEST_IMESSAGE_TO is set, and INKBOX_API_KEY is present.
+ * Three separate gates — same reasoning as sendDigestSmsIfConfigured above.
+ * A send failure is reported and never fails the run.
+ */
+async function sendDigestImessageIfConfigured(summary: RunSummary, deps: JobsCommandDeps): Promise<void> {
+  if (process.env["DIGEST_IMESSAGE_ENABLED"] !== "true") return;
+
+  const to = process.env["DIGEST_IMESSAGE_TO"];
+  if (!to) {
+    deps.stderr("DIGEST_IMESSAGE_ENABLED is true but DIGEST_IMESSAGE_TO is not set — skipping iMessage.");
+    return;
+  }
+
+  const apiKey = process.env["INKBOX_API_KEY"];
+  if (!apiKey) {
+    deps.stderr("DIGEST_IMESSAGE_ENABLED is true but INKBOX_API_KEY is not set — skipping iMessage.");
+    return;
+  }
+
+  const maxRoles = Number.parseInt(process.env["DIGEST_IMESSAGE_MAX_ROLES"] ?? "5", 10);
+  const text = formatDigestSms(summary, Number.isFinite(maxRoles) && maxRoles > 0 ? maxRoles : 5);
+
+  try {
+    const response = await fetch("https://inkbox.ai/api/v1/imessages", {
+      method: "POST",
+      headers: { "X-API-Key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ to, text, send_style: "regular" }),
+    });
+    if (!response.ok) {
+      let detail: string;
+      try {
+        const err = (await response.json()) as { detail?: string };
+        detail = err.detail ?? response.statusText;
+      } catch {
+        detail = response.statusText;
+      }
+      deps.stderr(`Could not iMessage the digest: HTTP ${response.status} — ${detail}`);
+      return;
+    }
+    deps.stdout(`Digest iMessaged to ${to}.`);
+  } catch (error) {
+    deps.stderr(`Could not iMessage the digest: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
