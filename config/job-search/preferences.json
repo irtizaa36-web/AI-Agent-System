@@ -1,8 +1,8 @@
 {
   "_comment": "Deterministic filters. Edit this file, not the code. Every value here runs before any model call, so tightening these is the cheapest way to improve the digest.",
 
-  "titles": [],
-  "_titles": "TODO Irtiza: the 3-6 target titles. A posting must match one to survive. Empty means 'not configured yet' and lets everything through to scoring, which costs more and surfaces noise.",
+  "titles": ["marketing program manager", "program manager", "vendor manager", "gtm manager", "go-to-market manager", "marketing operations manager"],
+  "_titles": "Drafted from Shivani's actual resume (Marketing Program Manager at AWS, Vendor Manager at Amazon, GTM/marketing-ops background) — this is a starting cluster, not a final answer. Adjust freely; a posting must match one of these to survive stage 6.",
 
   "titleExclusions": ["intern", "internship", "co-op", "contractor", "temporary"],
 
