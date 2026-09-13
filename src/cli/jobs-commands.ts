@@ -367,7 +367,7 @@ async function sendDigestImessageIfConfigured(summary: RunSummary, deps: JobsCom
     const response = await fetch(url, {
       method: "POST",
       headers: { "X-API-Key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ to, text, send_style: "regular" }),
+      body: JSON.stringify({ to, text }),
     });
     if (!response.ok) {
       let detail: string;
