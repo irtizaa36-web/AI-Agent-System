@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Twice-daily job-search pipeline (08:00 and 18:00 local).
+
+  Install:
+    1. Edit REPO_PATH below to the absolute path of this repository.
+    2. cp scripts/com.mobyai.jobsearch.plist ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.mobyai.jobsearch.plist
+    4. launchctl start com.mobyai.jobsearch     (to test it immediately)
+
+  Check on it:
+    launchctl list | grep mobyai
+    tail -f REPO_PATH/logs/jobsearch.out
+
+  The run is idempotent, so a missed or repeated firing is harmless — every
+  posting is content-hashed and anything already seen costs nothing.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mobyai.jobsearch</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd REPO_PATH &amp;&amp; /usr/bin/env npm run pipeline</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Hour</key><integer>8</integer>
+      <key>Minute</key><integer>0</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>18</integer>
+      <key>Minute</key><integer>0</integer>
+    </dict>
+  </array>
+
+  <key>StandardOutPath</key>
+  <string>REPO_PATH/logs/jobsearch.out</string>
+  <key>StandardErrorPath</key>
+  <string>REPO_PATH/logs/jobsearch.err</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

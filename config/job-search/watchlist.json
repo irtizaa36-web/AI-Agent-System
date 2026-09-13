@@ -1,0 +1,8 @@
+[
+  {
+    "_comment": "TODO Irtiza: replace these with her 20-50 target companies. Each entry needs the ATS type and the board token from the company's careers URL. Greenhouse: boards.greenhouse.io/ACME -> token 'ACME'. Lever: jobs.lever.co/ACME -> 'ACME'. Ashby: jobs.ashbyhq.com/ACME -> 'ACME'. For a niche or society board, use type 'feed' and put the RSS URL in boardToken.",
+    "company": "Example Corp",
+    "atsType": "greenhouse",
+    "boardToken": "example"
+  }
+]

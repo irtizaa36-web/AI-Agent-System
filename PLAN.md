@@ -1,6 +1,6 @@
 # PLAN.md — Job Search Agent (Moby AI job-search pipeline, v2)
 
-> Status: **awaiting approval.** Nothing in this document has been built. No code has been written.
+> Status: **Phase 1 built and merged** (see ADR 0014). Phases 2-4 below are still plans.
 > Scope owner: Irtiza. End user: his wife ("the candidate" below).
 
 ---
@@ -135,7 +135,7 @@ Tests colocated as `*.test.ts`, run by the existing `npm test` (`node --test` ov
 
 ## 6. Build order
 
-### Phase 1 — ships in one session, usable that day
+### Phase 1 — BUILT ✅
 Sources (Greenhouse + Lever + Ashby + RSS feeds + watchlist) → normalize → hash/delta → dedupe → hard filters → truncate → Haiku batch scoring with two-line rationale → ranked digest to Markdown and the local dashboard → cost ledger → `npm run pipeline` → launchd plist → tests for every pure stage.
 
 *Deliberately excluded from Phase 1:* no enrichment, no tailoring, no browser, no outreach. **No large model in the steady-state path at all** — Haiku produces the score, the confidence, and the two-line rationale in the same batched call, which is exactly what the definition of done asks for and keeps a run at a few cents.
@@ -205,4 +205,12 @@ The seven things holding that line: never re-process a posting (content hash); r
 
 ---
 
-**Awaiting your go before any implementation begins.**
+## Phase 1 as built — what changed from this plan
+
+Three things differ from what is written above, each for a reason found while building:
+
+1. **The jobs dashboard is its own small server** (`orchestrator jobs dashboard`), not a section inside the existing coworker dashboard as Q4 proposed. Reading that page's code made the call obvious: it is built around agent rosters and task kanban, with its own snapshot shape and a carefully considered accessible layout, and job search had no business reshaping it.
+2. **`ScoringClient` is a new port** rather than a reuse of the orchestrator's `ModelProvider`, which exposes neither token usage nor prompt caching — both of which this pipeline needs. Reasoning in ADR 0014.
+3. **Location classification gives the employer's stated location precedence over the description prose.** Found by running against real boards: Figma's product copy ("work together from anywhere in the world") was promoting an onsite Tel Aviv role into a remote-only search.
+
+Still open from Q1-Q5: the API key is configured and verified; the titles, salary floor and watchlist (Q2) are still placeholders in `config/job-search/`; the resume (Q3) still needs its one-time conversion into `profile/resume.md`; Q4 is answered above; Q5 defaults to 90 days and is a config value.

@@ -5,3 +5,10 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Her resume, accomplishment bank and notes. Personal data stays local — see PLAN.md.
+# The folder and its README are tracked; nothing inside it ever is.
+profile/*
+!profile/README.md
+# Per-run model spend ledger.
+logs/

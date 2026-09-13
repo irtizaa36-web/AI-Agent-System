@@ -24,6 +24,7 @@ import { JsonFileRecommendationStore } from "../dashboard/recommendation-store";
 import { runOperationalUpdateCommand } from "./operational-update-commands";
 import { JsonFileOperationalUpdateStore, type OperationalUpdateStore } from "../dashboard/operational-update-store";
 import { runDashboardCommand } from "./dashboard-command";
+import { runJobsCommand } from "./jobs-commands";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { WorkflowStore } from "../store/workflow-store";
@@ -81,6 +82,8 @@ function printUsage(stdout: (line: string) => void): void {
       '  orchestrator operational-update add "<summary>" --by <a> --provenance <p> Log a concise operational handoff',
       "  orchestrator operational-update list                         List operational handoffs",
       "  orchestrator dashboard [--port N]                           Serve the local agents/projects dashboard",
+      "  orchestrator jobs run                                       Run the job-search pipeline and write today's digest",
+      "  orchestrator jobs digest|sources|costs                      Read the last digest, check sources, or review model spend",
       '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
       "  orchestrator constraints list                                List recorded corrections",
       "  orchestrator help                                           Show this message",
@@ -320,6 +323,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
 
   if (command === "constraints") {
     return runConstraintsCommand(rest, deps);
+  }
+
+  if (command === "jobs") {
+    return runJobsCommand(rest, deps);
   }
 
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
