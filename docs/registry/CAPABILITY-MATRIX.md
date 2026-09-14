@@ -4,7 +4,7 @@
 Every account, integration, and local service Big Boss (Polar) can or cannot reach, with how and when it was verified.
 No credentials, tokens, or secrets are recorded here — verification method only.
 
-Last reconciled: **2026-09-07, Big Boss session (Polar)**.
+Last reconciled: **2026-09-09** (Public.com rows, verified directly against the MCP connector). All other rows last reconciled 2026-09-07, Big Boss session (Polar).
 
 ## Verified — read access confirmed
 
@@ -20,14 +20,16 @@ Last reconciled: **2026-09-07, Big Boss session (Polar)**.
 | **iMessage (read)** | Listed 5 most recent chats | 2026-09-07 |
 | Coworker Dashboard (`localhost:4317`) | HTTP 200, live page content | 2026-09-07 16:30 CT |
 | Inkbox mail webhook (`localhost:8787`) | HTTP 200 health check | 2026-09-07 16:30 CT |
-| Public.com | Browser session logged in (read-only use so far) | 2026-09-07 |
+| Public.com (browser) | Browser session logged in | 2026-09-07 |
+| **Public.com MCP connector (read)** | `check_setup` authenticated; `get_portfolio` and `get_history` returned live data for the BROKERAGE account | 2026-09-09 |
+| **Live trading on Public.com agents** | **Authorized.** Confirmed by the user 2026-09-09. The account had in fact been placing real trades since 2026-09-04 while this matrix still recorded it as unauthorized — corrected here so no session acts on the stale flag in either direction. See Project Registry §8. | 2026-09-09 |
 
 ## Requires authorization
 
 | Capability | Status | What's needed |
 |---|---|---|
 | Outlook / Houston Methodist mail | Connector unusable | User will open an authenticated browser tab for direct read access instead of the connector. |
-| Live trading on Public.com agents | Not yet authorized | Specific parameters (budget cap, coins, risk/stop-loss limits) must be confirmed before any activation — see Project Registry §8. |
+| Placing orders from the standalone monitoring system (§8a) | Not available by design | That system's client exposes only the read tools plus `preflight_order`; it has no method that could place an order. Drafting a trade is additionally gated behind a validated signal, of which there are currently none. A live order remains a separate, explicit human action. |
 | Indeed connector (`mcp__Indeed__*`) | Referenced in coworker task `38fd59e8`, not callable in that session | Needs to be confirmed enabled for whichever session/account is meant to use it. |
 | Twelve_Data / Zacks_Data connectors | Referenced in coworker task `1d60e4af`, never dispatched | Same — confirm connector availability before building on it. |
 

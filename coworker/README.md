@@ -10,6 +10,14 @@ watching the dashboard for any agent showing offline or stuck. Write down
 an idea, say who it's for, and that persona picks it up on its own next
 check-in — no one has to trigger it by hand.
 
+"PublicTrading" is different in kind from the others: it isn't a machine or a
+person's helper, it's one recurring daily job — the standalone Public.com
+monitoring review (`docs/operations/public-trading.md`). It reads the brokerage
+account and writes a review file; it cannot place an order, and it does not
+supervise or control the separate Public.com Agents in PROJECT-REGISTRY.md §8.
+Don't assign it general work, and note that `--to both` deliberately still means
+just macmini and Laptop2, so it never gets swept into an unrelated task.
+
 Jordan's real limit, worth stating plainly: if the problem is a session's
 own connection to a machine being down, no agent — Jordan included — can
 click things on that screen. It can diagnose and tell Irtiza exactly what

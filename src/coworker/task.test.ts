@@ -75,7 +75,10 @@ test("withResult records output, success/failure, and a finish time", () => {
 });
 
 test("ALL_COWORKER_PERSONAS includes every specialist persona without changing what 'both' means", () => {
-  assert.deepEqual(ALL_COWORKER_PERSONAS, ["macmini", "Laptop2", "Riley", "Jordan", "PinkyBaby"]);
+  assert.deepEqual(ALL_COWORKER_PERSONAS, ["macmini", "Laptop2", "Riley", "Jordan", "PinkyBaby", "PublicTrading"]);
+  // "both" stays the original two general-purpose coworkers no matter how many
+  // specialists join — PublicTrading runs one recurring review and must never
+  // be swept into a task assigned to "both".
   assert.deepEqual(personasFor("both"), ["macmini", "Laptop2"]);
 });
 
