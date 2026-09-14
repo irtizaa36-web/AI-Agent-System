@@ -35,6 +35,19 @@ const SAMPLE_ALERT_HTML = `
 </body></html>
 `;
 
+/**
+ * Simulates what Inkbox's real `/search` endpoint turned out to actually
+ * return, confirmed against Shivani's real mailbox on Sep 14: snippet-level
+ * messages, body truncated, no HTML part — `getMessage` (unmodified here)
+ * is the only way to get the real thing.
+ */
+class SnippetOnlySearchClient extends FakeInkboxClient {
+  async searchMail(query?: string): Promise<readonly EmailMessage[]> {
+    const full = await super.searchMail(query);
+    return full.map((m) => ({ ...m, body: m.body.slice(0, 50), bodyHtml: undefined }));
+  }
+}
+
 function message(overrides: Partial<EmailMessage> = {}): EmailMessage {
   return {
     id: "msg-1",
@@ -104,6 +117,21 @@ test("extractListingsFromEmail ignores the 'manage your alerts' link — it has 
 test("extractListingsFromEmail returns nothing for an email with no job-view links, rather than guessing", () => {
   const html = "<html><body><p>Congratulations on your work anniversary!</p></body></html>";
   assert.deepEqual(extractListingsFromEmail(html), []);
+});
+
+test("extractListingsFromEmail never leaks a truncated tag into the location — real LinkedIn markup runs past the tail window mid-tag", () => {
+  // Reproduces what a real forwarded Sep 14 alert actually did: the tail
+  // window's 400-char cap landed inside an unclosed `<td style="...` before
+  // it ever reached the tag's closing `>`, and the old code's stripTags saw
+  // that fragment as literal text — "New York, United States (On-site) <td
+  // style=\"fo" ended up in the location field. This fixture forces the same
+  // mid-tag cutoff deliberately, with a `<td>` attribute long enough that its
+  // closing `>` falls outside the 400-char window.
+  const html = `<a href="https://www.linkedin.com/jobs/view/1/">Some Role</a><div>Acme Corp · New York, United States (On-site)</div><td style="mso-hide:all;${"x".repeat(400)}">`;
+  const listings = extractListingsFromEmail(html);
+  assert.equal(listings.length, 1);
+  assert.equal(listings[0]?.location, "New York, United States (On-site)");
+  assert.ok(!listings[0]?.location.includes("<td"), "no unclosed tag fragment should leak into the location text");
 });
 
 test("a single unseparated segment after the anchor is read as the company, with location left blank rather than guessed", () => {
@@ -181,6 +209,18 @@ test("createAlertMailSource also reads a manually-forwarded backlog email, not j
   const postings = await source.fetch();
 
   assert.equal(postings.length, 2, "the forwarded backlog email's two listings, not the unrelated forward");
+});
+
+test("createAlertMailSource enriches each search hit via getMessage — search alone returns a truncated, HTML-less body", async () => {
+  const client = new SnippetOnlySearchClient("toozy@inkboxmail.com", [message({ id: "a", threadId: "a" })]);
+
+  // Confirms the premise: search alone is unusable for extraction.
+  const snippetOnly = await client.searchMail("job alert");
+  assert.equal(extractListingsFromEmail(snippetOnly[0]?.body ?? "").length, 0, "the snippet-level body has no HTML anchors to find");
+
+  const source = createAlertMailSource(client);
+  const postings = await source.fetch();
+  assert.equal(postings.length, 2, "extraction only succeeds once the full HTML body is fetched via getMessage");
 });
 
 test("createAlertMailSource returns an empty array, not a crash, when nothing matches", async () => {

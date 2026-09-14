@@ -22,15 +22,33 @@ import type { Source } from "./source";
  * documented data format. `extractListingsFromEmail` is a best-effort
  * extractor built from the publicly-known shape of LinkedIn's alert emails
  * (repeated job cards: a title link to `linkedin.com/.../jobs/view/<id>`,
- * followed by "Company · Location" text) — it has NOT been validated
- * against one of Shivani's real alert emails, because none has been
- * forwarded yet. It is deliberately conservative: if the expected shape
- * isn't found, it returns nothing rather than guessing at a company or
- * location from unrelated text. The first real batch of alerts should be
- * checked against this parser's output before trusting it unattended —
- * treat this the same as any other newly-added source that hasn't yet
- * proven itself against real data (see health.ts: an empty result reports
- * as `"empty"`, not silently as success).
+ * followed by "Company · Location" text). It is deliberately conservative:
+ * if the expected shape isn't found, it returns nothing rather than
+ * guessing at a company or location from unrelated text.
+ *
+ * Checked against a real forwarded batch on Sep 14: the card shape above was
+ * confirmed correct — but the source still returned zero postings, for two
+ * reasons stacked on top of each other, neither about the shape:
+ *
+ * 1. `InkboxClient#searchMail` turned out to return snippet-level messages —
+ *    a ~200-char `body`, no HTML part at all — the same characteristic
+ *    `readThread` already worked around elsewhere in real-client.ts by
+ *    re-fetching each message in full. `fetch()` here now does the same via
+ *    `client.getMessage`.
+ * 2. Even a fully-fetched message's `EmailMessage.body` is plain text (or
+ *    HTML with every tag already stripped) by design, because that's the
+ *    right shape for a human-facing summary. `extractListingsFromEmail`
+ *    parses for literal `<a href>` anchors, which cannot exist in that
+ *    field — not "may be missing," structurally cannot. Fixed by adding
+ *    `EmailMessage.bodyHtml` (client.ts) and reading that here instead, via
+ *    `htmlBodyOf`.
+ *
+ * This source read zero postings from every real alert it was ever handed
+ * until both were fixed together — extraction shape aside. Worth
+ * remembering: an "empty" health status (see health.ts) looks identical for
+ * "no alerts today" and "this integration is structurally broken" — the
+ * only way either bug surfaced was checking the parser's actual output
+ * against a real message, not trusting a clean run with 0 findings.
  *
  * Two ways a message counts as a job alert: `looksLikeJobAlert` (sender +
  * subject — the fast path for genuinely auto-forwarded originals) or
@@ -103,7 +121,17 @@ export function extractListingsFromEmail(html: string): readonly ExtractedListin
     // LinkedIn's own UI convention, carried into its emails.
     const tailStart = anchorPattern.lastIndex;
     const tail = html.slice(tailStart, tailStart + 400);
-    const tailText = stripTags(tail.split(/<a\b/i)[0] ?? "");
+    const beforeNextAnchor = tail.split(/<a\b/i)[0] ?? "";
+    // A real LinkedIn digest's markup (deeply nested tables, inline styles,
+    // tracking attributes) routinely runs past the 400-char cap mid-tag —
+    // confirmed against a real forwarded alert on Sep 14, where an unclosed
+    // `<td style="...` survived stripTags as literal text and leaked into
+    // the location field. stripTags only removes a tag it can see the whole
+    // of; trimming to the last complete `>` first means a cut-off tag never
+    // reaches it as text in the first place.
+    const lastCompleteTag = beforeNextAnchor.lastIndexOf(">");
+    const safeTail = lastCompleteTag >= 0 ? beforeNextAnchor.slice(0, lastCompleteTag + 1) : beforeNextAnchor;
+    const tailText = stripTags(safeTail);
 
     const parts = tailText
       .split(/·|•|\|/)
@@ -144,12 +172,24 @@ export function extractListingsFromEmail(html: string): readonly ExtractedListin
  * gets nothing here — this never lowers the bar to "contains the word
  * LinkedIn."
  */
-export function looksLikeForwardedJobAlert(message: Pick<EmailMessage, "body">): boolean {
-  return extractListingsFromEmail(message.body).length > 0;
+export function looksLikeForwardedJobAlert(message: Pick<EmailMessage, "body" | "bodyHtml">): boolean {
+  return extractListingsFromEmail(htmlBodyOf(message)).length > 0;
+}
+
+/**
+ * `EmailMessage.body` is plain text, or HTML with every tag stripped, by
+ * design (see the field's own doc comment in client.ts) — right for a
+ * summary, structurally unusable for `extractListingsFromEmail`, which
+ * parses for literal `<a href>` anchors. `bodyHtml` carries those tags when
+ * the source had them; a test fixture that sets `body` directly to inline
+ * HTML (no separate `bodyHtml`) still works via the fallback.
+ */
+function htmlBodyOf(message: Pick<EmailMessage, "body" | "bodyHtml">): string {
+  return message.bodyHtml ?? message.body;
 }
 
 export function alertEmailToPostings(message: EmailMessage, sourceId: string): readonly RawPosting[] {
-  return extractListingsFromEmail(message.body).map((listing) => ({
+  return extractListingsFromEmail(htmlBodyOf(message)).map((listing) => ({
     sourceId,
     url: listing.url,
     title: listing.title,
@@ -169,8 +209,20 @@ export function createAlertMailSource(client: InkboxClient, id = "inkbox:alert-m
     id,
     company: null,
     async fetch() {
-      const messages = await client.searchMail("job alert");
-      const alerts = messages.filter((message) => looksLikeJobAlert(message) || looksLikeForwardedJobAlert(message));
+      const matches = await client.searchMail("job alert");
+      // Confirmed against Shivani's real mailbox on Sep 14: `searchMail`
+      // returns snippet-level messages — a ~200-char body and no HTML part
+      // at all — the same characteristic `readThread` already works around
+      // by re-fetching each message in full (see fetchMessageDetail in
+      // real-client.ts). extractListingsFromEmail needs the real thing, so
+      // every match here gets the same treatment before being judged.
+      // Bounded by the search query itself already narrowing the mailbox
+      // down to a small candidate set, not the whole inbox.
+      const detailed = await Promise.all(matches.map((match) => client.getMessage(match.id)));
+      const alerts = detailed.filter(
+        (message): message is EmailMessage =>
+          message !== undefined && (looksLikeJobAlert(message) || looksLikeForwardedJobAlert(message)),
+      );
       return alerts.flatMap((message) => alertEmailToPostings(message, id));
     },
   };

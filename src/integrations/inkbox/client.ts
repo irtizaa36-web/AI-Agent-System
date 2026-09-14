@@ -31,6 +31,18 @@ export interface EmailMessage {
   readonly bcc?: readonly EmailAddress[];
   readonly subject: string;
   readonly body: string;
+  /**
+   * The raw HTML body, when the source provided one — distinct from `body`,
+   * which is plain text (or HTML with every tag stripped) by design, because
+   * that's the right shape for a human-facing summary or an LLM prompt. A
+   * consumer that needs to find actual `<a href>` links (alert-mail.ts
+   * extracting LinkedIn job-view URLs) needs this instead: `body` alone
+   * makes that structurally impossible, not just harder, since the tags
+   * it's parsing for don't survive into `body` at all. Absent when the
+   * source never had an HTML part, or for a caller (FakeInkboxClient
+   * fixtures) that only sets `body` directly with inline HTML.
+   */
+  readonly bodyHtml?: string;
   readonly receivedAt: string;
   readonly attachments?: readonly string[];
 }

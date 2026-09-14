@@ -40,6 +40,17 @@ test("parseRawMessage prefers body_text, falls back to stripped body_html, then 
   assert.equal(parseRawMessage({ ...base }).body, "");
 });
 
+test("parseRawMessage carries the raw HTML body separately, untouched, even when body_text wins the plain-text field", () => {
+  const base = { id: "m1", thread_id: "t1", from_address: "a@b.com", to_addresses: ["c@d.com"], subject: "Hi", created_at: "2026-01-01T00:00:00.000Z" };
+
+  const withBoth = parseRawMessage({ ...base, body_text: "plain text", body_html: '<a href="https://x.test">link</a>' });
+  assert.equal(withBoth.body, "plain text", "body stays plain-text-first, unaffected by adding bodyHtml");
+  assert.equal(withBoth.bodyHtml, '<a href="https://x.test">link</a>', "bodyHtml keeps the tags body_text-preference would have thrown away");
+
+  const withoutHtml = parseRawMessage({ ...base, body_text: "plain text" });
+  assert.equal(withoutHtml.bodyHtml, undefined, "no HTML part on the wire means no bodyHtml field, not an empty string");
+});
+
 test("parseRawMessage falls back to the message's own id as threadId when thread_id is null", () => {
   const message = parseRawMessage({
     id: "m1",
