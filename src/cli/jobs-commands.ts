@@ -13,6 +13,7 @@ import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
 import type { Source } from "../jobsearch/sources/source";
 import { createSmsClientFromEnv, SmsRecipientBlockedError } from "../jobsearch/sms-client";
 import { formatDigestSms } from "../jobsearch/digest-sms";
+import { formatDigestEmailBody, formatDigestEmailSubject } from "../jobsearch/digest-email";
 import { reconcileFiltered } from "../jobsearch/reconcile";
 import { scoreRecords } from "../jobsearch/score";
 import { sortByRank } from "../jobsearch/rank";
@@ -230,6 +231,7 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
 
   await sendDigestSmsIfConfigured(summary, deps);
   await sendDigestImessageIfConfigured(summary, deps);
+  await sendDigestEmailIfConfigured(summary, deps);
 
   // A run where every source broke is a failure worth a non-zero exit, so a
   // scheduled job surfaces it rather than looking like a quiet success.
@@ -336,6 +338,7 @@ async function runJobsReconcile(profile: string, root: string, deps: JobsCommand
 
   await sendDigestSmsIfConfigured(summary, deps);
   await sendDigestImessageIfConfigured(summary, deps);
+  await sendDigestEmailIfConfigured(summary, deps);
 
   return 0;
 }
@@ -503,6 +506,49 @@ async function sendDigestImessageIfConfigured(summary: RunSummary, deps: JobsCom
     deps.stdout(`Digest iMessaged to ${to}.`);
   } catch (error) {
     deps.stderr(`Could not iMessage the digest: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Emails the digest, when — and only when — DIGEST_EMAIL_ENABLED is exactly
+ * "true", DIGEST_EMAIL_TO is set, and Inkbox is configured. Same three-gate
+ * shape as the SMS/iMessage senders above, and the same non-fatal failure
+ * handling — a send failure is reported, never fails the run.
+ *
+ * Goes through InkboxClient's draft-then-send flow (saveDraft, then send by
+ * the draft's own id+revision) rather than a bespoke endpoint, because
+ * that's the one path in this codebase that actually delivers mail — see
+ * client.ts: `send` is explicitly "Consequential: actually delivers the
+ * draft." A digest to Shivani about her own job search is informational,
+ * not a job application or anything the CLAUDE.md stage-and-stop rule is
+ * about, so — same as the SMS/iMessage sends already did before this —
+ * there is no separate human approval step between saveDraft and send here.
+ */
+async function sendDigestEmailIfConfigured(summary: RunSummary, deps: JobsCommandDeps): Promise<void> {
+  if (process.env["DIGEST_EMAIL_ENABLED"] !== "true") return;
+
+  const to = process.env["DIGEST_EMAIL_TO"];
+  if (!to) {
+    deps.stderr("DIGEST_EMAIL_ENABLED is true but DIGEST_EMAIL_TO is not set — skipping the email.");
+    return;
+  }
+
+  const client = createInkboxClientFromEnv();
+  if (!client) {
+    deps.stderr("DIGEST_EMAIL_ENABLED is true but Inkbox is not configured (INKBOX_API_KEY/INKBOX_MAILBOX_ADDRESS) — skipping the email.");
+    return;
+  }
+
+  try {
+    const draft = await client.saveDraft({
+      to: [{ address: to }],
+      subject: formatDigestEmailSubject(summary),
+      body: formatDigestEmailBody(summary),
+    });
+    await client.send({ draftId: draft.id, revision: draft.revision });
+    deps.stdout(`Digest emailed to ${to}.`);
+  } catch (error) {
+    deps.stderr(`Could not email the digest: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
