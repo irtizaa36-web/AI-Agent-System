@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { alertEmailToPostings, createAlertMailSource, extractListingsFromEmail, looksLikeJobAlert } from "./alert-mail";
+import {
+  alertEmailToPostings,
+  createAlertMailSource,
+  extractListingsFromEmail,
+  looksLikeForwardedJobAlert,
+  looksLikeJobAlert,
+} from "./alert-mail";
 import { FakeInkboxClient } from "../../integrations/inkbox/fake-client";
 import type { EmailMessage } from "../../integrations/inkbox/client";
 
@@ -55,6 +61,25 @@ test("looksLikeJobAlert rejects an unrelated LinkedIn email — a connection req
 
 test("looksLikeJobAlert rejects mail from an unrelated domain, even with a matching subject", () => {
   assert.equal(looksLikeJobAlert(message({ from: { address: "newsletter@example.com" } })), false);
+});
+
+test("looksLikeForwardedJobAlert accepts a manually-forwarded copy — sender rewritten to the forwarder, listings still extractable", () => {
+  const forwarded = message({
+    from: { address: "brshivani@gmail.com" },
+    subject: "Fwd: 3 new jobs match your preferences",
+    body: `---------- Forwarded message ---------\nFrom: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>\n${SAMPLE_ALERT_HTML}`,
+  });
+  assert.equal(looksLikeJobAlert(forwarded), false, "sender is the forwarder, not LinkedIn — the direct check must not match");
+  assert.equal(looksLikeForwardedJobAlert(forwarded), true);
+});
+
+test("looksLikeForwardedJobAlert rejects a message that merely mentions LinkedIn with no extractable job-view link", () => {
+  const notAnAlert = message({
+    from: { address: "brshivani@gmail.com" },
+    subject: "Fwd: check out my LinkedIn profile",
+    body: "<p>Hey, connect with me on LinkedIn sometime!</p>",
+  });
+  assert.equal(looksLikeForwardedJobAlert(notAnAlert), false, "mentioning LinkedIn is not evidence — an extractable listing is");
 });
 
 test("extractListingsFromEmail reads title, company and location from each job card", () => {
@@ -132,6 +157,30 @@ test("createAlertMailSource reads only messages that look like job alerts, via t
 
   assert.equal(postings.length, 2, "only the genuine job-alert email's two listings, not the recruiter message");
   assert.ok(postings.every((p) => p.sourceId === "inkbox:alert-mail"));
+});
+
+test("createAlertMailSource also reads a manually-forwarded backlog email, not just genuine auto-forwarded originals", async () => {
+  const client = new FakeInkboxClient("toozy@inkboxmail.com", [
+    message({
+      id: "forwarded",
+      threadId: "forwarded",
+      from: { address: "brshivani@gmail.com" },
+      subject: "Fwd: 3 new jobs match your preferences",
+      body: `---------- Forwarded message ---------\nFrom: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>\n${SAMPLE_ALERT_HTML}`,
+    }),
+    message({
+      id: "unrelated",
+      threadId: "unrelated",
+      from: { address: "brshivani@gmail.com" },
+      subject: "Fwd: dinner Friday?",
+      body: "<p>Still on for 7pm?</p>",
+    }),
+  ]);
+
+  const source = createAlertMailSource(client);
+  const postings = await source.fetch();
+
+  assert.equal(postings.length, 2, "the forwarded backlog email's two listings, not the unrelated forward");
 });
 
 test("createAlertMailSource returns an empty array, not a crash, when nothing matches", async () => {

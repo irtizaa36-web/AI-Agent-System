@@ -31,6 +31,12 @@ import type { Source } from "./source";
  * treat this the same as any other newly-added source that hasn't yet
  * proven itself against real data (see health.ts: an empty result reports
  * as `"empty"`, not silently as success).
+ *
+ * Two ways a message counts as a job alert: `looksLikeJobAlert` (sender +
+ * subject — the fast path for genuinely auto-forwarded originals) or
+ * `looksLikeForwardedJobAlert` (extractable job-view links in the body —
+ * the fallback for a backlog someone forwarded by hand, where Gmail's
+ * "Forward" button rewrites the sender). See the latter's doc comment.
  */
 
 const JOB_ALERT_SENDER = /linkedin\.com|indeed\.com/i;
@@ -119,6 +125,29 @@ export function extractListingsFromEmail(html: string): readonly ExtractedListin
   return listings;
 }
 
+/**
+ * A manually-forwarded copy of a job-alert email fails `looksLikeJobAlert`
+ * for a structural reason, not a content one: Gmail's "Forward" button (as
+ * opposed to its Settings-based auto-forwarding) rewrites the `From` header
+ * to whoever hit forward, so the sender check above sees Shivani's own
+ * address, never linkedin.com/indeed.com. Rejecting on sender alone would
+ * silently drop an entire manually-recovered backlog — exactly the failure
+ * mode found when her Sep 14 auto-forwarding turned out to have never been
+ * switched on, and the existing alerts in her inbox had to be forwarded by
+ * hand.
+ *
+ * The fallback trusts the same structural evidence `extractListingsFromEmail`
+ * already relies on: a genuine `jobs/view` or `/viewjob` URL is a far more
+ * specific signal than a sender header, and unlike the sender, it survives
+ * forwarding intact (Gmail quotes the original HTML body). A message that
+ * merely mentions LinkedIn without a single extractable job-view link still
+ * gets nothing here — this never lowers the bar to "contains the word
+ * LinkedIn."
+ */
+export function looksLikeForwardedJobAlert(message: Pick<EmailMessage, "body">): boolean {
+  return extractListingsFromEmail(message.body).length > 0;
+}
+
 export function alertEmailToPostings(message: EmailMessage, sourceId: string): readonly RawPosting[] {
   return extractListingsFromEmail(message.body).map((listing) => ({
     sourceId,
@@ -141,7 +170,7 @@ export function createAlertMailSource(client: InkboxClient, id = "inkbox:alert-m
     company: null,
     async fetch() {
       const messages = await client.searchMail("job alert");
-      const alerts = messages.filter(looksLikeJobAlert);
+      const alerts = messages.filter((message) => looksLikeJobAlert(message) || looksLikeForwardedJobAlert(message));
       return alerts.flatMap((message) => alertEmailToPostings(message, id));
     },
   };
