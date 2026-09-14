@@ -35,8 +35,18 @@ export interface PipelineDeps {
   readonly store: JobStore;
   readonly prefs: Preferences;
   readonly profile: CandidateProfile;
-  /** Absent means no API key is configured: the run still fetches, dedupes and filters, and simply does not score. */
+  /**
+   * Absent means scoring is skipped this run — the run still fetches,
+   * dedupes and filters. `scoringUnavailableReason` says why, so the
+   * digest's failure message names the real cause rather than assuming it
+   * was always a missing API key (it might instead be a missing resume —
+   * see MissingProfileError in config.ts, and CLAUDE.md's own reminder that
+   * a wrong-but-plausible message is worse than no message: it sends
+   * whoever reads it chasing the wrong fix).
+   */
   readonly scoringClient?: ScoringClient;
+  /** Short clause completing "...not scored: {reason}." Defaults to the API-key case for callers that don't pass one. */
+  readonly scoringUnavailableReason?: string;
   readonly costLogPath: string;
   /** How many sources to fetch at once. Deliberately small — politeness, not throughput. */
   readonly concurrency?: number;
@@ -103,8 +113,9 @@ export async function runPipeline(deps: PipelineDeps): Promise<RunSummary> {
     scored = result.scored;
     failures = result.failures;
   } else if (passed.length > 0) {
+    const reason = deps.scoringUnavailableReason ?? "no ANTHROPIC_API_KEY configured";
     failures = [
-      `${passed.length} posting(s) fetched and filtered but not scored: no ANTHROPIC_API_KEY configured. They are saved and will be scored on the next run once a key is set.`,
+      `${passed.length} posting(s) fetched and filtered but not scored: ${reason}. They are saved and will be scored on the next run once this is resolved.`,
     ];
   }
 

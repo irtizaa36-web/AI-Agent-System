@@ -201,6 +201,17 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
     deps.stderr("ANTHROPIC_API_KEY is not set — running discovery only, scoring will be skipped.");
   }
   if (profileMissing) deps.stderr(profileMissing);
+  // The digest's own failure line needs the real cause, not an assumption:
+  // scoringClient can be undefined for two different reasons, and confusing
+  // them sends whoever reads it chasing the wrong fix (confirmed in
+  // production Sep 14 — a run with a perfectly good ANTHROPIC_API_KEY still
+  // said "no ANTHROPIC_API_KEY configured" because the real cause was a
+  // missing resume).
+  const scoringUnavailableReason = profileMissing
+    ? "no resume on file for this profile yet"
+    : !scoringClient
+      ? "no ANTHROPIC_API_KEY configured"
+      : undefined;
 
   // Adds LinkedIn/Indeed coverage via forwarded alert emails (ADR 0013,
   // ADR 0015) when Inkbox is configured. Silently absent otherwise — never
@@ -214,6 +225,7 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
     prefs,
     profile: candidate,
     scoringClient,
+    scoringUnavailableReason,
     costLogPath: join(root, COST_LOG_PATH),
   });
 
@@ -277,6 +289,7 @@ async function runJobsReconcile(profile: string, root: string, deps: JobsCommand
     deps.stderr("ANTHROPIC_API_KEY is not set — rescued postings will be saved unscored.");
   }
   if (profileMissing) deps.stderr(profileMissing);
+  const scoringUnavailableReason = profileMissing ? "no resume on file for this profile yet" : "no ANTHROPIC_API_KEY configured";
 
   const runId = randomUUID();
   const startedAt = new Date().toISOString();
@@ -289,7 +302,7 @@ async function runJobsReconcile(profile: string, root: string, deps: JobsCommand
     scored = result.scored;
     failures = result.failures;
   } else {
-    failures = [`${rescued.length} rescued posting(s) not scored: no ANTHROPIC_API_KEY configured.`];
+    failures = [`${rescued.length} rescued posting(s) not scored: ${scoringUnavailableReason}.`];
   }
 
   const scoredIds = new Set(scored.map((record) => record.id));

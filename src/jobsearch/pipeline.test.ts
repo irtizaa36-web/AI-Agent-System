@@ -213,6 +213,29 @@ test("with no scoring client the run still discovers and says plainly why nothin
   assert.equal((await store.listJobs()).length, 1);
 });
 
+test("scoringUnavailableReason overrides the default message — a missing resume is not the same failure as a missing API key", async () => {
+  // Confirmed in production Sep 14: a run with a perfectly good
+  // ANTHROPIC_API_KEY still reported "no ANTHROPIC_API_KEY configured"
+  // because the real cause was a missing resume (config.ts's
+  // MissingProfileError), and the caller had no way to say so — the
+  // pipeline always assumed the one reason. This is the caller's escape
+  // hatch out of that assumption.
+  const store = new InMemoryJobStore();
+
+  const summary = await runPipeline({
+    sources: [source("greenhouse:acme", [posting()])],
+    store,
+    prefs,
+    profile,
+    scoringUnavailableReason: "no resume on file for this profile yet",
+    costLogPath: LEDGER,
+    politeDelay: false,
+  });
+
+  assert.match(summary.failures[0] ?? "", /no resume on file for this profile yet/);
+  assert.doesNotMatch(summary.failures[0] ?? "", /ANTHROPIC_API_KEY/, "the wrong reason must not still appear");
+});
+
 test("the same role on two boards produces one shortlisted record with both links", async () => {
   const store = new InMemoryJobStore();
 
