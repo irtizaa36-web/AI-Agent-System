@@ -5,3 +5,12 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Real resumes, accomplishment banks and notes — one namespaced folder per
+# person (profile/shivani/, profile/irtiza/). Personal data stays local; see
+# PLAN.md and ADR 0017. The folder and its README are tracked; nothing inside
+# any person's directory ever is.
+profile/*
+!profile/README.md
+# Per-run model spend ledger.
+logs/

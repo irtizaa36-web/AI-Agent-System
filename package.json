@@ -14,7 +14,9 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test \"dist/**/*.test.js\"",
     "cli": "npm run build --silent && node dist/cli/index.js",
-    "cli:env": "npm run build --silent && node --env-file=.env dist/cli/index.js"
+    "cli:env": "npm run build --silent && node --env-file=.env dist/cli/index.js",
+    "pipeline": "npm run build --silent && node --env-file-if-exists=.env dist/cli/index.js jobs run",
+    "jobs": "npm run build --silent && node --env-file-if-exists=.env dist/cli/index.js jobs"
   },
   "dependencies": {
     "@inkbox/sdk": "^0.6.6",
