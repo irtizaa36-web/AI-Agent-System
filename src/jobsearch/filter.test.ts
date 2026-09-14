@@ -47,6 +47,25 @@ test("a title outside the cluster is rejected before any model call", () => {
   assert.match(outcome.reason ?? "", /outside the target cluster/);
 });
 
+test("a title matches a configured pattern even when the words are reordered", () => {
+  // Real Sep 14 examples that a literal substring check silently dropped:
+  // the board's title leads with a qualifier or restructures the phrase, but
+  // every word in the configured pattern is still there.
+  const outcome = applyFilters(job({ title: "Senior GTM Strategy & Operations Manager, Mid-Late Sales Funnel" }), {
+    ...prefs,
+    titles: ["strategy & operations manager"],
+  });
+  assert.equal(outcome.passed, true);
+});
+
+test("a title match still requires every word in the pattern, not just some of them", () => {
+  const outcome = applyFilters(job({ title: "Operations Coordinator" }), {
+    ...prefs,
+    titles: ["strategy & operations manager"],
+  });
+  assert.equal(outcome.passed, false);
+});
+
 test("an empty titles list lets everything through rather than rejecting the whole market", () => {
   const outcome = applyFilters(job({ title: "Staff Backend Engineer" }), { ...prefs, titles: [] });
   assert.equal(outcome.passed, true);

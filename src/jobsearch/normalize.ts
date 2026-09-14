@@ -269,6 +269,26 @@ export function normalizeTitle(title: string): string {
 }
 
 /**
+ * Whether every word in a configured title pattern shows up somewhere in a
+ * posting's title, regardless of order. A strict superset of substring
+ * matching: a literal substring match implies its words are all present in
+ * the title too, so nothing that passed the old `.includes()` check stops
+ * passing. What changes is board titles that restructure a phrase — "GTM
+ * Strategy & Operations Manager" vs. the configured "strategy & operations
+ * manager", or "Manager, Enablement Programs" vs. "enablement manager" — which
+ * a literal substring check rejects and this doesn't. Measured against Sep 14
+ * data, 80 of 5,378 title-rejected postings were word-order variants of a
+ * configured pattern; 14 of those cleared every other filter, so they were
+ * reaching the scorer under the old check for zero reason but ordering.
+ */
+export function titleMatchesTarget(title: string, target: string): boolean {
+  const targetTokens = normalizeTitle(target).split(" ").filter(Boolean);
+  if (targetTokens.length === 0) return false;
+  const titleTokens = new Set(normalizeTitle(title).split(" ").filter(Boolean));
+  return targetTokens.every((token) => titleTokens.has(token));
+}
+
+/**
  * The cross-source identity. Location class rather than raw location is
  * deliberate: the same remote role listed as "Remote - US" and "Remote"
  * must collapse, while a genuinely different Chicago office role must not.

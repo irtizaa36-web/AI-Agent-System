@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runPipeline } from "../jobsearch/pipeline";
@@ -5,13 +6,18 @@ import { renderDigest, digestPayload, type RunSummary } from "../jobsearch/diges
 import { sourcesFromWatchlist } from "../jobsearch/sources/registry";
 import { JsonFileJobStore } from "../store/job-store";
 import { createScoringClientFromEnv } from "../jobsearch/scoring-client";
-import { readLedger } from "../jobsearch/cost";
+import { CostLedger, readLedger } from "../jobsearch/cost";
 import { createJobsDashboardServer } from "../jobsearch/dashboard";
 import { createAlertMailSource } from "../jobsearch/sources/alert-mail";
 import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
 import type { Source } from "../jobsearch/sources/source";
 import { createSmsClientFromEnv, SmsRecipientBlockedError } from "../jobsearch/sms-client";
 import { formatDigestSms } from "../jobsearch/digest-sms";
+import { reconcileFiltered } from "../jobsearch/reconcile";
+import { scoreRecords } from "../jobsearch/score";
+import { sortByRank } from "../jobsearch/rank";
+import { summarizeRejections } from "../jobsearch/filter";
+import type { JobRecord } from "../jobsearch/records";
 import {
   assertValidProfile,
   CONFIG_ROOT,
@@ -42,6 +48,7 @@ export interface JobsCommandDeps {
 const USAGE = [
   "jobs subcommands (every one takes --profile <name>, or --all where noted):",
   "  run --profile <name>|--all   Fetch, dedupe, filter, score, and write today's digest",
+  "  reconcile --profile <name>   Re-check already-filtered postings against today's rules (after a prefs/filter change) and score any that now pass",
   "  digest --profile <name>      Print the most recent digest without running the pipeline",
   "  sources --profile <name>     List the configured sources and check each one's health",
   "  costs                        Show what recent runs have cost (shared ledger)",
@@ -120,6 +127,16 @@ export async function runJobsCommand(args: readonly string[], deps: JobsCommandD
       for (const profile of profiles) {
         if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
         worst = Math.max(worst, await runJobsRun(profile, root, deps));
+      }
+      return worst;
+    }
+    case "reconcile": {
+      const profiles = await resolveProfiles(rest, root, deps, true);
+      if (!profiles) return 1;
+      let worst = 0;
+      for (const profile of profiles) {
+        if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
+        worst = Math.max(worst, await runJobsReconcile(profile, root, deps));
       }
       return worst;
     }
@@ -218,6 +235,109 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
   // scheduled job surfaces it rather than looking like a quiet success.
   const allBroken = summary.health.length > 0 && summary.health.every((entry) => entry.state === "degraded");
   return allBroken ? 1 : 0;
+}
+
+/**
+ * Re-checks every currently `filtered` posting against today's prefs and
+ * scores whatever now passes. Exists because dedupe treats anything already
+ * in the store as known forever — see reconcile.ts — so a prefs or filter
+ * logic change only ever affects postings discovered after the change
+ * unless something explicitly replays the old ones too. Fetches nothing new;
+ * it only re-judges what the store already has.
+ */
+async function runJobsReconcile(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+  const prefs = await loadPreferences(profile, root);
+  const store = new JsonFileJobStore(join(root, dataDirFor(profile)));
+  const all = await store.listJobs();
+  const { rescued, stillFiltered } = reconcileFiltered(all, prefs);
+
+  deps.stdout(`${all.filter((r) => r.state === "filtered").length} previously-filtered posting(s) checked against current rules.`);
+
+  if (rescued.length === 0) {
+    deps.stdout("None now pass. Nothing to score, nothing written.");
+    return 0;
+  }
+
+  let candidate: CandidateProfile = { resume: "", notes: "" };
+  let profileMissing: string | null = null;
+  try {
+    candidate = await loadProfile(profile, root);
+  } catch (error) {
+    if (error instanceof MissingProfileError) {
+      profileMissing = error.message;
+    } else {
+      throw error;
+    }
+  }
+
+  const scoringClient = profileMissing ? undefined : createScoringClientFromEnv();
+  if (!profileMissing && !scoringClient) {
+    deps.stderr("ANTHROPIC_API_KEY is not set — rescued postings will be saved unscored.");
+  }
+  if (profileMissing) deps.stderr(profileMissing);
+
+  const runId = randomUUID();
+  const startedAt = new Date().toISOString();
+  const ledger = new CostLedger(runId, join(root, COST_LOG_PATH));
+
+  let scored: readonly JobRecord[] = [];
+  let failures: readonly string[] = [];
+  if (scoringClient) {
+    const result = await scoreRecords(rescued, candidate, prefs, scoringClient, ledger);
+    scored = result.scored;
+    failures = result.failures;
+  } else {
+    failures = [`${rescued.length} rescued posting(s) not scored: no ANTHROPIC_API_KEY configured.`];
+  }
+
+  const scoredIds = new Set(scored.map((record) => record.id));
+  const unscored = rescued.filter((record) => !scoredIds.has(record.id));
+  await store.saveJobs([...scored, ...unscored, ...stillFiltered]);
+
+  const ranked = sortByRank(scored, prefs);
+  const aboveCutoff = ranked.filter((record) => (record.score ?? 0) >= prefs.scoreCutoff);
+  const shortlisted = aboveCutoff.slice(0, prefs.digestLimit);
+  const alsoSeen = ranked.filter((record) => !shortlisted.includes(record));
+  const tokens = ledger.totalTokens();
+
+  const summary: RunSummary = {
+    runId,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    fetchedCount: 0,
+    newCount: rescued.length,
+    duplicateCount: 0,
+    filteredCount: stillFiltered.length,
+    filterReasons: summarizeRejections(stillFiltered),
+    scoredCount: scored.length,
+    shortlisted,
+    alsoSeen,
+    health: [],
+    failures,
+    costUsd: ledger.total(),
+    inputTokens: tokens.input,
+    outputTokens: tokens.output,
+  };
+
+  const markdown = renderDigest(summary).replace(
+    "# Job digest",
+    "# Job digest (reconciliation — re-checked previously-filtered postings, fetched nothing new)",
+  );
+  const digestDir = join(root, dataDirFor(profile), "digests");
+  await mkdir(digestDir, { recursive: true });
+  const stamp = summary.startedAt.replace(/[:.]/g, "-");
+  await writeFile(join(digestDir, `reconcile-${stamp}.md`), markdown, "utf8");
+  await writeFile(join(digestDir, "latest.md"), markdown, "utf8");
+  await writeFile(join(digestDir, "latest.json"), JSON.stringify(digestPayload(summary), null, 2), "utf8");
+
+  deps.stdout(markdown);
+  deps.stdout("");
+  deps.stdout(`${rescued.length} rescued, ${scored.length} scored, ${shortlisted.length} clear the cutoff.`);
+
+  await sendDigestSmsIfConfigured(summary, deps);
+  await sendDigestImessageIfConfigured(summary, deps);
+
+  return 0;
 }
 
 async function printLatestDigest(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {

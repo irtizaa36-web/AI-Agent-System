@@ -44,6 +44,10 @@ function summary(overrides: Partial<RunSummary> = {}): RunSummary {
     newCount: 9,
     duplicateCount: 111,
     filteredCount: 6,
+    filterReasons: [
+      { reason: "Title outside the target cluster", count: 4 },
+      { reason: "Not remote, and not in a named metro", count: 2 },
+    ],
     scoredCount: 3,
     shortlisted: [job()],
     alsoSeen: [],
@@ -103,6 +107,23 @@ test("cross-posted roles list their other links", () => {
     }),
   );
   assert.match(markdown, /Also posted: \[lever:acme\]\(https:\/\/b\.test\/2\)/);
+});
+
+test("the digest shows why postings were filtered out, not just how many", () => {
+  const markdown = renderDigest(summary());
+  assert.match(markdown, /Filtered out:.*Title outside the target cluster \(4\)/);
+  assert.match(markdown, /Not remote, and not in a named metro \(2\)/);
+});
+
+test("filter reasons beyond the top 5 are rolled up instead of spilling the whole list", () => {
+  const filterReasons = Array.from({ length: 8 }, (_, i) => ({ reason: `Reason ${i}`, count: 10 - i }));
+  const markdown = renderDigest(summary({ filterReasons }));
+  assert.match(markdown, /3 more reasons \(12\)/);
+});
+
+test("a run with nothing filtered out shows no filter-reasons line", () => {
+  const markdown = renderDigest(summary({ filteredCount: 0, filterReasons: [] }));
+  assert.doesNotMatch(markdown, /Filtered out:/);
 });
 
 test("the dashboard payload reports whether pay was stated, without inventing a figure", () => {

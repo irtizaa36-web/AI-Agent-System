@@ -4,7 +4,7 @@ import type { Source } from "./sources/source";
 import { jitter, mapWithConcurrency } from "./sources/source";
 import { toJobRecord } from "./normalize";
 import { dedupe } from "./dedupe";
-import { applyFilters } from "./filter";
+import { applyFilters, summarizeRejections } from "./filter";
 import { sortByRank } from "./rank";
 import { scoreRecords, type CandidateProfile } from "./score";
 import type { ScoringClient } from "./scoring-client";
@@ -133,6 +133,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<RunSummary> {
     newCount: fresh.length,
     duplicateCount,
     filteredCount: rejected.length,
+    filterReasons: summarizeRejections(rejected),
     scoredCount: scored.length,
     shortlisted,
     alsoSeen,

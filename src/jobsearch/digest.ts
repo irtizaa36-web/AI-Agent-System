@@ -1,5 +1,5 @@
 import type { JobRecord } from "./records";
-import { salaryUnknown } from "./filter";
+import { salaryUnknown, type RejectionBucket } from "./filter";
 import type { SourceHealth } from "./health";
 import { summarizeHealth } from "./health";
 
@@ -21,6 +21,7 @@ export interface RunSummary {
   readonly newCount: number;
   readonly duplicateCount: number;
   readonly filteredCount: number;
+  readonly filterReasons: readonly RejectionBucket[];
   readonly scoredCount: number;
   readonly shortlisted: readonly JobRecord[];
   readonly alsoSeen: readonly JobRecord[];
@@ -98,6 +99,14 @@ export function renderDigest(summary: RunSummary): string {
   lines.push(`- Tokens: ${summary.inputTokens.toLocaleString()} in, ${summary.outputTokens.toLocaleString()} out`);
   lines.push(`- Cost: ${money(summary.costUsd)}`);
 
+  if (summary.filterReasons.length > 0) {
+    const top = summary.filterReasons.slice(0, 5);
+    const rest = summary.filterReasons.slice(5).reduce((sum, bucket) => sum + bucket.count, 0);
+    const parts = top.map((bucket) => `${bucket.reason} (${bucket.count})`);
+    if (rest > 0) parts.push(`${summary.filterReasons.length - 5} more reasons (${rest})`);
+    lines.push(`- Filtered out: ${parts.join(", ")}`);
+  }
+
   const broken = summary.health.filter((entry) => entry.state === "degraded");
   if (broken.length > 0) {
     lines.push("", "### Sources needing attention", "");
@@ -138,6 +147,7 @@ export function digestPayload(summary: RunSummary): Record<string, unknown> {
       scored: summary.scoredCount,
       shortlisted: summary.shortlisted.length,
     },
+    filterReasons: summary.filterReasons,
     costUsd: summary.costUsd,
     shortlisted: summary.shortlisted.map((record) => ({
       id: record.id,

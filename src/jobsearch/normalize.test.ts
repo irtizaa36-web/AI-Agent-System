@@ -11,6 +11,7 @@ import {
   parseExperienceYears,
   parseSalary,
   stripBoilerplate,
+  titleMatchesTarget,
   toJobRecord,
   truncateToBudget,
 } from "./normalize";
@@ -196,6 +197,27 @@ test("truncateToBudget leaves short text alone and marks what it cuts", () => {
   const long = truncateToBudget("x".repeat(1000), 10);
   assert.ok(long.length < 1000);
   assert.match(long, /\[truncated\]$/);
+});
+
+test("titleMatchesTarget matches regardless of word order", () => {
+  assert.equal(titleMatchesTarget("Senior GTM Strategy & Operations Manager", "strategy & operations manager"), true);
+  assert.equal(titleMatchesTarget("Manager, Enablement Programs", "enablement manager"), true);
+});
+
+test("titleMatchesTarget is a superset of substring matching — a literal match still passes", () => {
+  assert.equal(titleMatchesTarget("Senior Marketing Program Manager", "program manager"), true);
+});
+
+test("titleMatchesTarget requires every word in the pattern, not just one", () => {
+  assert.equal(titleMatchesTarget("Operations Coordinator", "strategy & operations manager"), false);
+});
+
+test("titleMatchesTarget does not stem — plural and singular are different tokens", () => {
+  assert.equal(titleMatchesTarget("Director of Platform Programs", "program manager"), false);
+});
+
+test("titleMatchesTarget returns false for an empty pattern rather than matching everything", () => {
+  assert.equal(titleMatchesTarget("Anything At All", ""), false);
 });
 
 test("toJobRecord produces a seen record with the raw body kept out of the summary path", () => {

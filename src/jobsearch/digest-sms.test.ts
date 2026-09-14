@@ -45,6 +45,7 @@ function summary(overrides: Partial<RunSummary> = {}): RunSummary {
     newCount: 20,
     duplicateCount: 80,
     filteredCount: 15,
+    filterReasons: [{ reason: "Title outside the target cluster", count: 15 }],
     scoredCount: 5,
     shortlisted: [job()],
     alsoSeen: [],

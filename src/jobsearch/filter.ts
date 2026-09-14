@@ -1,5 +1,5 @@
 import type { JobRecord, Preferences } from "./records";
-import { normalizeCompany, normalizeTitle } from "./normalize";
+import { normalizeCompany, normalizeTitle, titleMatchesTarget } from "./normalize";
 
 /**
  * Stage 6: the free filters. Everything here is a string comparison or a
@@ -42,7 +42,7 @@ export function applyFilters(record: JobRecord, prefs: Preferences, now: Date = 
   // An empty titles list means "not configured yet" — let everything through
   // rather than silently rejecting the entire market on a blank config file.
   if (prefs.titles.length > 0) {
-    const matched = prefs.titles.some((target) => title.includes(normalizeTitle(target)));
+    const matched = prefs.titles.some((target) => titleMatchesTarget(record.title, target));
     if (!matched) {
       return { passed: false, reason: "Title outside the target cluster" };
     }
@@ -175,4 +175,43 @@ function checkSalary(record: JobRecord, prefs: Preferences): FilterOutcome {
 /** True when the posting published no salary, so the digest can say so rather than implying a figure. */
 export function salaryUnknown(record: JobRecord): boolean {
   return record.salaryMin === null && record.salaryMax === null;
+}
+
+export interface RejectionBucket {
+  readonly reason: string;
+  readonly count: number;
+}
+
+/**
+ * Every filter reason above is written to include specifics (an age in
+ * days, a dollar figure, a named country) so a single rejected posting is
+ * self-explanatory. That specificity is exactly what hides the shape of a
+ * whole run: 189 distinct-looking strings can still mean "title didn't
+ * match" 189 times. This buckets a run's rejections back to the check that
+ * produced them, so the digest can show which gate is actually doing the
+ * work — the gap this closes is that the title-cluster check silently threw
+ * away 92.9% of one real run and nobody could see that from the digest.
+ */
+const REJECTION_BUCKETS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^Title excluded:/, "Title excluded (level cap / intern / contractor)"],
+  [/^Company excluded:/, "Company excluded"],
+  [/^Industry excluded:/, "Industry excluded"],
+  [/^Not remote/, "Not remote, and not in a named metro"],
+  [/^Location not stated/, "Location not stated"],
+  [/^Remote, but not eligible from the US/, "Remote, but not US-eligible"],
+  [/^Wants .* above the .* ceiling/, "Wants more experience than her ceiling"],
+  [/^Wants at most .* below the .* floor/, "Wants less experience than her floor"],
+  [/^Posted .* older than/, "Posting older than the age limit"],
+  [/^Stated pay tops out at/, "Below the stated salary floor"],
+];
+
+/** Collapses a run's rejections down to the filter stage that produced each one, most common first. */
+export function summarizeRejections(records: readonly JobRecord[]): readonly RejectionBucket[] {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const reason = record.filterReason ?? "Unknown reason";
+    const bucket = REJECTION_BUCKETS.find(([pattern]) => pattern.test(reason))?.[1] ?? reason;
+    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count);
 }
