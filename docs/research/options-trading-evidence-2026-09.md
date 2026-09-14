@@ -210,3 +210,320 @@ dominant loss mechanism** — not bad directional calls. That is the same conclu
 Build `.agents/skills/options-trading-eval/SKILL.md` from the **[VERIFIED]** and
 **[ABSTRACT-LEVEL]** material only, carrying the confidence labels through, and encoding the
 contradicted claims as explicit warnings rather than omitting them.
+
+---
+
+## Verification round 2 (2026-09-14)
+
+Targeted follow-up on the five items left open in "(d) Missing information". Same confidence
+labels as above. **Four of five are now resolved against full primary text; one is partially
+resolved.**
+
+### Method note — the PDF blocker was worked around
+
+The earlier round recorded that primary PDFs "could not be converted to text." That is no longer
+true. `pypdf` is still broken (the `cryptography` Rust binding panics on import) and `pdftotext`
+is still absent, but PDF content streams are plain FlateDecode and can be inflated with the
+stdlib `zlib` and parsed for `Tj`/`TJ` text operators in ~100 lines of dependency-free Python.
+**Three papers were read in full this round by that route.** SSRN's own delivery endpoint still
+returns HTTP 403, so mirror copies (conference sites, author pages, publisher CDNs) were used
+instead. Future rounds should not treat "it's a PDF" as inaccessible.
+
+Caveat that applies to everything below: mirror PDFs are **specific dated versions**. Where a
+figure is version-dependent, that is stated.
+
+---
+
+### Claim 1 — the −0.9% / −3.4% per-trade figures — **RESOLVED**
+
+**[VERIFIED]** The figures are real, and they **do** come from Bogousslavsky & Muravyev. The
+previous round's suspicion that they had been misattributed was wrong. Read against the full
+text of the **August 29, 2024 version**
+([mirror PDF](https://www.lsu.edu/business/files/event-files/2025-finance-mardi-gras/retail_option_trading_v2.pdf)).
+
+Verbatim, §4.1 Profitability:
+
+> "Based on a sample of nearly 890,000 parent option trades, Table 2 reveals that option trades
+> yield an average return of −0.9%. This moderately negative return **includes broker commissions
+> and liquidity costs from crossing the bid-ask spread**."
+
+So the "including commissions and spread crossing" qualifier in the secondary source is accurate,
+not embellishment.
+
+| Item | Verified value |
+|---|---|
+| Average return per option parent trade | **−0.9%** (Table 3 baseline: **−0.93%**, t = **−3.57**) |
+| Option parent trades, N | **889,967** (Table 2b) — "nearly 890,000" is exact |
+| Small traders | **−3.4%** per option trade ("small traders, who are presumably less sophisticated, lose the most per option trade (−3.4%)") |
+| Multi-day traders | −0.9% per option trade; **break even** on stock trades |
+| Sample | **5,182 traders**, 2.4M parent trades, ~**$15 billion**, **2020–2022** |
+| Stock parent trades, N | 1,525,497 |
+
+Supporting context the secondary source dropped: the paper argues the −0.9% is **small relative
+to costs**, not large. TD Ameritrade's $0.65/contract, paid on entry and exit, is ~0.4% of an
+average $2,006 / 6-contract trade — i.e. **roughly half the total loss is plain commission.**
+Typical option bid-ask spreads are 5–10%, so the authors infer retail is largely using limit
+orders rather than crossing the spread. Profitability across subsamples ranges **−5% to +1%**.
+
+**Do not quote −0.9% as evidence that retail loses badly.** In the source it is an argument that
+losses are *smaller than widely claimed*.
+
+### Claim 2 — the abstract-level findings — **RESOLVED, with two corrections**
+
+**[VERIFIED]** against the same full text.
+
+| Sub-claim | Verdict |
+|---|---|
+| Option trades > 1/3 of retail trades | **Confirmed** for the Aug-2024 version — abstract: "Option trades constitute over one-third of all trades." **Version-dependent, see below.** |
+| "Almost no covered calls or protective puts" | **Confirmed, and stronger than stated.** Covered calls are **< 0.2%** of all option trades. Even at the **90th percentile across accounts**, covered calls and protective puts **jointly** account for ~**0.3%**. At most **15–16%** of option trades are multi-leg at all, vs. **at least one-third** of all OPRA trades (Li, Musto & Pearson 2023). |
+| "Little evidence of positive skewness in realised dollar profits" | **Confirmed.** Dollar P&L is **slightly negatively** skewed: skewness **−0.25** (stock) and **−0.14** (option) for multi-day traders. The paper attributes part of this to retail realising gains earlier than losses. |
+| "Relatively sophisticated on average" | **Confirmed as a quote — but the earlier round used it wrongly.** See below. |
+
+**Correction 1 — "sophisticated" is a sample-selection artifact, not a finding about retail.**
+The dataset is users of a **trading journal**. The paper says so explicitly and names it as the
+study's main limitation:
+
+> "These traders may be relatively more sophisticated than other retail investors since they find
+> a journal valuable, trade relatively often and in large size, and short more."
+
+> "The main limitation of our data is that more active and sophisticated retail traders are more
+> likely to use a trading journal. Thus, our findings should be extrapolated to the full universe
+> of retail traders... with caution."
+
+Section (c) above cites this paper's "relatively sophisticated on average" to complicate the
+"retail are gamblers" claim. **That inference does not survive contact with the paper.** The
+sample is self-selected toward sophistication by construction. The *skewness* result stands on
+its own and is the citable one; the *sophistication* line is a caveat the authors attach to their
+own generalisability, not a result about retail investors as a population.
+
+**Correction 2 — this paper directly contradicts de Silva, So & Smith, which section (b) above
+reports as [VERIFIED] with no mention of dispute.** Verbatim:
+
+> "Our profitability estimates contrast with Bryzgalova et al. (2022) and de Silva et al. (2023),
+> who report losses of 3% to 9% per trade based on aggregate retail proxies. The difference arises
+> from the proxy limitations, differences in analysis units, endogenous holding periods, and
+> investor sophistication."
+
+This is an **open, live methodological dispute** — trader-level broker data (−0.9%) vs. aggregate
+exchange proxies (−3% to −9%) — not a settled number. Section (b)'s presentation of the 5–9%
+earnings-window figure as the "single most citable result" should be read against this. Both are
+peer-reviewed-grade work; they disagree about magnitude, and the disagreement is about *proxy
+construction*, which is exactly the kind of thing a skill should surface rather than pick a side on.
+
+**Version caveat.** The abstract has changed across versions and the numbers move with it:
+
+| Version | Dataset | Options share of trades |
+|---|---|---|
+| Aug 29, 2024 (read in full here) | **$15 billion** | "over **one-third** of all trades" |
+| Version indexed by [Illinois Experts](https://experts.illinois.edu/en/publications/an-anatomy-of-retail-option-trading/) | **$20 billion** | "nearly **half** of all trades in 2022" |
+
+The author's own homepage ([bogousslavsky.github.io](https://bogousslavsky.github.io/)) lists the
+paper as a **February 2025** working paper and still describes "$15 billion". The $20bn/"nearly
+half" abstract could not be matched to a readable full text. **All full-text figures above are
+verified for the August 2024 version and may have been revised since.** SSRN 4682388 itself
+remains 403 to automated fetch.
+
+### Claim 3 — the conflicting 0DTE loss figures — **RESOLVED**
+
+**[VERIFIED]** against the full text of the **FoFI 2024 conference version**
+([PDF](https://wp.lancs.ac.uk/fofi2024/files/2024/04/FoFI-2024-146-Leander-Gayda.pdf)).
+**There are at least two paper versions, and that explains most of the conflict.**
+
+| Figure | Status | What it actually is |
+|---|---|---|
+| **$241,000/day** | **Verified** | Full sample, **Feb 2021 – Sep 2023**. Table 2 Panel A. |
+| **$350,000/day** | **Verified** | **Post-16 May 2022** (Cboe daily expiration calendar). Table 2 Panel B. |
+| **~$125 million cumulative** | **Verified** | Cumulative net-of-fees loss to Sep 2023. Gross-of-fees loss is only ~**$30 million** — i.e. **~$90M+ of the $125M is transaction costs.** |
+| **> $500,000/day** | **Verified, but the period attribution was wrong** | Peak months are **Jun, Sep and Dec 2022, and Apr 2023** — *not* "Mar–Apr 2023". Sep 2022 alone: **$680,000/day**. |
+| **~$3 million/day** | **Could not substantiate — [UNVERIFIED]** | Appears nowhere in this version. Almost certainly a **truncation artifact of "$350,000"**: the sentence reads "...this number has grown to average losses of **$350,000** per day," and a truncated quote at "$3" reads as "$3 million". Flagged as a *likely* transcription error, not a proven one. |
+
+The **"$350,000/day (~$125M cumulative)" row in section (b)'s conflict table was not a separate
+secondary source** — it is the paper's own headline pairing. The table above overstated the
+number of independent conflicting sources.
+
+**Version history, which the earlier round lacked:**
+
+- **v1 (Mar/Apr 2023)** — 0DTE data Jan 2021 – Feb 2023. **$184,000/day** full sample;
+  **$358,000/day** since 16 May 2022. This is the version Bloomberg covered on 2023-04-21
+  ("Day Traders Lose $358,000 Per Day Gambling on Zero-Day Options") — **[SECONDARY]**, headline
+  only, paywalled.
+- **later version (Dec 2023 / FoFI 2024)** — sample extended to Sep 2023. **$241,000/day** full
+  sample; **$350,000/day** since 16 May 2022.
+
+So $358k and $350k are the *same statistic* in two vintages, and $184k vs $241k likewise.
+**The order-of-magnitude conflict was never real.** Every genuine figure sits in the
+**$184k–$680k/day** band; only the unsupported "$3 million" sat outside it.
+
+Mechanism, verified: **"Roughly 60% of daily losses are the result of transaction costs, 60% are
+driven by investments in 0DTE put options, and retail buys show particularly poor performance."**
+Also verified — and cutting against the blanket "0DTE is bad" framing: **many multi-leg strategies
+deliver positive margin-adjusted returns**, with median put-spread return **3%** and call-spread
+**3.3%**, and multi-leg net losses have been **flat since early 2023**.
+
+### Claim 4 — the "−$8.05 vs +$4.55 per contract" asymmetry — **REFUTED as stated**
+
+**[VERIFIED]** — the numbers are real; **the unit is wrong, by a factor of about 100,000.**
+
+They are **Table 2, Panel B** of the Beckmeyer et al. FoFI-2024 version — *"Average daily net and
+gross profits in 0DTE retail options"*. The table is **aggregate dollars per day, in units of
+$100,000** — not dollars per contract. Panel B (from 16 May 2022):
+
+| | All options | Debit | Credit |
+|---|---|---|---|
+| **Net** | −3.50 | **−8.05** | **+4.55** |
+| **Gross** | −1.06 | −6.79 | +5.73 |
+
+The unit is provable from the table's own internals: Panel A "All Options = −2.41" is the
+**$241,000/day** figure quoted in the abstract, and Panel B "All Options = −3.50" is the
+**$350,000/day** figure. So the correct readings are:
+
+- Retail **debit (long)** 0DTE trades lost ≈ **$805,000 per day in aggregate** (post-May-2022).
+- Retail **credit (short)** 0DTE trades made ≈ **+$455,000 per day in aggregate**.
+
+**These are not per-contract expectancies and must never be quoted as such.** A retail trader
+cannot read "−$8.05" as their expected loss on a contract. The secondary source misread a
+scaled aggregate table as a per-unit one.
+
+**The direction of the asymmetry does survive**, and is independently stated in the paper's prose:
+*"While long positions in options lose money on average, short positions are profitable."*
+Debit/credit sign flips by month, though — Debit was **+33.40** (i.e. +$3.34M/day) in Jan-22 and
+**−29.01** (−$2.90M/day) in Dec-22 — so this is a **volatile aggregate, not a stable edge.**
+Any skill that encodes "selling beats buying" from this must carry that instability, and the
+crash-risk caveat already recorded in section (b).
+
+### Claim 5 — "80% of options expire worthless" — **PARTIALLY RESOLVED**
+
+**[UNVERIFIED]** for the 80% claim itself: **no primary source exists.** Every trail followed
+this round dead-ends in an unsourced attribution to "CBOE" with no named report, dataset, or
+date. This is a textbook circular-citation pattern — many apparently independent write-ups, one
+un-locatable origin.
+
+The prior recorded in the brief is **correct on mechanism**: the figure is a bad inference from a
+real statistic. The real statistic is that **~10% of contracts are exercised**; the myth infers
+that the other ~90% (softened to 80%) therefore expired worthless. That inference silently
+discards the largest category — positions **closed in the secondary market before expiry**.
+
+Best available sourced figures, by tier:
+
+**(a) / (b) / (c) — first-party industry body.** The Options Industry Council (OIC, the
+OCC-and-exchange-sponsored education arm) states on its Options Exercise FAQ
+([optionseducation.org](https://www.optionseducation.org/referencelibrary/faq/options-exercise)):
+
+> "Historically, more than **72%** of all option contracts are closed out in the market prior to
+> expiration. Additionally, another **22%** expire without value while the remaining **6%** get
+> exercised."
+
+**[ABSTRACT-LEVEL]** — this is a first-party statement but carries **no date range and no
+underlying dataset**, so it cannot be audited. Note it does **not** match the other commonly
+circulated breakdown (~10% exercised / 55–60% closed / 30–35% worthless), which is attributed to
+CBOE but which this round **could not trace to any CBOE publication** — the most careful
+secondary write-up found ([MoneyShow, 2015](https://www.moneyshow.com/articles/optionsidea-43293/))
+cites only a bare hyperlink, no report. **Two mutually inconsistent "official" breakdowns are in
+circulation and neither is independently auditable.**
+
+**(b) — measured, auditable, and the strongest number found.** Amaya, Garcia-Ares, Pearson &
+Vasquez, using Cboe exchange data with opening/closing flags
+([PDF](https://cdn.cboe.com/resources/education/research_publications/Retail_Profitability.pdf)),
+Jan 2020 – Jun 2023:
+
+> "42.4% (57.6%) of Cboe SLIM trades are closing (opening) trades... **These results imply that
+> most options positions are not held to expiration.** ...only 14.6% = 57.3% − 42.7% of volume is
+> due to opening trades that are held to expiration, and only **14.6%/57.3% = 25.5% of opening
+> trades are held to expiration**."
+
+**[VERIFIED]** — ~**25.5% of retail-proxy opening positions reach expiry; ~74.5% are closed
+first.** This is a directly measured, reproducible figure from exchange data with true
+opening/closing flags, and it is the single best support for the "closed before expiry" leg.
+Scope limit: **Cboe SLIM (retail price-improvement auction) trades only**, not all options.
+
+**Bottom line for the skill:** "80% of options expire worthless" is **[UNVERIFIED] and should be
+treated as false as commonly stated.** The defensible replacement is: *most option positions are
+closed before expiration rather than held to expiry* — ~74.5% of retail-proxy opening trades on
+Cboe (Jan 2020 – Jun 2023) [VERIFIED], or ~72% of all contracts per OIC [ABSTRACT-LEVEL]. The
+share **expiring worthless** is nowhere near 80%: OIC says **22%**, and no auditable primary
+source for any figure in this category was located. **State the 22% with its provenance weakness
+attached, or don't state a number at all.**
+
+### Bonus — CBOE's "New Evidence on the Performance of Customer Options Trades" — **READ IN FULL**
+
+**[VERIFIED]** Amaya, Garcia-Ares, Pearson & Vasquez, **April 7, 2025**
+([PDF](https://cdn.cboe.com/resources/education/research_publications/Retail_Profitability.pdf)).
+Read in full via the zlib route. This paper **materially destabilises the "retail loses" consensus**
+and belongs in the evidence base.
+
+It is a **direct rebuttal** of Bryzgalova, Pavlova & Sikorskaya (2023, *Journal of Finance*), whose
+finding that retail options traders lose money is one of the load-bearing citations in this whole
+literature. Two methodological attacks, both concrete:
+
+1. **Wrong terminal value.** BPS compute the profit of options *held to expiration* using the NBBO
+   bid-ask midpoint of the last trade rather than the **actual expiration value**. For a
+   soon-to-expire OTM option quoted 0 / $0.20, that books a $0.10 value on a contract worth zero.
+   Because offers are always ≥ 1 tick, this is **systematically biased**. *"The net effect of using
+   the expiration values in place of the NBBO midpoints is that the estimate of the profitability of
+   options held to expiration **changes from negative to positive**, using the same OPRA trade data
+   that BPS use."*
+2. **Wrong trade direction.** BPS infer buy/sell from a quote rule. Against Cboe's actual
+   counterparty records, that rule **misclassifies 42.4% of trades and 42.6% of volume.**
+
+Their own estimates, using true directions and true expiration values:
+
+| Sample | Cboe customer SLIM net profit | t-stat |
+|---|---|---|
+| Jan 2020 – Jun 2023 | **+$0.34 million/day** | 0.29 |
+| Jan 2020 – Jun 2021 | **+$2.07 million/day** | 1.19 |
+
+vs. BPS's **−$5.03M/day** (10-day horizon) and **−$1.63M/day** (held to expiration).
+
+**Two disclosures that must travel with this paper, both stated by the authors themselves:**
+
+- **Conflict of interest.** *"This paper was supported by a data research grant from The Options
+  Institute, the educational division of Cboe Global Markets."* The exchange operator whose retail
+  volume is at stake funded the data access for a paper concluding retail does fine. That does not
+  make it wrong — the methodological critiques are specific and checkable — but it is a funding
+  interest aligned with the result and must be disclosed on every citation.
+- **The authors do not claim a positive edge.** *"our performance estimates are not statistically
+  significant at conventional significance levels."* They claim only: *"our results provide no
+  evidence that Cboe customer SLIM trades are unprofitable."* **Absence of evidence of loss, not
+  evidence of profit.** Anyone citing this as "retail options traders are profitable" is
+  overstating it, in the same way the secondary sources overstated the papers above.
+
+Also verified and consistent with the structural story in section (b): *"Purchases of calls and
+sales of puts display positive performance during both sample periods, while purchases of puts and
+sales of calls are not"* — with the authors noting this is what you'd expect mechanically, since
+the S&P 500 rose **33%** and **38%** over the two sample windows. **That is a beta artifact, not
+skill, and must not be read as a strategy result.**
+
+---
+
+### What this round changes about the document above
+
+1. **Section (b)'s [UNVERIFIED] flag on −0.9% / −3.4% should be read as superseded** — both are
+   [VERIFIED], with the "small relative to costs" framing attached.
+2. **Section (b)'s and (c)'s use of "relatively sophisticated on average" to rebut the gambling
+   narrative is not supported by the paper.** The skewness result rebuts it; the sophistication
+   line is a self-selection caveat. Cite the skewness, drop the sophistication.
+3. **The 0DTE "conflicting figures" table should be read as resolved**, not as live conflict —
+   two paper vintages plus one likely truncation artifact, all within $184k–$680k/day.
+4. **The "−$8.05 / +$4.55" per-contract asymmetry is refuted as stated** and must not be carried
+   into the skill in per-contract form.
+5. **Section (b) presents de Silva/So/Smith as the strongest result without noting it is
+   contested.** Both Bogousslavsky & Muravyev and the Cboe-funded Amaya et al. paper attack the
+   proxy-based loss estimates on method. The skill should encode this as **a live dispute about
+   retail-proxy construction**, not a settled loss magnitude.
+6. **"80% expire worthless" stays [UNVERIFIED] and should be marked false-as-stated**, with the
+   ~25.5%-held-to-expiry figure offered as the sourced replacement.
+
+### Still open after this round
+
+- **SSRN 4682388's current (Feb 2025) full text.** The $20bn / "nearly half of 2022" abstract
+  could not be matched to a readable version. The Aug-2024 full text is what is verified here.
+- **No auditable primary source for any "% of options expiring worthless" figure.** OIC's
+  72/22/6 is first-party but undated and datasetless; the 10/55–60/30–35 breakdown could not be
+  traced to CBOE at all. **A genuine OCC exercise-and-expiration dataset was not located** —
+  theocc.com's historical volume statistics pages returned HTTP 403 to automated fetch. Worth a
+  manual look.
+- **Bryzgalova, Pavlova & Sikorskaya (2023, *Journal of Finance*) has not been read directly** —
+  only through Amaya et al.'s rebuttal of it. Reading one side of a dispute through the other
+  side's summary is exactly the failure mode this document exists to avoid. **Read BPS directly
+  before encoding either side.**
+- **Carr & Wu (2009) and the BXM figures remain [SECONDARY]** — untouched this round.
