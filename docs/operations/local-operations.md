@@ -22,6 +22,15 @@ The response states whether bearer authentication is required but never reveals 
 
 Use the health endpoint and `launchctl print gui/<uid>/com.aiagentsystem.inkbox-webhook` for read-only inspection. A service update requires human review because it may change a live process using real communication credentials.
 
+## Inkbox Contacts API (confirmed 2026-09-16)
+
+`src/integrations/inkbox/contact-client.ts` wraps `https://inkbox.ai/api/v1/contacts` (`X-API-Key`, no `agent_identity_id` param — org scoping is implicit in the key). Confirmed against both the docs and live calls on this identity's real data, not guessed:
+
+- **Working and used:** `GET /contacts/lookup` (exact email/phone reverse lookup), `PATCH /contacts/{id}` (replace named fields), `POST /contacts/{id}/merge` (`{"losing_contact_ids": [...]}` — survivor keeps combined identifiers/correspondence/memories; response includes `memory_count`/`latest_memory`). `jobs enrich-contact --profile <name>` uses lookup+update to link `DIGEST_IMESSAGE_TO`'s phone onto the contact found via `DIGEST_EMAIL_TO` and tag it with the profile — idempotent, safe to re-run.
+- **Contact Memory is real and populated**, not a dormant feature — Inkbox auto-extracts memories from real correspondence (confirmed: a merged contact carried 8 memories over, including an accurate auto-generated preference summary). No memory create/update endpoint exists though — read-only from this side.
+- **Not writable via API, confirmed by checking the documented `PATCH` field list against a live contact object's actual fields:** `contact_rules` (blacklist/allowlist — `list`-only, zero create/update endpoint anywhere in the docs) and a contact's own `review_status`/`is_confirmed` (present on every contact object, but absent from the documented PATCH contract). Both look like the natural "is this real correspondence or retail noise" signal — neither is settable directly. The one observed exception: `merge` has the side effect of setting the survivor to `is_confirmed: true` — not a general "confirm a contact" mechanism, just what merging happens to do.
+- **A real per-person split exists today:** Inkbox auto-creates a *separate* contact per channel the first time it sees an identifier (an email-only contact from the first inbound mail, a phone-only contact from the first inbound text/iMessage) rather than linking them automatically. Anyone doing contact-based work should check for this split (`lookup` by each known identifier, compare ids) before assuming one contact record is the whole picture.
+
 ## Job-search pipeline: two profiles, one engine
 
 Two searches run through the same pipeline with entirely separate data:
