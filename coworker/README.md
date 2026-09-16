@@ -110,6 +110,14 @@ Those arrive as ordinary coworker tasks assigned to `macmini`, and they are
 the local-trigger kind by definition (see "Two different kinds of trigger"
 below) — a cloud-sandboxed fire cannot complete them.
 
+**What "supersedes" does and does not reopen (2026-09-16, confirmed with
+Irtiza):** lifting the 2026-09-04 hold applies to the job-search pipeline
+specifically — it does not by itself resume every other task that hold had
+paused. Two stay explicitly paused until Irtiza says otherwise: the Mac Mini
+optimization pass (`a7f3e8c2`) and the knowledge-work-plugins marketplace
+install (`7ad46f37`). Don't infer a general "everything's back on" from this
+entry; check for a task's own explicit go-ahead instead.
+
 One standing rule for these, worth stating once here rather than repeating
 it in every task: **a task will name an `.env` variable but never its
 value.** Real keys, tokens and personal data are not written to
