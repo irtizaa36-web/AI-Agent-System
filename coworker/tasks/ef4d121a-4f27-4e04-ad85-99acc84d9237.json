@@ -1,0 +1,11 @@
+{
+  "id": "ef4d121a-4f27-4e04-ad85-99acc84d9237",
+  "createdAt": "2026-09-16T20:14:50.819Z",
+  "task": "Scoring for the shivani profile is silently degraded on this machine: profile/shivani/resume.md does not exist, so there is nothing to score postings against. The pipeline correctly reports scoring-unavailable instead of ranking anything - it is not crashing, it is quietly doing less than it looks like it is doing. NEEDS THIS MACHINE - profile/* is gitignored personal data that deliberately never travels through the repo, a chat message, or this task.\n\nSteps:\n\n1. The retired earlier version of this project kept her materials locally at .orchestrator/job-search/shivani-*.txt. Check whether those still exist on this machine. If they do, they are the source - nothing needs to come from outside.\n\n2. Write her resume to profile/shivani/resume.md. It is gitignored (profile/* is, with only profile/README.md excepted) - run git check-ignore -v profile/shivani/resume.md first if you want to confirm before writing. Do the same for profile/irtiza/resume.md if that one is also missing.\n\n3. If no local source exists: do NOT reconstruct, summarize, or invent one. A plausible-looking resume that is not actually hers is worse than no resume - it would silently score every posting against fiction. Mark this stuck/failed and tell Irtiza exactly which file is missing so he can place it himself.\n\n4. Once placed: node dist/cli/index.js jobs run --profile shivani, and confirm postings actually get scored now rather than stopping at the deterministic pre-filter.\n\nReport whether a local source was found and whether scoring works afterward. Never report the resume's contents, and do not paste them into issue #1 or any coworker record.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  }
+}

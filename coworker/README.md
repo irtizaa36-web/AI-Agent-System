@@ -60,23 +60,64 @@ Ongoing pieces of work get a short reference name so every team/session means
 the same thing when they mention it, in commit messages, issue #1, the
 dashboard, or conversation with Irtiza:
 
-- **Project Shivani — RETIRED (2026-09-04), being restarted fresh.** Was the
-  recurring job search + resume tailoring for Irtiza's wife, run via
-  `job-search-agent` against her real resume and stated preferences
-  (`.orchestrator/job-search/shivani-*.txt`, gitignored/local-only) and
-  delivered via iMessage + the shared "Job Search Checkpoint" Google Doc.
-  Irtiza asked to clear all responsibilities for this version of the project
-  and start it new — **macmini should stop its recurring Shivani check-in
-  routine** (the standing "read her iMessage thread a few times a day" prompt)
-  until a new version of this project is defined. Her local resume/preference
-  files and the checkpoint doc are untouched — nothing was deleted, the
-  routine is just paused. Left here for history/reference rather than
-  deleted outright; replace this entry once the new project has a shape.
+- **Project Shivani — RESTARTED (2026-09-16), replacing the version retired
+  on 2026-09-04.** This is the "new shape" that the retired entry said to
+  wait for, so the old entry's "stop the recurring Shivani check-in" pause
+  is now lifted — but note the routine itself is *not* what came back. The
+  old version was an ad-hoc `job-search-agent` run against local text files,
+  delivered by hand to a Google Doc. The new one is a real committed
+  pipeline in this repo, and it runs itself:
+
+  - Two profiles through one engine — `shivani` (marketing/program-management
+    on ATS boards) and `irtiza` (clinical-expertise gig platforms), fully
+    namespace-isolated per ADR 0017. See
+    `docs/operations/local-operations.md`.
+  - `scripts/com.mobyai.jobsearch.plist` runs `jobs run --all` at 10:00
+    local, Mon–Fri. Nobody triggers it by hand.
+  - Delivery is the digest email (`DIGEST_EMAIL_*`), not a Google Doc.
+  - **A feedback loop she drives herself:** she replies by email or by text
+    and her `preferences.json` is updated automatically, no approval step —
+    Irtiza's explicit 2026-09-16 call. Committed and pushed by the pipeline
+    so it survives a re-pull.
+
+  What this means for macmini: there is no "read her thread a few times a
+  day" prompt to restore. The pipeline reads her replies on its own. macmini's
+  job is the machine-local infrastructure that pipeline needs and cannot
+  install for itself — `.env` values, launchd registrations, local files
+  kept out of the repo — which arrives as normal coworker tasks.
+
+- **Project Irtiza** — the `irtiza` profile of the same pipeline: clinical
+  gig platforms (Mercor, Turing, Handshake AI, AJE, BeMo). Same engine, same
+  stage-and-stop rule — applications are staged up to the submit button and
+  never past it. See `.claude/agents/job-search-steward-irtiza.md`.
 
 - **PinkyBaby** — Team B's Lead Agent. Owns triage, integration, durable
   handoffs, and tasks that require Team B coordination.
 
-## Current focus (2026-09-04)
+## Current focus (2026-09-16)
+
+**Supersedes the 2026-09-04 entry below.** The job-search pipeline (Project
+Shivani + Project Irtiza above) is active again and is the current priority
+alongside the Dashboard — Irtiza has directed that work continuously through
+2026-09-14..16, which is the "two new projects coming from Irtiza directly"
+the older entry was waiting on.
+
+macmini's standing role in it: **machine-local infrastructure only.** The
+pipeline runs itself on a launchd schedule; what it cannot do for itself is
+anything gitignored or machine-bound — `.env` values, LaunchAgent
+registration, placing a personal file the repo deliberately never carries.
+Those arrive as ordinary coworker tasks assigned to `macmini`, and they are
+the local-trigger kind by definition (see "Two different kinds of trigger"
+below) — a cloud-sandboxed fire cannot complete them.
+
+One standing rule for these, worth stating once here rather than repeating
+it in every task: **a task will name an `.env` variable but never its
+value.** Real keys, tokens and personal data are not written to
+`coworker/tasks/` any more than to a commit or a chat message. `.env.example`
+is the committed contract for what each variable means and what it gates;
+the value comes from Irtiza or from the service's own console.
+
+### Superseded: current focus (2026-09-04)
 
 Per Irtiza's explicit direction: **all projects other than the Dashboard are
 on hold** until further notice. Concretely:
