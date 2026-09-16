@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DEFAULT_PREFERENCES, type Preferences, type WatchlistEntry } from "./records";
 import type { CandidateProfile } from "./score";
@@ -86,6 +86,24 @@ async function readJsonIfPresent<T>(path: string): Promise<T | undefined> {
 export async function loadPreferences(profile: string, root = "."): Promise<Preferences> {
   const fromFile = await readJsonIfPresent<Partial<Preferences>>(join(root, configDirFor(profile), "preferences.json"));
   return { ...DEFAULT_PREFERENCES, ...(fromFile ?? {}) };
+}
+
+/**
+ * Writes a partial update onto the raw preferences.json file — merged over
+ * whatever is already there, not over `DEFAULT_PREFERENCES`, and not
+ * serialized from a typed `Preferences` object. Both distinctions matter:
+ * a merge over defaults would silently write every default value into the
+ * file the first time anything changes, and serializing a typed object
+ * would delete every "_titles"/"_salaryFloor"-style documentary comment
+ * this project's own preferences.json files rely on (see any of them) —
+ * those aren't part of the `Preferences` type, so a naive round-trip
+ * through it is how they'd quietly disappear.
+ */
+export async function savePreferences(profile: string, patch: Readonly<Record<string, unknown>>, root = "."): Promise<void> {
+  const path = join(root, configDirFor(profile), "preferences.json");
+  const raw = (await readJsonIfPresent<Record<string, unknown>>(path)) ?? {};
+  const merged = { ...raw, ...patch };
+  await writeFile(path, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
 }
 
 export async function loadWatchlist(profile: string, root = "."): Promise<readonly WatchlistEntry[]> {

@@ -30,8 +30,12 @@ import {
   loadProfile,
   loadWatchlist,
   MissingProfileError,
+  savePreferences,
 } from "../jobsearch/config";
 import type { CandidateProfile } from "../jobsearch/score";
+import { applyFeedbackPatch, buildFeedbackReplyBody, classifyFeedback, looksLikeDirectMessage, type PatchEntry } from "../jobsearch/feedback";
+import { JsonFileFeedbackLog } from "../jobsearch/feedback-log";
+import { commitAndPush } from "../integrations/git/auto-commit";
 
 /**
  * `orchestrator jobs ...` — the pipeline's command surface, and the single
@@ -50,6 +54,7 @@ const USAGE = [
   "jobs subcommands (every one takes --profile <name>, or --all where noted):",
   "  run --profile <name>|--all   Fetch, dedupe, filter, score, and write today's digest",
   "  reconcile --profile <name>   Re-check already-filtered postings against today's rules (after a prefs/filter change) and score any that now pass",
+  "  check-feedback --profile <name>|--all   Read new direct replies from the candidate, answer questions, and auto-apply any preference changes (FEEDBACK_LOOP_ENABLED=true required)",
   "  digest --profile <name>      Print the most recent digest without running the pipeline",
   "  sources --profile <name>     List the configured sources and check each one's health",
   "  costs                        Show what recent runs have cost (shared ledger)",
@@ -138,6 +143,16 @@ export async function runJobsCommand(args: readonly string[], deps: JobsCommandD
       for (const profile of profiles) {
         if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
         worst = Math.max(worst, await runJobsReconcile(profile, root, deps));
+      }
+      return worst;
+    }
+    case "check-feedback": {
+      const profiles = await resolveProfiles(rest, root, deps, true);
+      if (!profiles) return 1;
+      let worst = 0;
+      for (const profile of profiles) {
+        if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
+        worst = Math.max(worst, await runJobsCheckFeedback(profile, root, deps));
       }
       return worst;
     }
@@ -244,6 +259,13 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
   await sendDigestSmsIfConfigured(summary, deps);
   await sendDigestImessageIfConfigured(summary, deps);
   await sendDigestEmailIfConfigured(summary, deps);
+
+  // Piggybacks on the same daily schedule as the pipeline itself, so the
+  // feedback loop gets at least one pass a day with no separate scheduling
+  // required. Self-gated on FEEDBACK_LOOP_ENABLED like every other optional
+  // step above — a no-op unless explicitly turned on. Run `jobs check-feedback`
+  // directly (or on its own more frequent schedule) for faster turnaround.
+  await runJobsCheckFeedback(profile, root, deps);
 
   // A run where every source broke is a failure worth a non-zero exit, so a
   // scheduled job surfaces it rather than looking like a quiet success.
@@ -353,6 +375,125 @@ async function runJobsReconcile(profile: string, root: string, deps: JobsCommand
   await sendDigestImessageIfConfigured(summary, deps);
   await sendDigestEmailIfConfigured(summary, deps);
 
+  return 0;
+}
+
+/**
+ * The feedback loop: reads whatever's new in the shared Inkbox mailbox,
+ * picks out messages that are genuinely the candidate writing directly to
+ * us (see feedback.ts's looksLikeDirectMessage — this is deliberately
+ * narrow, the same distinction owner-forwarding.ts had to make once her
+ * full inbox started auto-forwarding through this same mailbox), and for
+ * each one: answers any question, applies any preference change she asked
+ * for, and replies telling her exactly what happened. Applied per Irtiza's
+ * explicit Sep 16 call — no approval step — but "no approval step" and
+ * "no guessing" are different rules: an ambiguous ask is reported back to
+ * her as something to clarify, never silently guessed at (see feedback.ts's
+ * own doc comment for why that distinction is load-bearing here).
+ *
+ * Config changes are committed and pushed immediately (commitAndPush) —
+ * necessary because the scheduled pipeline run never runs `git pull`
+ * first (see scripts/com.mobyai.jobsearch.plist), so an applied-but-
+ * uncommitted change would vanish the moment anything else pulls or the
+ * worktree is recreated.
+ */
+async function runJobsCheckFeedback(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+  if (process.env["FEEDBACK_LOOP_ENABLED"] !== "true") return 0;
+
+  // The same address her digest goes to is the address whose direct
+  // replies count as her own feedback — one identity, not a second env var
+  // that could quietly drift from the first.
+  const candidateEmail = process.env["DIGEST_EMAIL_TO"];
+  if (!candidateEmail) {
+    deps.stderr("FEEDBACK_LOOP_ENABLED is true but DIGEST_EMAIL_TO is not set — skipping (no address to treat as her own).");
+    return 1;
+  }
+
+  const inkboxClient = createInkboxClientFromEnv();
+  if (!inkboxClient) {
+    deps.stderr("FEEDBACK_LOOP_ENABLED is true but Inkbox is not configured — skipping.");
+    return 1;
+  }
+
+  const scoringClient = createScoringClientFromEnv();
+  if (!scoringClient) {
+    deps.stderr("FEEDBACK_LOOP_ENABLED is true but ANTHROPIC_API_KEY is not set — cannot classify replies, skipping.");
+    return 1;
+  }
+
+  const prefs = await loadPreferences(profile, root);
+  const feedbackLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback"));
+  const ledger = new CostLedger(randomUUID(), join(root, COST_LOG_PATH));
+
+  // searchMail can return snippet-level messages (confirmed Sep 14 — the
+  // same characteristic alert-mail.ts had to work around) — every candidate
+  // here gets re-fetched in full via getMessage before classification, never
+  // classified off a truncated snippet.
+  const candidates = await inkboxClient.searchMail();
+  let processed = 0;
+
+  for (const summary of candidates) {
+    if (await feedbackLog.hasProcessed(summary.id)) continue;
+    if (!looksLikeDirectMessage(summary, candidateEmail, inkboxClient.mailboxAddress)) continue;
+
+    const full = (await inkboxClient.getMessage(summary.id)) ?? summary;
+    const runContext = `Score cutoff: ${prefs.scoreCutoff}. Salary floor: ${prefs.salaryFloor ?? "none stated"}. Titles tracked: ${prefs.titles.join(", ") || "(none configured)"}. Metros: ${prefs.metros.join(", ") || "(none — remote only)"}.`;
+
+    const classification = await classifyFeedback(full.body, prefs, runContext, scoringClient, prefs.scoringModel, ledger);
+
+    let applied: readonly PatchEntry[] = [];
+    let rejected: readonly PatchEntry[] = [];
+
+    if (classification.changes.length > 0) {
+      const patchResult = applyFeedbackPatch(prefs, classification.changes);
+      applied = patchResult.applied;
+      rejected = patchResult.rejected;
+
+      if (patchResult.applied.length > 0) {
+        const patch = Object.fromEntries(patchResult.applied.map((c) => [c.field, c.value]));
+        await savePreferences(profile, patch, root);
+
+        const commitMessage = `feedback(${profile}): ${patchResult.applied.map((c) => `${c.field} — "${c.quote}"`).join("; ")}`;
+        const gitResult = commitAndPush(join(configDirFor(profile), "preferences.json"), commitMessage, root);
+        if (gitResult.error) {
+          deps.stderr(`Applied a preference change locally but git failed (${gitResult.error}) — it will not survive a re-pull until this is fixed.`);
+        } else if (gitResult.committed) {
+          deps.stdout(`Committed and pushed: ${commitMessage}`);
+        }
+        deps.stdout(`Applied feedback from ${full.from.address}: ${patchResult.applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
+      }
+    }
+
+    const replyBody = buildFeedbackReplyBody(classification, applied, rejected);
+    let replied = false;
+    if (replyBody.length > 0) {
+      try {
+        const draft = await inkboxClient.saveDraft({
+          to: [{ address: full.from.address }],
+          subject: full.subject.toLowerCase().startsWith("re:") ? full.subject : `Re: ${full.subject}`,
+          body: replyBody,
+          threadId: full.threadId,
+        });
+        await inkboxClient.send({ draftId: draft.id, revision: draft.revision });
+        replied = true;
+        deps.stdout(`Replied to ${full.from.address}.`);
+      } catch (error) {
+        deps.stderr(`Could not reply to ${full.from.address}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    await feedbackLog.record({
+      messageId: full.id,
+      fromAddress: full.from.address,
+      processedAt: new Date().toISOString(),
+      appliedFields: applied.map((c) => c.field),
+      hadQuestion: classification.hasQuestion,
+      replied,
+    });
+    processed += 1;
+  }
+
+  if (processed === 0) deps.stdout("No new direct feedback messages found.");
   return 0;
 }
 
