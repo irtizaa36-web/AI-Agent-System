@@ -86,3 +86,66 @@ test("shouldForwardInbound allows forwarding any other sender once enabled", () 
     assert.equal(shouldForwardInbound("restaurant@example.com", "agent@example.test").forward, true);
   });
 });
+
+function withExcludeEnv(value: string | undefined, fn: () => void): void {
+  const original = process.env["OWNER_FORWARD_EXCLUDE_RECIPIENTS"];
+  if (value === undefined) delete process.env["OWNER_FORWARD_EXCLUDE_RECIPIENTS"];
+  else process.env["OWNER_FORWARD_EXCLUDE_RECIPIENTS"] = value;
+  try {
+    fn();
+  } finally {
+    if (original === undefined) delete process.env["OWNER_FORWARD_EXCLUDE_RECIPIENTS"];
+    else process.env["OWNER_FORWARD_EXCLUDE_RECIPIENTS"] = original;
+  }
+}
+
+test("shouldForwardInbound refuses a message whose original recipient is on the excluded list, regardless of sender", () => {
+  withOwnerEnv("owner@example.com", () => {
+    withExcludeEnv("brshivani@gmail.com", () => {
+      // Same shape as the real flood: Gmail's own forwarding preserves the
+      // original To: header, so retail marketing addressed to Shivani looks
+      // just as varied in sender as anything else — the recipient is the
+      // only stable signal.
+      const result = shouldForwardInbound("hello@emails.reebok.com", "agent@example.test", ["brshivani@gmail.com"]);
+      assert.equal(result.forward, false);
+      assert.match(result.reason ?? "", /brshivani@gmail\.com/);
+      assert.match(result.reason ?? "", /excluded from owner-forwarding/);
+    });
+  });
+});
+
+test("shouldForwardInbound still forwards mail addressed to someone not on the excluded list", () => {
+  withOwnerEnv("owner@example.com", () => {
+    withExcludeEnv("brshivani@gmail.com", () => {
+      const result = shouldForwardInbound("team@mercor.com", "agent@example.test", ["irtizaa36@gmail.com"]);
+      assert.equal(result.forward, true);
+    });
+  });
+});
+
+test("shouldForwardInbound is unaffected by the exclude list when it's unset — existing behavior is a strict default", () => {
+  withOwnerEnv("owner@example.com", () => {
+    withExcludeEnv(undefined, () => {
+      const result = shouldForwardInbound("hello@emails.reebok.com", "agent@example.test", ["brshivani@gmail.com"]);
+      assert.equal(result.forward, true);
+    });
+  });
+});
+
+test("shouldForwardInbound defaults toAddresses to empty for callers that haven't been updated — never crashes, never wrongly excludes", () => {
+  withOwnerEnv("owner@example.com", () => {
+    withExcludeEnv("brshivani@gmail.com", () => {
+      const result = shouldForwardInbound("hello@emails.reebok.com", "agent@example.test");
+      assert.equal(result.forward, true);
+    });
+  });
+});
+
+test("the exclude match is case-insensitive, matching the rest of this module's address handling", () => {
+  withOwnerEnv("owner@example.com", () => {
+    withExcludeEnv("BrShivani@Gmail.com", () => {
+      const result = shouldForwardInbound("hello@emails.reebok.com", "agent@example.test", ["brshivani@gmail.com"]);
+      assert.equal(result.forward, false);
+    });
+  });
+});

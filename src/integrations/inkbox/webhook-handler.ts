@@ -69,7 +69,11 @@ async function handleMessageReceived(message: EmailMessage, deps: WebhookHandler
   if (alreadyForwarded) {
     actions.push("forwarding skipped: already forwarded");
   } else {
-    const decision = shouldForwardInbound(message.from.address, deps.inkboxClient.mailboxAddress);
+    const decision = shouldForwardInbound(
+      message.from.address,
+      deps.inkboxClient.mailboxAddress,
+      message.to.map((address) => address.address),
+    );
     if (decision.forward && owner) {
       try {
         const result = await deps.inkboxClient.forward(message.id, { address: owner });

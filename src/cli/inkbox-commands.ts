@@ -209,7 +209,11 @@ async function checkRepliesCommand(_args: readonly string[], deps: CliDeps): Pro
 
   for (const message of allMail) {
     if (await deps.forwardingLog.hasForwarded(message.id)) continue;
-    const decision = shouldForwardInbound(message.from.address, deps.inkboxClient.mailboxAddress);
+    const decision = shouldForwardInbound(
+      message.from.address,
+      deps.inkboxClient.mailboxAddress,
+      message.to.map((address) => address.address),
+    );
     if (!decision.forward || !owner) {
       await deps.forwardingLog.record({
         messageId: message.id,
