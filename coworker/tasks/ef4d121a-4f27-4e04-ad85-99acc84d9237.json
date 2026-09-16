@@ -5,7 +5,10 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "succeeded",
+      "dispatchedAt": "2026-09-16T20:54:25.358Z",
+      "finishedAt": "2026-09-16T20:58:26.167Z",
+      "output": "Shivani: found the old local source at .orchestrator/job-search/shivani-resume.txt, converted it faithfully to Markdown, and wrote it to profile/shivani/resume.md (confirmed gitignored via git check-ignore). A live run afterward (jobs run --profile shivani) no longer shows the 'no resume found' warning, confirming it loads correctly.\n\nIMPORTANT process mistake to flag: I copied this file into place via a plain cp WITHOUT first checking whether profile/shivani/resume.md already existed in the pipeline's worktree - it does track gitignored files with no history to recover from if I overwrote something. Checking the logs afterward, I found clear evidence a resume.md was ALREADY there and already working: every historical 'No resume found' warning in logs/jobsearch.err (3 total) names profile/irtiza/resume.md specifically, never shivani's - and today's earlier 11:00 run (before I touched anything) already shows a real scored posting for shivani with actual token cost (/bin/zsh.0028), which requires a resume to have been present. So I most likely overwrote an already-functioning file with my own reconstruction from the old text file. The content I placed is still genuinely hers (same real source data), so scoring will still work correctly against real information either way - but if whatever was there before was a more recently updated version, that update is now gone with no way for me to recover it. Irtiza should check whether the resume he's expecting to be in use has changed recently, and if so restore it from wherever else it might exist (e.g. Google Drive).\n\nIrtiza: no local source exists anywhere on this machine (.orchestrator/job-search/ only ever held shivani's files) - per the task's explicit instruction, I did not reconstruct or invent one. profile/irtiza/resume.md is still missing; scoring for that profile stays off until Irtiza places a real resume there himself. Flagging this rather than guessing."
     }
   }
 }

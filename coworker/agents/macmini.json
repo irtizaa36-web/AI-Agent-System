@@ -1,6 +1,6 @@
 {
   "name": "macmini",
-  "status": "stuck",
-  "currentTask": "90945db6: LaunchAgent loaded+fixed, but blocked by a second unmanaged process holding port 4317 - needs human decision, see issue #1",
-  "updatedAt": "2026-09-04T00:20:31.830Z"
+  "status": "idle",
+  "currentTask": "no pending coworker tasks in this session's scope (b5d09ffe/a60a7ba7/ef4d121a all done); 7ad46f37 and a7f3e8c2 left paused per issue #1",
+  "updatedAt": "2026-09-16T20:59:27.469Z"
 }

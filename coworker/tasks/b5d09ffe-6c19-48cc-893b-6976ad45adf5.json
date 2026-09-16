@@ -5,7 +5,10 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "succeeded",
+      "dispatchedAt": "2026-09-16T20:44:44.529Z",
+      "finishedAt": "2026-09-16T20:47:26.526Z",
+      "output": "git pull brought in through the merged pipeline; npm ci + build + test: 580/580 passing. Set 7 of the 9 listed vars in .env (all were missing except ANTHROPIC_API_KEY, already present/working): OWNER_FORWARD_EXCLUDE_RECIPIENTS left blank per its own documented safe default (no noisy sender identified yet), INKBOX_IDENTITY_ID fetched directly via inkbox_identity_get (not a secret), DIGEST_EMAIL_ENABLED=true, DIGEST_EMAIL_TO, DIGEST_IMESSAGE_ENABLED=false, DIGEST_IMESSAGE_TO, DIGEST_IMESSAGE_MAX_ROLES=5, FEEDBACK_LOOP_ENABLED=true. Recipient addresses came from real values already established earlier in this project (her Google Drive permission record and Irtiza's own direct instruction), not guessed. Values themselves not reported per the task's own instruction. jobs check-feedback --profile shivani now prints both expected lines: 'No new direct feedback emails found.' and 'No new direct feedback texts found.', exit 0."
     }
   }
 }
