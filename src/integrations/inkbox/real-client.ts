@@ -75,6 +75,7 @@ export function parseRawMessage(raw: RawMessage): EmailMessage {
     ...(raw.bcc_addresses ? { bcc: raw.bcc_addresses.map((address) => ({ address })) } : {}),
     subject: raw.subject ?? "",
     body: bodyFrom(raw),
+    ...(raw.body_html ? { bodyHtml: raw.body_html } : {}),
     receivedAt: raw.created_at,
   };
 }

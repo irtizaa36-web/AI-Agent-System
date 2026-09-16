@@ -1,0 +1,11 @@
+{
+  "id": "a60a7ba7-2809-4795-8042-05c52fbc69a8",
+  "createdAt": "2026-09-16T20:14:50.709Z",
+  "task": "Bug, real and observed on 2026-09-16: the 10:00 job-search run fired TWICE, about 63 seconds apart. Two digest emails went out - the first reporting 0 new / 0 shortlisted, the second the real 160 new / 1 shortlisted. She received both. NEEDS THIS MACHINE - launchd registration is machine-local state, not something the repo tracks.\n\nInvestigate:\n- launchctl list | grep -i mobyai\n- Inspect scripts/com.mobyai.jobsearch.plist in the repo AND whatever is actually loaded under ~/Library/LaunchAgents/ - they can differ. Look for a duplicate StartCalendarInterval entry, two different labels pointing at the same script, or the job having been bootstrapped twice.\n\nFix by removing/unloading the duplicate registration. Do NOT fix this by editing the pipeline code or adding a lock file - the pipeline is behaving correctly, it is being invoked twice.\n\nTwo honest caveats worth holding onto:\n- The 0 new / 0 shortlisted first email is a real clue. A plain duplicate registration would more likely produce two similar-looking runs, not one empty one. An empty first run then a full second run also fits \"first invocation raced ahead of something it needed\" - a stale dist/, a source not yet reachable, a cold cache.\n- So if the evidence does not actually support the duplicate-registration theory, say so plainly and report what you did find instead. Do not force the theory to fit.\n\nReport what was registered before and after, and which explanation the evidence actually supports.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  }
+}

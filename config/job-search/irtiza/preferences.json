@@ -1,0 +1,36 @@
+{
+  "_comment": "Irtiza's search: clinical-expertise gig work on AI/eval platforms (Mercor, Turing, Handshake AI, AJE, BeMo, scholr). Scaffolded, NOT yet filled in — every value below is a placeholder until he supplies real ones. See docs/job-search/strategy.md for the shared rules and .claude/agents/job-search-steward-irtiza.md for how this search differs from Shivani's (tracking-heavy, not discovery-heavy).",
+
+  "titles": [],
+  "_titles": "TODO: the role/work types worth surfacing (e.g. 'clinical expert', 'medical reviewer', 'physician annotator'). Empty means no title filter is applied at all.",
+
+  "titleExclusions": ["intern", "internship", "volunteer", "unpaid"],
+
+  "salaryFloor": null,
+  "_salaryFloor": "TODO if wanted. Note these platforms usually quote hourly ($100-200/hr), not annual — the current salaryFloor check reads annual figures, so leaving this null until the hourly case is handled properly is the honest choice rather than comparing incomparable numbers.",
+  "salaryCurrency": "USD",
+
+  "remoteOnly": true,
+  "metros": [],
+  "usRemoteOnly": true,
+
+  "locationPriority": ["Remote"],
+  "locationPriorityStep": 2,
+
+  "experienceYearsFloor": null,
+  "experienceYearsCeiling": null,
+
+  "maxPostingAgeDays": null,
+
+  "industryExclusions": [],
+  "companyExclusions": [],
+
+  "scoreCutoff": 65,
+  "unstatedSalaryRankPenalty": 3,
+  "digestLimit": 8,
+
+  "postingTokenBudget": 600,
+  "scoringBatchSize": 15,
+  "scoringModel": "claude-haiku-4-5",
+  "rawRetentionDays": 90
+}
