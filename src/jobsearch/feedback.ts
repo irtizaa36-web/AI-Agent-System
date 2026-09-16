@@ -82,6 +82,28 @@ export function looksLikeDirectMessage(
   return message.to.some((address) => address.address.toLowerCase() === mailbox);
 }
 
+/** Strips everything but digits, then keeps the last 10 — enough to match "+12144023994", "12144023994", and "(214) 402-3994" against each other without pretending to be a real phone-number parser. */
+function normalizePhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  return digits.slice(-10);
+}
+
+/**
+ * The iMessage counterpart to looksLikeDirectMessage above: true only for a
+ * message this identity actually received (direction "inbound") from her own
+ * configured number. There's no forwarded-mail equivalent to guard against
+ * here — Inkbox's iMessage API only ever reports messages sent to or from
+ * this identity directly — so the check is simpler than the email one.
+ */
+export function looksLikeDirectText(
+  message: { readonly direction: string; readonly remoteNumber: string | null },
+  candidatePhone: string,
+): boolean {
+  if (message.direction !== "inbound") return false;
+  if (!message.remoteNumber) return false;
+  return normalizePhone(message.remoteNumber) === normalizePhone(candidatePhone);
+}
+
 function fieldDescription(field: AllowedPatchField): string {
   const descriptions: Record<AllowedPatchField, string> = {
     titles: "array of strings — title patterns that must appear (any order) for a posting to be considered at all",

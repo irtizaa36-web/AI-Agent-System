@@ -6,6 +6,7 @@ import {
   buildFeedbackReplyBody,
   classifyFeedback,
   looksLikeDirectMessage,
+  looksLikeDirectText,
   parseFeedbackClassification,
 } from "./feedback";
 import { DEFAULT_PREFERENCES, type Preferences } from "./records";
@@ -52,6 +53,36 @@ test("looksLikeDirectMessage is case-insensitive", () => {
     ),
     true,
   );
+});
+
+test("looksLikeDirectText requires inbound direction from her own configured number", () => {
+  assert.equal(
+    looksLikeDirectText({ direction: "inbound", remoteNumber: "+12144023994" }, "+12144023994"),
+    true,
+  );
+});
+
+test("looksLikeDirectText rejects an outbound message even from her own number — that's our own reply, not her feedback", () => {
+  assert.equal(
+    looksLikeDirectText({ direction: "outbound", remoteNumber: "+12144023994" }, "+12144023994"),
+    false,
+  );
+});
+
+test("looksLikeDirectText rejects a message from a different number", () => {
+  assert.equal(
+    looksLikeDirectText({ direction: "inbound", remoteNumber: "+15559876543" }, "+12144023994"),
+    false,
+  );
+});
+
+test("looksLikeDirectText rejects a group thread's inbound message with no direct remoteNumber", () => {
+  assert.equal(looksLikeDirectText({ direction: "inbound", remoteNumber: null }, "+12144023994"), false);
+});
+
+test("looksLikeDirectText tolerates formatting differences (+1, parens/dashes, bare 10 digits) between the same number", () => {
+  assert.equal(looksLikeDirectText({ direction: "inbound", remoteNumber: "(214) 402-3994" }, "+12144023994"), true);
+  assert.equal(looksLikeDirectText({ direction: "inbound", remoteNumber: "2144023994" }, "+12144023994"), true);
 });
 
 test("buildFeedbackPrompt lists every allowed field with its meaning, and only the allowed fields' current values", () => {

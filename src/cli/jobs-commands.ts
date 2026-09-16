@@ -33,8 +33,16 @@ import {
   savePreferences,
 } from "../jobsearch/config";
 import type { CandidateProfile } from "../jobsearch/score";
-import { applyFeedbackPatch, buildFeedbackReplyBody, classifyFeedback, looksLikeDirectMessage, type PatchEntry } from "../jobsearch/feedback";
+import {
+  applyFeedbackPatch,
+  buildFeedbackReplyBody,
+  classifyFeedback,
+  looksLikeDirectMessage,
+  looksLikeDirectText,
+  type PatchEntry,
+} from "../jobsearch/feedback";
 import { JsonFileFeedbackLog } from "../jobsearch/feedback-log";
+import { createImessageClientFromEnv } from "../jobsearch/imessage-client";
 import { commitAndPush } from "../integrations/git/auto-commit";
 
 /**
@@ -54,7 +62,7 @@ const USAGE = [
   "jobs subcommands (every one takes --profile <name>, or --all where noted):",
   "  run --profile <name>|--all   Fetch, dedupe, filter, score, and write today's digest",
   "  reconcile --profile <name>   Re-check already-filtered postings against today's rules (after a prefs/filter change) and score any that now pass",
-  "  check-feedback --profile <name>|--all   Read new direct replies from the candidate, answer questions, and auto-apply any preference changes (FEEDBACK_LOOP_ENABLED=true required)",
+  "  check-feedback --profile <name>|--all   Read new direct replies from the candidate (email and, if DIGEST_IMESSAGE_TO is set, iMessage), answer questions, and auto-apply any preference changes (FEEDBACK_LOOP_ENABLED=true required)",
   "  digest --profile <name>      Print the most recent digest without running the pipeline",
   "  sources --profile <name>     List the configured sources and check each one's health",
   "  costs                        Show what recent runs have cost (shared ledger)",
@@ -379,13 +387,14 @@ async function runJobsReconcile(profile: string, root: string, deps: JobsCommand
 }
 
 /**
- * The feedback loop: reads whatever's new in the shared Inkbox mailbox,
- * picks out messages that are genuinely the candidate writing directly to
- * us (see feedback.ts's looksLikeDirectMessage — this is deliberately
- * narrow, the same distinction owner-forwarding.ts had to make once her
- * full inbox started auto-forwarding through this same mailbox), and for
- * each one: answers any question, applies any preference change she asked
- * for, and replies telling her exactly what happened. Applied per Irtiza's
+ * The feedback loop: reads whatever's new on either channel — email and
+ * iMessage both — picks out messages that are genuinely the candidate
+ * writing directly to us (see feedback.ts's looksLikeDirectMessage and
+ * looksLikeDirectText — deliberately narrow, the same distinction
+ * owner-forwarding.ts had to make once her full inbox started
+ * auto-forwarding through this same mailbox), and for each one: answers any
+ * question, applies any preference change she asked for, and replies on the
+ * same channel telling her exactly what happened. Applied per Irtiza's
  * explicit Sep 16 call — no approval step — but "no approval step" and
  * "no guessing" are different rules: an ambiguous ask is reported back to
  * her as something to clarify, never silently guessed at (see feedback.ts's
@@ -395,23 +404,68 @@ async function runJobsReconcile(profile: string, root: string, deps: JobsCommand
  * necessary because the scheduled pipeline run never runs `git pull`
  * first (see scripts/com.mobyai.jobsearch.plist), so an applied-but-
  * uncommitted change would vanish the moment anything else pulls or the
- * worktree is recreated.
+ * worktree is recreated. Both channels share this same apply-and-commit
+ * step (applyFeedbackChanges below), since which channel she happened to
+ * use has no bearing on how a change to preferences.json gets made durable.
  */
 async function runJobsCheckFeedback(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
   if (process.env["FEEDBACK_LOOP_ENABLED"] !== "true") return 0;
 
+  const emailResult = await checkEmailFeedback(profile, root, deps);
+  const imessageResult = await checkImessageFeedback(profile, root, deps);
+  return Math.max(emailResult, imessageResult);
+}
+
+/**
+ * Applies whichever of `changes` are well-typed and allow-listed, and —
+ * only when at least one actually applied — writes preferences.json and
+ * commits+pushes it. Shared by both feedback channels below so the
+ * write/commit path (and its failure handling) exists in exactly one place.
+ */
+async function applyFeedbackChanges(
+  profile: string,
+  root: string,
+  changes: readonly PatchEntry[],
+  prefs: Awaited<ReturnType<typeof loadPreferences>>,
+  deps: JobsCommandDeps,
+): Promise<{ readonly applied: readonly PatchEntry[]; readonly rejected: readonly PatchEntry[] }> {
+  if (changes.length === 0) return { applied: [], rejected: [] };
+
+  const patchResult = applyFeedbackPatch(prefs, changes);
+  if (patchResult.applied.length > 0) {
+    const patch = Object.fromEntries(patchResult.applied.map((c) => [c.field, c.value]));
+    await savePreferences(profile, patch, root);
+
+    const commitMessage = `feedback(${profile}): ${patchResult.applied.map((c) => `${c.field} — "${c.quote}"`).join("; ")}`;
+    const gitResult = commitAndPush(join(configDirFor(profile), "preferences.json"), commitMessage, root);
+    if (gitResult.error) {
+      deps.stderr(`Applied a preference change locally but git failed (${gitResult.error}) — it will not survive a re-pull until this is fixed.`);
+    } else if (gitResult.committed) {
+      deps.stdout(`Committed and pushed: ${commitMessage}`);
+    }
+  }
+
+  return { applied: patchResult.applied, rejected: patchResult.rejected };
+}
+
+/** Builds the same "Score cutoff: ... Salary floor: ..." context string both channels give the classifier, so a text and an email asking the same thing get judged against identical facts. */
+function feedbackRunContext(prefs: Awaited<ReturnType<typeof loadPreferences>>): string {
+  return `Score cutoff: ${prefs.scoreCutoff}. Salary floor: ${prefs.salaryFloor ?? "none stated"}. Titles tracked: ${prefs.titles.join(", ") || "(none configured)"}. Metros: ${prefs.metros.join(", ") || "(none — remote only)"}.`;
+}
+
+async function checkEmailFeedback(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
   // The same address her digest goes to is the address whose direct
   // replies count as her own feedback — one identity, not a second env var
   // that could quietly drift from the first.
   const candidateEmail = process.env["DIGEST_EMAIL_TO"];
   if (!candidateEmail) {
-    deps.stderr("FEEDBACK_LOOP_ENABLED is true but DIGEST_EMAIL_TO is not set — skipping (no address to treat as her own).");
+    deps.stderr("FEEDBACK_LOOP_ENABLED is true but DIGEST_EMAIL_TO is not set — skipping the email feedback channel (no address to treat as her own).");
     return 1;
   }
 
   const inkboxClient = createInkboxClientFromEnv();
   if (!inkboxClient) {
-    deps.stderr("FEEDBACK_LOOP_ENABLED is true but Inkbox is not configured — skipping.");
+    deps.stderr("FEEDBACK_LOOP_ENABLED is true but Inkbox is not configured — skipping the email feedback channel.");
     return 1;
   }
 
@@ -437,31 +491,10 @@ async function runJobsCheckFeedback(profile: string, root: string, deps: JobsCom
     if (!looksLikeDirectMessage(summary, candidateEmail, inkboxClient.mailboxAddress)) continue;
 
     const full = (await inkboxClient.getMessage(summary.id)) ?? summary;
-    const runContext = `Score cutoff: ${prefs.scoreCutoff}. Salary floor: ${prefs.salaryFloor ?? "none stated"}. Titles tracked: ${prefs.titles.join(", ") || "(none configured)"}. Metros: ${prefs.metros.join(", ") || "(none — remote only)"}.`;
-
-    const classification = await classifyFeedback(full.body, prefs, runContext, scoringClient, prefs.scoringModel, ledger);
-
-    let applied: readonly PatchEntry[] = [];
-    let rejected: readonly PatchEntry[] = [];
-
-    if (classification.changes.length > 0) {
-      const patchResult = applyFeedbackPatch(prefs, classification.changes);
-      applied = patchResult.applied;
-      rejected = patchResult.rejected;
-
-      if (patchResult.applied.length > 0) {
-        const patch = Object.fromEntries(patchResult.applied.map((c) => [c.field, c.value]));
-        await savePreferences(profile, patch, root);
-
-        const commitMessage = `feedback(${profile}): ${patchResult.applied.map((c) => `${c.field} — "${c.quote}"`).join("; ")}`;
-        const gitResult = commitAndPush(join(configDirFor(profile), "preferences.json"), commitMessage, root);
-        if (gitResult.error) {
-          deps.stderr(`Applied a preference change locally but git failed (${gitResult.error}) — it will not survive a re-pull until this is fixed.`);
-        } else if (gitResult.committed) {
-          deps.stdout(`Committed and pushed: ${commitMessage}`);
-        }
-        deps.stdout(`Applied feedback from ${full.from.address}: ${patchResult.applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
-      }
+    const classification = await classifyFeedback(full.body, prefs, feedbackRunContext(prefs), scoringClient, prefs.scoringModel, ledger);
+    const { applied, rejected } = await applyFeedbackChanges(profile, root, classification.changes, prefs, deps);
+    if (applied.length > 0) {
+      deps.stdout(`Applied feedback from ${full.from.address}: ${applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
     }
 
     const replyBody = buildFeedbackReplyBody(classification, applied, rejected);
@@ -493,7 +526,78 @@ async function runJobsCheckFeedback(profile: string, root: string, deps: JobsCom
     processed += 1;
   }
 
-  if (processed === 0) deps.stdout("No new direct feedback messages found.");
+  if (processed === 0) deps.stdout("No new direct feedback emails found.");
+  return 0;
+}
+
+/**
+ * The iMessage twin of checkEmailFeedback above. Reuses DIGEST_IMESSAGE_TO
+ * as her phone identity — same reasoning as reusing DIGEST_EMAIL_TO for the
+ * email channel: one setting, not a second one that could quietly drift out
+ * of sync — regardless of whether DIGEST_IMESSAGE_ENABLED (which only
+ * controls the outbound daily-digest text) happens to be on; texting in
+ * feedback and receiving the digest by text are independent choices.
+ * Missing DIGEST_IMESSAGE_TO is treated as "she hasn't opted into texting
+ * in feedback," not an error — unlike the email channel, which is the
+ * primary channel and always expected to be configured.
+ */
+async function checkImessageFeedback(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+  const candidatePhone = process.env["DIGEST_IMESSAGE_TO"];
+  if (!candidatePhone) return 0;
+
+  const imessageClient = createImessageClientFromEnv();
+  if (!imessageClient) {
+    deps.stderr("DIGEST_IMESSAGE_TO is set but Inkbox iMessage is not configured (INKBOX_API_KEY/INKBOX_IDENTITY_ID) — skipping the iMessage feedback channel.");
+    return 1;
+  }
+
+  const scoringClient = createScoringClientFromEnv();
+  if (!scoringClient) {
+    deps.stderr("FEEDBACK_LOOP_ENABLED is true but ANTHROPIC_API_KEY is not set — cannot classify replies, skipping.");
+    return 1;
+  }
+
+  const prefs = await loadPreferences(profile, root);
+  const feedbackLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback-imessage"));
+  const ledger = new CostLedger(randomUUID(), join(root, COST_LOG_PATH));
+
+  const messages = await imessageClient.listMessages();
+  let processed = 0;
+
+  for (const message of messages) {
+    if (await feedbackLog.hasProcessed(message.id)) continue;
+    if (!looksLikeDirectText(message, candidatePhone)) continue;
+
+    const classification = await classifyFeedback(message.content, prefs, feedbackRunContext(prefs), scoringClient, prefs.scoringModel, ledger);
+    const { applied, rejected } = await applyFeedbackChanges(profile, root, classification.changes, prefs, deps);
+    if (applied.length > 0) {
+      deps.stdout(`Applied feedback (text) from ${message.remoteNumber}: ${applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
+    }
+
+    const replyBody = buildFeedbackReplyBody(classification, applied, rejected);
+    let replied = false;
+    if (replyBody.length > 0) {
+      try {
+        await imessageClient.send(candidatePhone, replyBody);
+        replied = true;
+        deps.stdout(`Texted a reply to ${candidatePhone}.`);
+      } catch (error) {
+        deps.stderr(`Could not text a reply to ${candidatePhone}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    await feedbackLog.record({
+      messageId: message.id,
+      fromAddress: message.remoteNumber ?? candidatePhone,
+      processedAt: new Date().toISOString(),
+      appliedFields: applied.map((c) => c.field),
+      hadQuestion: classification.hasQuestion,
+      replied,
+    });
+    processed += 1;
+  }
+
+  if (processed === 0) deps.stdout("No new direct feedback texts found.");
   return 0;
 }
 
