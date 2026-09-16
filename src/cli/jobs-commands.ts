@@ -39,11 +39,13 @@ import {
   classifyFeedback,
   looksLikeDirectMessage,
   looksLikeDirectText,
+  normalizePhone,
   type PatchEntry,
 } from "../jobsearch/feedback";
 import { JsonFileFeedbackLog } from "../jobsearch/feedback-log";
 import { createImessageClientFromEnv } from "../jobsearch/imessage-client";
 import { commitAndPush } from "../integrations/git/auto-commit";
+import { createContactClientFromEnv, type Contact } from "../integrations/inkbox/contact-client";
 
 /**
  * `orchestrator jobs ...` — the pipeline's command surface, and the single
@@ -63,6 +65,7 @@ const USAGE = [
   "  run --profile <name>|--all   Fetch, dedupe, filter, score, and write today's digest",
   "  reconcile --profile <name>   Re-check already-filtered postings against today's rules (after a prefs/filter change) and score any that now pass",
   "  check-feedback --profile <name>|--all   Read new direct replies from the candidate (email and, if DIGEST_IMESSAGE_TO is set, iMessage), answer questions, and auto-apply any preference changes (FEEDBACK_LOOP_ENABLED=true required)",
+  "  enrich-contact --profile <name>|--all   Link DIGEST_IMESSAGE_TO's phone to the candidate's Inkbox contact record (found via DIGEST_EMAIL_TO) and tag it with this profile. Idempotent; safe to re-run.",
   "  digest --profile <name>      Print the most recent digest without running the pipeline",
   "  sources --profile <name>     List the configured sources and check each one's health",
   "  costs                        Show what recent runs have cost (shared ledger)",
@@ -161,6 +164,16 @@ export async function runJobsCommand(args: readonly string[], deps: JobsCommandD
       for (const profile of profiles) {
         if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
         worst = Math.max(worst, await runJobsCheckFeedback(profile, root, deps));
+      }
+      return worst;
+    }
+    case "enrich-contact": {
+      const profiles = await resolveProfiles(rest, root, deps, true);
+      if (!profiles) return 1;
+      let worst = 0;
+      for (const profile of profiles) {
+        if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
+        worst = Math.max(worst, await runJobsEnrichContact(profile, root, deps));
       }
       return worst;
     }
@@ -598,6 +611,65 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
   }
 
   if (processed === 0) deps.stdout("No new direct feedback texts found.");
+  return 0;
+}
+
+/**
+ * One-time-per-change enrichment, not part of the daily run: finds the
+ * candidate's real Inkbox contact record (Inkbox already auto-creates one
+ * from her inbound mail — this doesn't create a new one) via DIGEST_EMAIL_TO,
+ * links DIGEST_IMESSAGE_TO's phone number onto it if that link doesn't
+ * already exist, and tags it with a custom field naming this profile. Both
+ * checks are idempotent — a phone already present, or a custom field with
+ * the same label+value already present, is left alone rather than
+ * duplicated on every re-run.
+ *
+ * Deliberately does not touch review_status/is_confirmed or try to
+ * suppress retail-forwarding noise via contact rules — see
+ * contact-client.ts's doc comment for why: neither is writable through
+ * Inkbox's documented API today.
+ */
+async function runJobsEnrichContact(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+  const candidateEmail = process.env["DIGEST_EMAIL_TO"];
+  if (!candidateEmail) {
+    deps.stderr("DIGEST_EMAIL_TO is not set — no address to look her Inkbox contact up by.");
+    return 1;
+  }
+
+  const contactClient = createContactClientFromEnv();
+  if (!contactClient) {
+    deps.stderr("INKBOX_API_KEY is not set — cannot reach Inkbox's contacts API.");
+    return 1;
+  }
+
+  const matches = await contactClient.lookup({ email: candidateEmail });
+  const existing = matches[0];
+  if (!existing) {
+    deps.stdout(`No Inkbox contact found for ${candidateEmail} yet — nothing to enrich. One is created automatically once mail from her arrives.`);
+    return 0;
+  }
+
+  const patch: { phones?: Contact["phones"]; customFields?: Contact["customFields"] } = {};
+
+  const candidatePhone = process.env["DIGEST_IMESSAGE_TO"];
+  if (candidatePhone && !existing.phones.some((p) => normalizePhone(p.valueE164) === normalizePhone(candidatePhone))) {
+    patch.phones = [...existing.phones, { valueE164: candidatePhone, label: "mobile", isPrimary: existing.phones.length === 0 }];
+  }
+
+  const tagLabel = "moby-role";
+  const tagValue = `job-search-candidate:${profile}`;
+  if (!existing.customFields.some((f) => f.label === tagLabel && f.value === tagValue)) {
+    patch.customFields = [...existing.customFields, { label: tagLabel, value: tagValue }];
+  }
+
+  if (!patch.phones && !patch.customFields) {
+    deps.stdout(`${existing.preferredName ?? candidateEmail}'s Inkbox contact (${existing.id}) is already up to date.`);
+    return 0;
+  }
+
+  const updated = await contactClient.update(existing.id, patch);
+  const changes = [patch.phones ? "linked her phone" : null, patch.customFields ? "added the profile tag" : null].filter((c): c is string => c !== null);
+  deps.stdout(`Updated Inkbox contact ${updated.id} (${updated.preferredName ?? candidateEmail}): ${changes.join(", ")}.`);
   return 0;
 }
 

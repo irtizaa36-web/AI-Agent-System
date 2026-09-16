@@ -83,7 +83,7 @@ export function looksLikeDirectMessage(
 }
 
 /** Strips everything but digits, then keeps the last 10 — enough to match "+12144023994", "12144023994", and "(214) 402-3994" against each other without pretending to be a real phone-number parser. */
-function normalizePhone(value: string): string {
+export function normalizePhone(value: string): string {
   const digits = value.replace(/\D/g, "");
   return digits.slice(-10);
 }
