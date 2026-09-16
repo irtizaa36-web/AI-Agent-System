@@ -14,7 +14,8 @@ import type { RecommendationStore } from "./recommendation-store";
 import { createOperationalUpdate, OPERATIONAL_UPDATE_PROVENANCES, type OperationalUpdateProvenance } from "./operational-update";
 import type { OperationalUpdateStore } from "./operational-update-store";
 import { buildDashboardSnapshot } from "./snapshot";
-import { DASHBOARD_HTML } from "./page";
+import { COMMAND_CENTER_HTML } from "./command-center-page";
+import { DASHBOARD_HTML as LEGACY_DASHBOARD_HTML } from "./page";
 
 export interface DashboardServerDeps {
   readonly coworkerStore: CoworkerTaskStore;
@@ -202,7 +203,12 @@ export function createDashboardServer(deps: DashboardServerDeps): Server {
   return createServer((req, res) => {
     void (async () => {
       if (req.method === "GET" && req.url === "/") {
-        sendHtml(res, DASHBOARD_HTML);
+        sendHtml(res, COMMAND_CENTER_HTML);
+        return;
+      }
+
+      if (req.method === "GET" && req.url === "/legacy") {
+        sendHtml(res, LEGACY_DASHBOARD_HTML);
         return;
       }
 

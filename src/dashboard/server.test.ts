@@ -29,9 +29,24 @@ async function withServer(
   }
 }
 
-test("GET / serves the dashboard HTML page", async () => {
+test("GET / serves the Moby AI command center", async () => {
   await withServer(async (baseUrl) => {
     const res = await fetch(`${baseUrl}/`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /text\/html/);
+    const body = await res.text();
+    assert.match(body, /Moby AI/);
+    assert.match(body, /Interface preview/);
+    assert.match(body, /Orchestrator/);
+    assert.match(body, /href="\/legacy"/);
+    assert.match(body, /fetch\("\/api\/snapshot"\)/);
+    assert.match(body, /messages stay in this browser and do not invoke a model/);
+  });
+});
+
+test("GET /legacy preserves the operational dashboard", async () => {
+  await withServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/legacy`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") ?? "", /text\/html/);
     const body = await res.text();
