@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "Curated watchlist for the market-review check-ins (src/tools/market-review/).",
+    "`tickers` are underlyings reviewed every run, on top of whatever the account already holds",
+    "and whatever the day's market scan surfaced. `optionUnderlyings` is the subset whose option",
+    "chains get pulled — chain pulls are the expensive call, so this list is deliberately short.",
+    "`notes` explain why a name is here, and are printed in the report so the reason never gets lost.",
+    "Edit this file directly; nothing generates it."
+  ],
+  "tickers": ["SPY", "QQQ", "NVDA", "MU", "AMD"],
+  "optionUnderlyings": ["SPY"],
+  "notes": {
+    "SPY": "Primary 0DTE vehicle — daily expirations, deepest options liquidity.",
+    "QQQ": "Tech-beta read for the semiconductor holdings; not traded directly.",
+    "NVDA": "Largest single-name AI exposure in the account.",
+    "MU": "Largest position by value; earnings move the whole semi basket.",
+    "AMD": "Held; moves with NVDA but with a wider spread."
+  }
+}

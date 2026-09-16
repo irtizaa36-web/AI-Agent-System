@@ -34,6 +34,10 @@ Default five canonical labels (needs-triage, needs-info, ready-for-agent, ready-
 
 A standalone monitoring and trade-drafting system lives in `src/tools/public-trading/`. Read `docs/operations/public-trading.md` before touching it. Two boundaries hold without exception: it never places an order (its client interface exposes no method that could), and it is separate from — not a supervisor of — the Public.com Agents in `docs/registry/PROJECT-REGISTRY.md` §8.
 
+### Market review check-ins
+
+Four scheduled daily check-ins (09:00, 09:35, 12:00, 15:30 ET) live in `src/tools/market-review/`, producing ranked option and stock ideas for human review. Read `docs/operations/market-review.md` before touching it. The same two boundaries hold — no order path in the client interface, no control over the §8 Agents — plus one documented, deliberate gap: suggested sizes are arithmetic against a stated risk budget and are **not** checked against live buying power, so every report carries that disclaimer verbatim. The session fetches and judges; the CLI computes every derived number, so the maths stays under test.
+
 ### Domain docs
 
 Single-context layout (`CONTEXT.md` + `docs/adr/` at repo root). See `docs/agents/domain.md`.

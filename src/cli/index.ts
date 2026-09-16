@@ -25,6 +25,7 @@ import { runOperationalUpdateCommand } from "./operational-update-commands";
 import { JsonFileOperationalUpdateStore, type OperationalUpdateStore } from "../dashboard/operational-update-store";
 import { runDashboardCommand } from "./dashboard-command";
 import { runPublicTradingCommand } from "./public-trading-commands";
+import { runMarketReviewCommand } from "./market-review-commands";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { WorkflowStore } from "../store/workflow-store";
@@ -82,6 +83,9 @@ function printUsage(stdout: (line: string) => void): void {
       '  orchestrator operational-update add "<summary>" --by <a> --provenance <p> Log a concise operational handoff',
       "  orchestrator operational-update list                         List operational handoffs",
       "  orchestrator public-trading review --input <file|->         Write a Public.com monitoring review (read-only, drafts only)",
+      "  orchestrator market-review check-in --slot <s> --input <f>  Write a scheduled market check-in (read-only, drafts only)",
+      "  orchestrator market-review close-loop --input <file|->      Record what actually happened, at a named reference time",
+      "  orchestrator market-review log [--limit N]                  Show the append-only prediction log",
       "  orchestrator dashboard [--port N]                           Serve the local agents/projects dashboard",
       '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
       "  orchestrator constraints list                                List recorded corrections",
@@ -318,6 +322,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
 
   if (command === "public-trading") {
     return runPublicTradingCommand(rest, deps);
+  }
+
+  if (command === "market-review") {
+    return runMarketReviewCommand(rest, deps);
   }
 
   if (command === "dashboard") {
