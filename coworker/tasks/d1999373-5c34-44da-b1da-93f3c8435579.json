@@ -1,0 +1,11 @@
+{
+  "id": "d1999373-5c34-44da-b1da-93f3c8435579",
+  "createdAt": "2026-09-17T04:17:27.892Z",
+  "task": "Report the Inkbox tunnel's public URL - Irtiza needs it to create a webhook subscription in Inkbox's console (destination field). NEEDS THIS MACHINE - the tunnel only exists as a live connection process running there.\n\nBackground: the Inkbox mail webhook receiver already runs on this machine (localhost:8787, confirmed healthy in earlier work). Its public address comes from an Inkbox tunnel (*.inkboxwire.com) that must already be connected for the receiver to be reachable at all - but nobody has written down what that URL actually is anywhere in the repo.\n\nSteps:\n\n1. Check whatever process manages the webhook receiver/tunnel (the LaunchAgent docs/operations/local-operations.md describes, com.aiagentsystem.inkbox-webhook) - its logs should show the tunnel's publicUrl once connected (see src/integrations/inkbox/tunnel.ts's connectTunnel - it logs onStatus events and the listener has a publicUrl field).\n\n2. If there's a documented way to query it without digging through logs (an `orchestrator inkbox webhook-health` command or similar, check src/cli for an inkbox subcommand), use that instead - report which one you used.\n\n3. Report the exact URL back on issue #1, addressed to Irtiza - he needs it in the next few minutes to paste into Inkbox's console while creating a webhook subscription. This is not a secret (it's a public address, not a credential), so it's fine to post directly. Do NOT go create the subscription yourself in Inkbox's console - that's Irtiza's own action, not yours to do on his behalf.\n\nIf the tunnel isn't actually connected (INKBOX_TUNNEL_NAME unset, or connectTunnel never runs), report that plainly instead of guessing at a URL - Irtiza would need to get the tunnel running first before the webhook subscription can point anywhere real.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  }
+}
