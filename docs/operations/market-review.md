@@ -233,6 +233,81 @@ known catalyst is the single worst documented case for retail
 expected volatility is highest], so a catalyst in the window counts against a
 premium-buying idea rather than for it. That inversion is the point.
 
+## External signal tracking (unverified sources)
+
+A separate, explicit capability for tracking a named third-party source's stated
+market calls — a YouTube channel, say — and grading them against what actually
+happened. This exists because a request to import such a channel's videos
+directly into the evidence-based skill would reverse
+`.agents/skills/options-trading-eval/SKILL.md`'s founding decision: popularity
+and confidence are not evidence, and at least one of the most-repeated claims in
+retail options education is directly contradicted by peer-reviewed work. See
+`docs/research/options-trading-evidence-2026-09.md`'s 2026-09-17 addendum for
+the full reasoning.
+
+**What this is:** a record of what a source said, timestamped before the
+outcome was known, graded afterward on direction only.
+
+**What this is not:** evidence, a recommendation, or content for the skill. A
+tracked source's calls are never cited as support for a trading claim. If a
+source's hit rate is ever large-sample and strong enough to be worth citing,
+that citation would describe *that source's track record specifically* — a
+[FIRST-PARTY] finding with its own sample-size caveats — never a general
+options-trading truth.
+
+```bash
+# Record a call, before the outcome is known.
+node dist/cli/index.js market-review external-signal add --input signal.json
+
+# Record what actually happened, once it's known.
+node dist/cli/index.js market-review external-signal outcome --input outcome.json
+
+# See the hit rate.
+node dist/cli/index.js market-review external-signal stats
+```
+
+`add` input:
+
+```jsonc
+{
+  "signals": [
+    {
+      "sourceName": "Some Channel",
+      "sourceUrl": "https://www.youtube.com/@SomeChannel",
+      "videoUrl": "https://www.youtube.com/watch?v=...",
+      "videoTitle": "...",
+      "recordedAt": "2026-09-17T14:00:00Z",
+      "forDate": "2026-09-17",
+      "symbol": "SPY",
+      "direction": "BEARISH",              // BULLISH | BEARISH | NEUTRAL
+      "statedThesis": "…what they actually said, quoted or faithfully summarised…"
+    }
+  ]
+}
+```
+
+`statedThesis` is required and rejected if empty, for the same reason a
+recommendation's `mechanism` is required: a graded call with no record of what
+was claimed cannot be audited later. **Never fill this field from a title or a
+paraphrase you are not confident in** — if the actual claim could not be
+obtained (a blocked transcript, for instance), say so explicitly in the field
+rather than inferring a direction from framing. "Trap" language especially is
+built to be unfalsifiable after the fact; grading only the raw direction is
+what keeps this honest.
+
+`outcome` input mirrors `close-loop`: every entry needs `asOf` and a
+`referenceLabel`, plus `priceAtCall` (without it the call is recorded but stays
+`UNGRADED` forever) and `priceAtReference`.
+
+A `NEUTRAL` call is recorded but never graded — there is no principled
+threshold for "the market went nowhere" that couldn't be tuned after the fact
+to make a source look better.
+
+Stored separately from this system's own predictions, at
+`docs/operations/market-review/external-signals.jsonl` — never merged into
+`prediction-log.jsonl`, so a reader never has to wonder row by row whether an
+entry is this system's own recommendation or a third party's.
+
 ## Known limitations
 
 - **No market-wide forward earnings calendar** is available through any connector

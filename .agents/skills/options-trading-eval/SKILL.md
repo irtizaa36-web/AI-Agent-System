@@ -299,8 +299,15 @@ Unresolved in the evidence base; do not paper over them:
 - `docs/research/options-trading-evidence-2026-09.md` — full evidence review with source list,
   access status, and confidence labels, including a "Verification round 2" section
   (2026-09-14) that re-checked several claims against primary-source full text and caught the
-  unit error and sophistication misattribution corrected above. **Read this before adding any
-  claim to this skill.**
+  unit error and sophistication misattribution corrected above, and a 2026-09-17 addendum
+  explaining why a named YouTube channel's videos were not incorporated as skill content.
+  **Read this before adding any claim to this skill.**
+- `src/tools/market-review/external-signals.ts` and `docs/operations/market-review.md`
+  ("External signal tracking") — where a third-party source's dated calls are tracked and
+  graded against outcomes, if you want to know whether a specific channel is worth listening
+  to. **Never treat a tracked source's calls as evidence for this skill** — even a strong hit
+  rate would describe that source's own track record, not a general options-trading truth,
+  and would need its own confidence label and sample-size caveats before citing.
 - `.agents/skills/crypto-signal-eval/SKILL.md` — sibling skill; same evidence-first posture,
   and the source of the backtest + random-baseline bar that any *systematic* options signal
   would also have to clear before it could justify a trade.

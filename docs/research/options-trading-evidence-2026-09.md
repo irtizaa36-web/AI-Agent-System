@@ -36,6 +36,35 @@ where the most-repeated framing is contradicted by peer-reviewed work. A skill t
 repetition would have encoded the wrong answer with high confidence. This is the same failure
 mode `crypto-signal-eval` exists to prevent.
 
+### Addendum (2026-09-17) — a later request to "incorporate a channel's videos" directly
+
+A later request asked to incorporate a specific YouTube channel's videos and transcripts into
+the options-trading-eval skill. That is the same method this section already declined, asked
+again in a different form, and it was declined again for the same reason: a channel's stated
+market calls are not evidence just because they are numerous, confident, or repeated.
+
+What was built instead — `src/tools/market-review/external-signals.ts` and the
+`orchestrator market-review external-signal` CLI — records a named source's dated calls
+*before* the outcome is known and grades them afterward against what the underlying actually
+did. That produces a real, checkable hit rate over a large-enough sample, which is a
+fundamentally different thing from importing the channel's opinions as content: a good hit rate
+is not itself proof; too small a sample proves nothing either way. See
+`docs/operations/market-review.md`'s "External signal tracking" section for the full rule set.
+
+**This document and the skill remain closed to citing any such channel's claims as evidence
+until a tracked sample says otherwise** — and even then, a validated hit rate would be a
+[FIRST-PARTY] finding about *that one source's track record*, not a general options-trading
+truth, and would need its own confidence label and sample-size caveats before it could support
+anything in the skill.
+
+Separately: the transcript for the specific video that prompted this (a "rate hike trap" call on
+SPY/QQQ dated 2026-09-17) could not be retrieved in this environment — YouTube's transcript
+endpoint returned a CAPTCHA wall to automated fetches, and third-party transcript mirrors
+returned 403. Only the title and channel name (`SPY Day Trading`) were confirmed via YouTube's
+oEmbed endpoint. No claim from that video is recorded anywhere in this repository, because the
+actual claim was never obtained — logging a title-inferred direction as though it were the
+stated thesis would be exactly the kind of fabrication this project refuses to do.
+
 ---
 
 ## Confidence labels used below

@@ -17,6 +17,19 @@ import {
   type LogEntry,
   type OutcomeLogEntry,
 } from "../tools/market-review/store";
+import {
+  DEFAULT_EXTERNAL_SIGNAL_LOG_PATH,
+  appendExternalSignalEntries,
+  readExternalSignalEntries,
+  splitExternalSignalLog,
+} from "../tools/market-review/external-signals-store";
+import {
+  gradeAllSignals,
+  summariseBySource,
+  validateExternalSignal,
+  type ExternalSignal,
+  type ExternalSignalOutcome,
+} from "../tools/market-review/external-signals";
 import type { CliDeps } from "./index";
 import type { ContractAnalysis, IvTermCheck } from "../tools/market-review/analysis";
 import type { Conviction, Direction, SizedRecommendation } from "../tools/market-review/recommend";
@@ -49,12 +62,20 @@ const USAGE = [
   "  orchestrator market-review check-in --slot <slot> --input <file|-> [--dir <path>] [--log <path>]",
   "  orchestrator market-review close-loop --input <file|-> [--log <path>]",
   "  orchestrator market-review log [--log <path>] [--limit N]",
+  "  orchestrator market-review external-signal add --input <file|-> [--log <path>]",
+  "  orchestrator market-review external-signal outcome --input <file|-> [--log <path>]",
+  "  orchestrator market-review external-signal stats [--log <path>] [--source <name>]",
   "",
   "  --slot    One of: pre-open, opening, midday, pre-close",
   "  --input   JSON the session assembled for this run, or '-' to read stdin. See",
   "            docs/operations/market-review.md for the full shape.",
   `  --dir     Where reports are written (default: ${DEFAULT_REVIEW_DIR})`,
   `  --log     Append-only prediction log (default: ${DEFAULT_LOG_PATH})`,
+  "",
+  "external-signal tracks a NAMED THIRD-PARTY SOURCE's stated calls (e.g. a",
+  "YouTube channel) and grades them against what actually happened. It is a",
+  "separate log from this system's own predictions and is never treated as",
+  `evidence — see docs/operations/market-review.md. Default log: ${DEFAULT_EXTERNAL_SIGNAL_LOG_PATH}`,
 ].join("\n");
 
 async function readStdin(): Promise<string> {
@@ -471,12 +492,200 @@ async function runLogCommand(rest: readonly string[], deps: CliDeps): Promise<nu
   return 0;
 }
 
+interface ExternalSignalAddPayload {
+  readonly signals?: readonly ExternalSignal[];
+}
+
+/** Records one or more third-party calls, before their outcome is known. */
+async function runExternalSignalAdd(rest: readonly string[], deps: CliDeps): Promise<number> {
+  let values: { input?: string; log?: string };
+  try {
+    ({ values } = parseArgs({
+      args: [...rest],
+      options: { input: { type: "string" }, log: { type: "string" } },
+      allowPositionals: false,
+    }) as { values: typeof values });
+  } catch (error) {
+    deps.stderr(`${(error as Error).message}\n${USAGE}`);
+    return 1;
+  }
+
+  if (values.input === undefined) {
+    deps.stderr(`--input is required.\n${USAGE}`);
+    return 1;
+  }
+
+  let payload: ExternalSignalAddPayload;
+  try {
+    payload = (await readInput(values.input)) as ExternalSignalAddPayload;
+  } catch (error) {
+    deps.stderr(`Could not read --input: ${(error as Error).message}`);
+    return 1;
+  }
+
+  const signals = payload.signals ?? [];
+  if (signals.length === 0) {
+    deps.stderr('Input needs a "signals" array with at least one entry.');
+    return 1;
+  }
+
+  try {
+    for (const signal of signals) validateExternalSignal(signal);
+  } catch (error) {
+    deps.stderr((error as Error).message);
+    return 1;
+  }
+
+  const logPath = values.log ?? DEFAULT_EXTERNAL_SIGNAL_LOG_PATH;
+  try {
+    await appendExternalSignalEntries(
+      signals.map((signal) => ({ kind: "SIGNAL" as const, ...signal })),
+      logPath,
+    );
+  } catch (error) {
+    deps.stderr(`Could not append to the log: ${(error as Error).message}`);
+    return 1;
+  }
+
+  deps.stdout(`Recorded ${signals.length} external signal(s) to ${logPath}`);
+  for (const signal of signals) {
+    deps.stdout(`  ${signal.sourceName}: ${signal.symbol} ${signal.direction} — ${signal.videoUrl}`);
+  }
+  deps.stdout(
+    "This is a tracked, ungraded call from a third-party source — not evidence, and not a recommendation " +
+      "from this system. It will be scored once an outcome is recorded.",
+  );
+  return 0;
+}
+
+interface ExternalSignalOutcomePayload {
+  readonly outcomes?: readonly ExternalSignalOutcome[];
+}
+
+/** Records what actually happened for one or more previously-tracked calls. */
+async function runExternalSignalOutcome(rest: readonly string[], deps: CliDeps): Promise<number> {
+  let values: { input?: string; log?: string };
+  try {
+    ({ values } = parseArgs({
+      args: [...rest],
+      options: { input: { type: "string" }, log: { type: "string" } },
+      allowPositionals: false,
+    }) as { values: typeof values });
+  } catch (error) {
+    deps.stderr(`${(error as Error).message}\n${USAGE}`);
+    return 1;
+  }
+
+  if (values.input === undefined) {
+    deps.stderr(`--input is required.\n${USAGE}`);
+    return 1;
+  }
+
+  let payload: ExternalSignalOutcomePayload;
+  try {
+    payload = (await readInput(values.input)) as ExternalSignalOutcomePayload;
+  } catch (error) {
+    deps.stderr(`Could not read --input: ${(error as Error).message}`);
+    return 1;
+  }
+
+  const outcomes = payload.outcomes ?? [];
+  if (outcomes.length === 0) {
+    deps.stderr('Input needs an "outcomes" array with at least one entry.');
+    return 1;
+  }
+  for (const outcome of outcomes) {
+    if (outcome.asOf === undefined || outcome.asOf.trim() === "") {
+      deps.stderr(`Outcome for ${outcome.videoUrl} is missing "asOf" — a mark with no reference time is not a mark.`);
+      return 1;
+    }
+  }
+
+  const logPath = values.log ?? DEFAULT_EXTERNAL_SIGNAL_LOG_PATH;
+  let graded;
+  try {
+    await appendExternalSignalEntries(
+      outcomes.map((outcome) => ({ kind: "OUTCOME" as const, ...outcome })),
+      logPath,
+    );
+    const { signals, outcomes: allOutcomes } = splitExternalSignalLog(await readExternalSignalEntries(logPath));
+    graded = gradeAllSignals(signals, allOutcomes).filter((entry) =>
+      outcomes.some((outcome) => outcome.videoUrl === entry.signal.videoUrl && outcome.symbol === entry.signal.symbol),
+    );
+  } catch (error) {
+    deps.stderr(`Could not record the outcome: ${(error as Error).message}`);
+    return 1;
+  }
+
+  deps.stdout(`Recorded ${outcomes.length} outcome(s) to ${logPath}`);
+  for (const entry of graded) {
+    deps.stdout(`  ${entry.signal.sourceName} ${entry.signal.symbol}: ${entry.grade} — ${entry.reason}`);
+  }
+  return 0;
+}
+
+/** Prints the hit-rate stats this tracking exists to produce. */
+async function runExternalSignalStats(rest: readonly string[], deps: CliDeps): Promise<number> {
+  let values: { log?: string; source?: string };
+  try {
+    ({ values } = parseArgs({
+      args: [...rest],
+      options: { log: { type: "string" }, source: { type: "string" } },
+      allowPositionals: false,
+    }) as { values: typeof values });
+  } catch (error) {
+    deps.stderr(`${(error as Error).message}\n${USAGE}`);
+    return 1;
+  }
+
+  const logPath = values.log ?? DEFAULT_EXTERNAL_SIGNAL_LOG_PATH;
+  let stats;
+  try {
+    const { signals, outcomes } = splitExternalSignalLog(await readExternalSignalEntries(logPath));
+    const graded = gradeAllSignals(signals, outcomes);
+    stats = summariseBySource(graded).filter(
+      (entry) => values.source === undefined || entry.sourceName === values.source,
+    );
+  } catch (error) {
+    deps.stderr(`Could not read the log: ${(error as Error).message}`);
+    return 1;
+  }
+
+  if (stats.length === 0) {
+    deps.stdout("No tracked signals yet.");
+    return 0;
+  }
+
+  for (const entry of stats) {
+    const rate = entry.hitRate === undefined ? "no graded calls yet" : `${(entry.hitRate * 100).toFixed(1)}% hit rate`;
+    deps.stdout(
+      `${entry.sourceName}: ${entry.totalCalls} call(s) — ${entry.hits} hit, ${entry.misses} miss, ` +
+        `${entry.ungraded} ungraded — ${rate}`,
+    );
+  }
+  deps.stdout(
+    "This is a track record, not evidence: too few calls make a hit rate meaningless, and a good record on " +
+      "one symbol says nothing about another. Do not cite this in the skill until the sample says otherwise.",
+  );
+  return 0;
+}
+
+async function runExternalSignalCommand(argv: readonly string[], deps: CliDeps): Promise<number> {
+  const [action, ...rest] = argv;
+  if (action === "add") return runExternalSignalAdd(rest, deps);
+  if (action === "outcome") return runExternalSignalOutcome(rest, deps);
+  if (action === "stats") return runExternalSignalStats(rest, deps);
+  deps.stderr(USAGE);
+  return 1;
+}
+
 export async function runMarketReviewCommand(argv: readonly string[], deps: CliDeps): Promise<number> {
   const [subcommand, ...rest] = argv;
 
   if (subcommand === "check-in") return runCheckIn(rest, deps);
   if (subcommand === "close-loop") return runCloseLoop(rest, deps);
   if (subcommand === "log") return runLogCommand(rest, deps);
+  if (subcommand === "external-signal") return runExternalSignalCommand(rest, deps);
 
   deps.stderr(USAGE);
   return 1;
