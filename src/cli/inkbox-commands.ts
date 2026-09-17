@@ -8,9 +8,29 @@ import { getOwnerForwardAddress, shouldForwardInbound } from "../integrations/in
 import { INKBOX_WEBHOOK_PATH } from "../integrations/inkbox/webhook";
 import { startInkboxWebhookServer } from "../integrations/inkbox/webhook-server";
 import { connectTunnel, getTunnelConfigFromEnv, type ConnectedTunnel } from "../integrations/inkbox/tunnel";
+import { runJobsCheckFeedback } from "./jobs-commands";
 import type { CliDeps } from "./index";
 
 const DEFAULT_WEBHOOK_PORT = 8787;
+
+/**
+ * Decides whether an inbound-message webhook event should trigger an
+ * immediate feedback check, and for which profile. Pure and exported so this
+ * one decision — the one place a live webhook event could get routed to the
+ * wrong candidate's config, or silently do nothing — is unit-tested without
+ * spinning up a real server. `FEEDBACK_LOOP_PROFILE` is deliberately its own
+ * setting rather than inferred: guessing which profile owns an inbound
+ * message would break ADR 0017's "no default profile" rule the moment a
+ * second candidate's feedback loop went live on the same machine.
+ */
+export function feedbackCheckProfileFor(
+  event: string,
+  feedbackLoopEnabled: boolean,
+  feedbackLoopProfile: string | undefined,
+): string | undefined {
+  if (event !== "message.received" || !feedbackLoopEnabled) return undefined;
+  return feedbackLoopProfile && feedbackLoopProfile.trim().length > 0 ? feedbackLoopProfile : undefined;
+}
 
 /** Treats an unset OR blank value (e.g. a template's untouched `KEY=` line) as "use the fallback." */
 export function parsePort(raw: string | undefined, fallback: number): number {
@@ -319,6 +339,20 @@ async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Pro
     return 1;
   }
 
+  const feedbackLoopEnabled = process.env["FEEDBACK_LOOP_ENABLED"] === "true";
+  const feedbackLoopProfile = process.env["FEEDBACK_LOOP_PROFILE"];
+  if (feedbackLoopEnabled && !feedbackCheckProfileFor("message.received", true, feedbackLoopProfile)) {
+    deps.stdout(
+      "FEEDBACK_LOOP_ENABLED is true but FEEDBACK_LOOP_PROFILE is not set — an inbound message here will NOT " +
+        "trigger a real-time feedback check. It will still be picked up by the next scheduled or manual `jobs check-feedback`.",
+    );
+  }
+
+  // Chained (not fired concurrently) so two inbound messages arriving close
+  // together can never run checkEmailFeedback/checkImessageFeedback at the
+  // same time and race on the same feedback-log dedup check.
+  let feedbackCheckChain: Promise<void> = Promise.resolve();
+
   let started;
   try {
     started = await startInkboxWebhookServer(
@@ -334,7 +368,18 @@ async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Pro
         port,
         signingKey,
         authToken,
-        onEvent: (result) => deps.stdout(`[inkbox webhook] ${result.event}: ${result.actions.join("; ") || "(no action)"}`),
+        onEvent: (result) => {
+          deps.stdout(`[inkbox webhook] ${result.event}: ${result.actions.join("; ") || "(no action)"}`);
+          const profile = feedbackCheckProfileFor(result.event, feedbackLoopEnabled, feedbackLoopProfile);
+          if (profile) {
+            feedbackCheckChain = feedbackCheckChain
+              .then(() => runJobsCheckFeedback(profile, ".", { stdout: deps.stdout, stderr: deps.stderr }))
+              .then(() => undefined)
+              .catch((error: unknown) => {
+                deps.stderr(`[inkbox webhook] real-time feedback check failed: ${(error as Error).message}`);
+              });
+          }
+        },
         onRejected: (info) => {
           deps.stderr(`[inkbox webhook] rejected (${info.statusCode}): ${info.reason}`);
           // Temporary diagnostic: only fires for a payload-shape mismatch,
