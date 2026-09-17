@@ -5,8 +5,10 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "dispatched",
-      "dispatchedAt": "2026-09-17T05:09:32.125Z"
+      "status": "succeeded",
+      "dispatchedAt": "2026-09-17T05:09:32.125Z",
+      "finishedAt": "2026-09-17T05:27:14.633Z",
+      "output": "Set OWNER_FORWARD_EXCLUDE_RECIPIENTS=brshivani@gmail.com in .env (previously left blank on task b5d09ffe - that was a misread, the noisy recipient was already known). Restarted com.aiagentsystem.inkbox-webhook (launchctl kickstart -k) so it picked up the new value - confirmed via a fresh PID and the process log showing a clean stop/restart.\n\nAll three verification checks passed:\n1. Functional test against the live code + live .env (node --env-file=.env -e '...'): mail originally addressed to brshivani@gmail.com correctly returns forward:false; mail addressed directly to the Inkbox mailbox itself (her feedback-loop replies) still returns forward:true. Confirms the fix targets the right thing without breaking the feedback loop.\n2. Watched for the full 15 minutes post-restart: baseline was 201 total matching flood emails in Irtiza's Gmail, most recent at 05:03:29Z (a few minutes before the 05:10:17Z restart). Re-checked Gmail after the watch window - zero new ones arrived; the newest is still that same pre-restart message. Flood has stopped.\n3. Direct real-world confirmation from the webhook receiver's own log (found while working an unrelated urgent task): the most recent line in .orchestrator/webhook-receiver.log is a live inbound message processed moments after the restart, reading exactly 'forwarding skipped: message was originally addressed to brshivani@gmail.com, which is excluded from owner-forwarding' - the exclusion firing correctly on real production traffic, not just a synthetic test.\n\nFeedback loop unaffected per check 1 and per design (the exclusion matches on original recipient, not on whether it's the Inkbox mailbox's own address)."
     }
   }
 }
