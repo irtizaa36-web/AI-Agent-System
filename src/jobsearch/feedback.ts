@@ -1,6 +1,7 @@
 import type { Preferences } from "./records";
 import type { ScoringClient } from "./scoring-client";
 import type { CostLedger } from "./cost";
+import type { DigestPayload } from "./digest";
 
 /**
  * Stage 11 (new): a candidate's own reply, turned into two things — an
@@ -104,6 +105,83 @@ export function looksLikeDirectText(
   return normalizePhone(message.remoteNumber) === normalizePhone(candidatePhone);
 }
 
+/** One past exchange, in the shape buildConversationHistory needs — deliberately narrower than FeedbackRecord (no messageId/fromAddress) so a caller merging records from two different channel logs doesn't have to reconcile their unrelated identity fields, just chronological content. */
+export interface ConversationTurn {
+  readonly processedAt: string;
+  readonly messageText: string;
+  readonly appliedChanges: readonly { readonly field: string; readonly value: unknown }[];
+  readonly replyBody: string;
+}
+
+/**
+ * Renders recent turns as prompt text so the classifier can resolve a
+ * reference like "make it higher" or "did you get my last text" against
+ * what she actually said and what was actually done — the single biggest
+ * gap in the original one-shot design, where every message was classified
+ * with zero memory of any prior one. Bounded to `limit` most recent turns;
+ * an unbounded history would grow the prompt (and the cost) forever and
+ * most of it stops being relevant anyway.
+ *
+ * A turn missing messageText/replyBody (an old FeedbackRecord written
+ * before those fields existed) is skipped rather than rendered with a
+ * placeholder — a blank "she said: ''" line is worse than not mentioning
+ * that turn at all, since it would look like she sent an empty message.
+ */
+export function buildConversationHistory(turns: readonly ConversationTurn[], limit = 5): string {
+  const usable = turns.filter((t) => t.messageText.length > 0).slice(-limit);
+  if (usable.length === 0) return "(no prior messages on file)";
+
+  return usable
+    .map((turn) => {
+      const changeLine =
+        turn.appliedChanges.length > 0
+          ? `Changed: ${turn.appliedChanges.map((c) => `${c.field} → ${JSON.stringify(c.value)}`).join(", ")}.`
+          : "Nothing was changed.";
+      const replyLine = turn.replyBody.length > 0 ? `We replied: "${turn.replyBody}"` : "We had nothing to reply.";
+      return `[${turn.processedAt.slice(0, 10)}] She said: "${turn.messageText}"\n${changeLine} ${replyLine}`;
+    })
+    .join("\n\n");
+}
+
+/**
+ * Turns the latest run's real data into prompt text, so she can ask "what
+ * did you find today" or "why didn't X show up" and get a grounded answer
+ * instead of the model apologizing that it doesn't know. Before this, the
+ * classifier only ever saw four static facts (cutoff, floor, titles,
+ * metros) — never what the pipeline had actually just done.
+ *
+ * `latestRun` is undefined when no digest has ever been written, or the
+ * file couldn't be read — handled as an honest "no recent run data",
+ * never a guess at what a run might have found.
+ */
+export function buildRunContext(prefs: Preferences, latestRun?: DigestPayload): string {
+  const base = `Score cutoff: ${prefs.scoreCutoff}. Salary floor: ${prefs.salaryFloor ?? "none stated"}. Titles tracked: ${prefs.titles.join(", ") || "(none configured)"}. Metros: ${prefs.metros.join(", ") || "(none — remote only)"}.`;
+
+  if (!latestRun) return `${base}\n(No recent run data available.)`;
+
+  const runLine = `Most recent run (${latestRun.startedAt.slice(0, 10)}): ${latestRun.counts.new} new postings, ${latestRun.counts.filtered} filtered out, ${latestRun.counts.scored} scored, ${latestRun.counts.shortlisted} shortlisted.`;
+
+  const shortlistBlock =
+    latestRun.shortlisted.length > 0
+      ? [
+          "Shortlisted roles from that run:",
+          ...latestRun.shortlisted.map((role) => {
+            const pay = role.salaryStated ? `$${role.salaryMin?.toLocaleString()}-${role.salaryMax?.toLocaleString()}` : "pay not stated";
+            const gaps = role.gaps.length > 0 ? ` Gaps: ${role.gaps.join("; ")}.` : "";
+            const rationale = role.rationale ?? "(no rationale on file)";
+            return `- ${role.title} at ${role.company} (score ${role.score ?? "?"}/100, ${role.locationClass}, ${pay}): ${rationale}${gaps}`;
+          }),
+        ].join("\n")
+      : "No roles were shortlisted in that run.";
+
+  const rejectionBlock =
+    latestRun.filterReasons.length > 0
+      ? ["Why postings were filtered out before scoring:", ...latestRun.filterReasons.map((r) => `- ${r.reason}: ${r.count}`)].join("\n")
+      : "";
+
+  return [base, "", runLine, "", shortlistBlock, rejectionBlock].filter((section) => section.length > 0).join("\n");
+}
+
 function fieldDescription(field: AllowedPatchField): string {
   const descriptions: Record<AllowedPatchField, string> = {
     titles: "array of strings — title patterns that must appear (any order) for a posting to be considered at all",
@@ -125,15 +203,22 @@ function fieldDescription(field: AllowedPatchField): string {
 
 /**
  * Builds the classification prompt. The current preferences (only the
- * allowed-to-change fields, not the whole file) and a short run context are
- * the ONLY facts the model is given to answer from — it is told explicitly
- * to say it doesn't know rather than invent an answer, the same discipline
- * `score.ts`'s scoring prompt already applies to job postings.
+ * allowed-to-change fields, not the whole file), a run context, and now
+ * recent conversation history are the ONLY facts the model is given to
+ * answer from — it is told explicitly to say it doesn't know rather than
+ * invent an answer, the same discipline `score.ts`'s scoring prompt
+ * already applies to job postings.
+ *
+ * `conversationHistory` defaults to the same "nothing on file" string
+ * `buildConversationHistory` returns for an empty history, so a caller
+ * that hasn't wired history through yet (or genuinely has none) doesn't
+ * have to construct that string itself.
  */
 export function buildFeedbackPrompt(
   messageText: string,
   currentPrefs: Preferences,
   runContext: string,
+  conversationHistory: string = "(no prior messages on file)",
 ): { readonly system: string; readonly user: string } {
   const currentValues = Object.fromEntries(ALLOWED_PATCH_FIELDS.map((field) => [field, currentPrefs[field]]));
 
@@ -144,17 +229,20 @@ export function buildFeedbackPrompt(
     "",
     "Rules, in order of importance:",
     "- Never invent a value she did not state or clearly, unambiguously imply. A vague or sarcastic remark is not a value.",
+    "- Use the conversation history below to resolve a reference her current message makes to something earlier — \"make it higher\", \"the one from before\", \"did you get my last text\" — but only when an earlier turn actually grounds it. If history doesn't make the reference clear, treat it as unclear rather than guessing which prior turn she means.",
     "- Only ever change a field from this exact list, with this exact meaning:",
     ...ALLOWED_PATCH_FIELDS.map((field) => `  - ${field}: ${fieldDescription(field)}`),
     "- If a request doesn't map cleanly onto one of those fields and values, or the mapping is genuinely ambiguous, put the relevant part of her message in \"unclear\" and do NOT put anything in \"changes\" for it. An honest 'I couldn't map this' beats a wrong guess every time.",
     "- For an array field (titles, metros, etc.), the value you output is the FULL new array — you have the current array below, so add or remove from it as her message asks and output the complete result, not just a delta.",
-    "- If she asks a question, answer it ONLY from the current preferences and run context given below. If you don't have what's needed to answer honestly, say so plainly in the draft rather than guessing.",
+    "- If she asks a question, answer it ONLY from the current preferences, run context, and conversation history given below. If you don't have what's needed to answer honestly, say so plainly in the draft rather than guessing.",
     "- Output ONLY a JSON object, no prose before or after, matching this shape exactly:",
     '{"hasQuestion": boolean, "answerDraft": string | null, "changes": [{"field": string, "value": <matching type>, "quote": string}], "unclear": [string]}',
   ].join("\n");
 
   const user = [
     `Her message:\n"""\n${messageText}\n"""`,
+    "",
+    `Recent conversation with her (oldest first, most recent last):\n${conversationHistory}`,
     "",
     `Her current preferences (only the fields you're allowed to change):\n${JSON.stringify(currentValues, null, 2)}`,
     "",
@@ -216,8 +304,9 @@ export async function classifyFeedback(
   client: ScoringClient,
   model: string,
   ledger?: CostLedger,
+  conversationHistory?: string,
 ): Promise<FeedbackClassification> {
-  const { system, user } = buildFeedbackPrompt(messageText, currentPrefs, runContext);
+  const { system, user } = buildFeedbackPrompt(messageText, currentPrefs, runContext, conversationHistory);
   const result = await client.complete({ model, system, user, maxTokens: 1500 });
   if (ledger) await ledger.record("feedback-classification", model, result.usage);
   return parseFeedbackClassification(result.text);

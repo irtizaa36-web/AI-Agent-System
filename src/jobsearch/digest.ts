@@ -133,8 +133,49 @@ export function renderDigest(summary: RunSummary): string {
   return lines.join("\n");
 }
 
-/** The same run, as data, for the dashboard to render. */
-export function digestPayload(summary: RunSummary): Record<string, unknown> {
+/** One shortlisted role as digestPayload serializes it — flattened from JobRecord, dashboard- and prompt-facing rather than the pipeline's own internal shape. */
+export interface DigestPayloadRole {
+  readonly id: string;
+  readonly title: string;
+  readonly company: string;
+  readonly locationClass: string;
+  readonly salaryStated: boolean;
+  readonly salaryMin: number | null;
+  readonly salaryMax: number | null;
+  readonly score: number | null;
+  readonly confidence: string | null;
+  readonly rationale: string | null;
+  readonly gaps: readonly string[];
+  readonly applyUrl: string;
+}
+
+/**
+ * The structured, typed shape `digests/latest.json` is written in on every
+ * run and reconcile — real enough to import and read back elsewhere (see
+ * feedback.ts's buildRunContext), not just a display payload for the
+ * dashboard.
+ */
+export interface DigestPayload {
+  readonly runId: string;
+  readonly startedAt: string;
+  readonly finishedAt: string;
+  readonly counts: {
+    readonly fetched: number;
+    readonly new: number;
+    readonly duplicates: number;
+    readonly filtered: number;
+    readonly scored: number;
+    readonly shortlisted: number;
+  };
+  readonly filterReasons: readonly RejectionBucket[];
+  readonly costUsd: number;
+  readonly shortlisted: readonly DigestPayloadRole[];
+  readonly health: readonly SourceHealth[];
+  readonly failures: readonly string[];
+}
+
+/** The same run, as data, for the dashboard to render and for the feedback loop to answer questions from. */
+export function digestPayload(summary: RunSummary): DigestPayload {
   return {
     runId: summary.runId,
     startedAt: summary.startedAt,

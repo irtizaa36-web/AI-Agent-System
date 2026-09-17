@@ -2,15 +2,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   applyFeedbackPatch,
+  buildConversationHistory,
   buildFeedbackPrompt,
   buildFeedbackReplyBody,
+  buildRunContext,
   classifyFeedback,
   looksLikeDirectMessage,
   looksLikeDirectText,
   parseFeedbackClassification,
+  type ConversationTurn,
 } from "./feedback";
 import { DEFAULT_PREFERENCES, type Preferences } from "./records";
 import { FakeScoringClient } from "./scoring-client";
+import type { DigestPayload } from "./digest";
 
 const prefs: Preferences = { ...DEFAULT_PREFERENCES, titles: ["program manager"], scoreCutoff: 65, salaryFloor: 120000 };
 
@@ -94,6 +98,115 @@ test("buildFeedbackPrompt lists every allowed field with its meaning, and only t
   assert.doesNotMatch(user, /"scoringModel"/, "only allow-listed current values are shown to the model");
 });
 
+test("buildFeedbackPrompt defaults to an empty conversation history when none is passed", () => {
+  const { user } = buildFeedbackPrompt("hello", prefs, "some context");
+  assert.match(user, /no prior messages on file/);
+});
+
+test("buildFeedbackPrompt includes real conversation history when passed, and tells the model to use it for references", () => {
+  const { system, user } = buildFeedbackPrompt("make it higher", prefs, "some context", '[2026-09-10] She said: "bump the floor to 120k"\nChanged: salaryFloor → 120000.');
+  assert.match(system, /Use the conversation history below to resolve a reference/);
+  assert.match(user, /bump the floor to 120k/);
+});
+
+test("buildConversationHistory renders turns oldest-first with what changed and what was replied", () => {
+  const turns: ConversationTurn[] = [
+    { processedAt: "2026-09-10T12:00:00Z", messageText: "bump the floor to 120k", appliedChanges: [{ field: "salaryFloor", value: 120000 }], replyBody: "Updated: salaryFloor → 120000" },
+    { processedAt: "2026-09-12T12:00:00Z", messageText: "any updates?", appliedChanges: [], replyBody: "Nothing new today." },
+  ];
+  const history = buildConversationHistory(turns);
+  assert.match(history, /bump the floor to 120k/);
+  assert.match(history, /salaryFloor → 120000/);
+  assert.match(history, /any updates\?/);
+  assert.match(history, /Nothing new today\./);
+  assert.ok(history.indexOf("bump the floor") < history.indexOf("any updates"), "oldest turn appears first");
+});
+
+test("buildConversationHistory returns a plain placeholder for an empty history, not an empty string", () => {
+  assert.equal(buildConversationHistory([]), "(no prior messages on file)");
+});
+
+test("buildConversationHistory skips a turn with no message text rather than rendering a blank quote", () => {
+  const turns: ConversationTurn[] = [
+    { processedAt: "2026-09-10T12:00:00Z", messageText: "", appliedChanges: [], replyBody: "" },
+    { processedAt: "2026-09-12T12:00:00Z", messageText: "any updates?", appliedChanges: [], replyBody: "Nothing new today." },
+  ];
+  const history = buildConversationHistory(turns);
+  assert.doesNotMatch(history, /She said: ""/);
+  assert.match(history, /any updates\?/);
+});
+
+test("buildConversationHistory keeps only the most recent `limit` turns", () => {
+  const turns: ConversationTurn[] = Array.from({ length: 8 }, (_, i) => ({
+    processedAt: `2026-09-${10 + i}T12:00:00Z`,
+    messageText: `message ${i}`,
+    appliedChanges: [],
+    replyBody: "",
+  }));
+  const history = buildConversationHistory(turns, 3);
+  assert.doesNotMatch(history, /message 0/);
+  assert.doesNotMatch(history, /message 4/);
+  assert.match(history, /message 5/);
+  assert.match(history, /message 7/);
+});
+
+test("buildRunContext falls back honestly when no run data is available", () => {
+  const context = buildRunContext(prefs, undefined);
+  assert.match(context, /No recent run data available/);
+});
+
+test("buildRunContext surfaces real shortlisted roles and filter reasons from the latest run", () => {
+  const latestRun: DigestPayload = {
+    runId: "run-1",
+    startedAt: "2026-09-16T10:00:00Z",
+    finishedAt: "2026-09-16T10:05:00Z",
+    counts: { fetched: 200, new: 160, duplicates: 40, filtered: 159, scored: 1, shortlisted: 1 },
+    filterReasons: [{ reason: "title mismatch", count: 120 }, { reason: "below salary floor", count: 39 }],
+    costUsd: 0.12,
+    shortlisted: [
+      {
+        id: "job-1",
+        title: "Senior Program Manager",
+        company: "Acme Corp",
+        locationClass: "remote",
+        salaryStated: true,
+        salaryMin: 130000,
+        salaryMax: 150000,
+        score: 82,
+        confidence: "high",
+        rationale: "Strong match on program management background.",
+        gaps: ["No stated healthcare experience"],
+        applyUrl: "https://example.com/apply",
+      },
+    ],
+    health: [],
+    failures: [],
+  };
+
+  const context = buildRunContext(prefs, latestRun);
+  assert.match(context, /160 new postings/);
+  assert.match(context, /Senior Program Manager at Acme Corp/);
+  assert.match(context, /130,000-150,000/);
+  assert.match(context, /No stated healthcare experience/);
+  assert.match(context, /title mismatch: 120/);
+});
+
+test("buildRunContext reports plainly when nothing was shortlisted, rather than omitting the section", () => {
+  const latestRun: DigestPayload = {
+    runId: "run-2",
+    startedAt: "2026-09-16T10:00:00Z",
+    finishedAt: "2026-09-16T10:05:00Z",
+    counts: { fetched: 50, new: 10, duplicates: 40, filtered: 10, scored: 0, shortlisted: 0 },
+    filterReasons: [],
+    costUsd: 0,
+    shortlisted: [],
+    health: [],
+    failures: [],
+  };
+  const context = buildRunContext(prefs, latestRun);
+  assert.match(context, /No roles were shortlisted in that run/);
+});
+
 test("parseFeedbackClassification returns the empty classification on malformed JSON, never a guess", () => {
   assert.deepEqual(parseFeedbackClassification("not json at all"), {
     hasQuestion: false,
@@ -162,6 +275,20 @@ test("classifyFeedback round-trips through a fake scoring client", async () => {
   const result = await classifyFeedback("add Austin too", prefs, "160 new, 0 shortlisted today", client, "claude-haiku-4-5");
   assert.equal(result.changes[0]?.field, "metros");
   assert.deepEqual(result.changes[0]?.value, ["Houston", "Dallas", "New York", "Austin"]);
+});
+
+test("classifyFeedback passes conversation history all the way through to the actual prompt sent", async () => {
+  const client = new FakeScoringClient([JSON.stringify({ hasQuestion: false, answerDraft: null, changes: [], unclear: [] })]);
+  await classifyFeedback(
+    "make it higher",
+    prefs,
+    "some context",
+    client,
+    "claude-haiku-4-5",
+    undefined,
+    '[2026-09-10] She said: "bump the floor to 120k"\nChanged: salaryFloor → 120000.',
+  );
+  assert.match(client.requests[0]?.user ?? "", /bump the floor to 120k/);
 });
 
 test("applyFeedbackPatch applies a well-typed change and returns it in applied, not rejected", () => {

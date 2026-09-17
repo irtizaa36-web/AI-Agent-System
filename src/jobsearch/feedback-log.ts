@@ -2,6 +2,12 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isNotFoundError } from "../store/run-store";
 
+/** One field the classifier actually changed on a past turn — the durable form of feedback.ts's PatchEntry, kept for conversation history rather than just the field name, so a later message like "make it higher" has something to resolve "it" against. */
+export interface AppliedChangeRecord {
+  readonly field: string;
+  readonly value: unknown;
+}
+
 export interface FeedbackRecord {
   readonly messageId: string;
   readonly fromAddress: string;
@@ -9,6 +15,16 @@ export interface FeedbackRecord {
   readonly appliedFields: readonly string[];
   readonly hadQuestion: boolean;
   readonly replied: boolean;
+  /**
+   * Her actual message and what we said back, plus the changes with their
+   * values (appliedFields above only has names). Optional because every
+   * record written before this field existed lacks it — conversation-history
+   * building (feedback.ts's buildConversationHistory) must degrade cleanly
+   * when reading an old record, not crash or invent the missing text.
+   */
+  readonly messageText?: string;
+  readonly appliedChanges?: readonly AppliedChangeRecord[];
+  readonly replyBody?: string;
 }
 
 /**

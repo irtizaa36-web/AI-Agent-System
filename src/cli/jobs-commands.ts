@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runPipeline } from "../jobsearch/pipeline";
-import { renderDigest, digestPayload, type RunSummary } from "../jobsearch/digest";
+import { renderDigest, digestPayload, type DigestPayload, type RunSummary } from "../jobsearch/digest";
 import { sourcesFromWatchlist } from "../jobsearch/sources/registry";
 import { JsonFileJobStore } from "../store/job-store";
 import { createScoringClientFromEnv } from "../jobsearch/scoring-client";
@@ -35,14 +35,17 @@ import {
 import type { CandidateProfile } from "../jobsearch/score";
 import {
   applyFeedbackPatch,
+  buildConversationHistory,
   buildFeedbackReplyBody,
+  buildRunContext,
   classifyFeedback,
   looksLikeDirectMessage,
   looksLikeDirectText,
   normalizePhone,
+  type ConversationTurn,
   type PatchEntry,
 } from "../jobsearch/feedback";
-import { JsonFileFeedbackLog } from "../jobsearch/feedback-log";
+import { JsonFileFeedbackLog, type FeedbackRecord } from "../jobsearch/feedback-log";
 import { createImessageClientFromEnv } from "../jobsearch/imessage-client";
 import { commitAndPush } from "../integrations/git/auto-commit";
 import { createContactClientFromEnv, type Contact } from "../integrations/inkbox/contact-client";
@@ -461,9 +464,48 @@ async function applyFeedbackChanges(
   return { applied: patchResult.applied, rejected: patchResult.rejected };
 }
 
-/** Builds the same "Score cutoff: ... Salary floor: ..." context string both channels give the classifier, so a text and an email asking the same thing get judged against identical facts. */
-function feedbackRunContext(prefs: Awaited<ReturnType<typeof loadPreferences>>): string {
-  return `Score cutoff: ${prefs.scoreCutoff}. Salary floor: ${prefs.salaryFloor ?? "none stated"}. Titles tracked: ${prefs.titles.join(", ") || "(none configured)"}. Metros: ${prefs.metros.join(", ") || "(none — remote only)"}.`;
+/**
+ * Reads `digests/latest.json` — the structured payload `jobs run` and
+ * `jobs reconcile` already write on every pass — so the feedback loop can
+ * answer "what did you find today" and "why was X filtered out" from real
+ * data instead of the four static facts it used to be limited to. Missing
+ * or unparseable is treated as "no recent run data", never a guess.
+ */
+async function loadLatestDigestPayload(profile: string, root: string): Promise<DigestPayload | undefined> {
+  try {
+    const raw = await readFile(join(root, dataDirFor(profile), "digests", "latest.json"), "utf8");
+    return JSON.parse(raw) as DigestPayload;
+  } catch {
+    // Missing file, or malformed JSON — either way, honest "no recent run
+    // data" rather than a guess. isNotFoundError isn't needed to
+    // distinguish the two cases since both are handled identically here.
+    return undefined;
+  }
+}
+
+/**
+ * Merges both channel logs (email + iMessage) into one chronological
+ * conversation, because she can text one day and email the next and a
+ * reference like "make it higher" needs to resolve regardless of which
+ * channel carried the turn it refers to. A record from before either log
+ * carried messageText/replyBody (pre-dates this feature) is filtered out by
+ * buildConversationHistory itself, not here.
+ */
+async function loadConversationHistory(profile: string, root: string, limit = 5): Promise<string> {
+  const emailLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback"));
+  const imessageLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback-imessage"));
+  const [emailRecords, imessageRecords] = await Promise.all([emailLog.list(), imessageLog.list()]);
+
+  const toTurn = (record: FeedbackRecord): ConversationTurn => ({
+    processedAt: record.processedAt,
+    messageText: record.messageText ?? "",
+    appliedChanges: record.appliedChanges ?? [],
+    replyBody: record.replyBody ?? "",
+  });
+
+  const turns = [...emailRecords, ...imessageRecords].map(toTurn).sort((a, b) => a.processedAt.localeCompare(b.processedAt));
+
+  return buildConversationHistory(turns, limit);
 }
 
 async function checkEmailFeedback(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
@@ -491,6 +533,8 @@ async function checkEmailFeedback(profile: string, root: string, deps: JobsComma
   const prefs = await loadPreferences(profile, root);
   const feedbackLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback"));
   const ledger = new CostLedger(randomUUID(), join(root, COST_LOG_PATH));
+  const latestRun = await loadLatestDigestPayload(profile, root);
+  const runContext = buildRunContext(prefs, latestRun);
 
   // searchMail can return snippet-level messages (confirmed Sep 14 — the
   // same characteristic alert-mail.ts had to work around) — every candidate
@@ -504,7 +548,11 @@ async function checkEmailFeedback(profile: string, root: string, deps: JobsComma
     if (!looksLikeDirectMessage(summary, candidateEmail, inkboxClient.mailboxAddress)) continue;
 
     const full = (await inkboxClient.getMessage(summary.id)) ?? summary;
-    const classification = await classifyFeedback(full.body, prefs, feedbackRunContext(prefs), scoringClient, prefs.scoringModel, ledger);
+    // Reloaded per message, not once before the loop: if she sent more than
+    // one message since the last check, an earlier one in this same pass
+    // needs to already be in history by the time the next one is classified.
+    const conversationHistory = await loadConversationHistory(profile, root);
+    const classification = await classifyFeedback(full.body, prefs, runContext, scoringClient, prefs.scoringModel, ledger, conversationHistory);
     const { applied, rejected } = await applyFeedbackChanges(profile, root, classification.changes, prefs, deps);
     if (applied.length > 0) {
       deps.stdout(`Applied feedback from ${full.from.address}: ${applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
@@ -533,6 +581,9 @@ async function checkEmailFeedback(profile: string, root: string, deps: JobsComma
       fromAddress: full.from.address,
       processedAt: new Date().toISOString(),
       appliedFields: applied.map((c) => c.field),
+      messageText: full.body,
+      appliedChanges: applied.map((c) => ({ field: c.field, value: c.value })),
+      replyBody,
       hadQuestion: classification.hasQuestion,
       replied,
     });
@@ -573,6 +624,8 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
   const prefs = await loadPreferences(profile, root);
   const feedbackLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback-imessage"));
   const ledger = new CostLedger(randomUUID(), join(root, COST_LOG_PATH));
+  const latestRun = await loadLatestDigestPayload(profile, root);
+  const runContext = buildRunContext(prefs, latestRun);
 
   const messages = await imessageClient.listMessages();
   let processed = 0;
@@ -581,7 +634,11 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
     if (await feedbackLog.hasProcessed(message.id)) continue;
     if (!looksLikeDirectText(message, candidatePhone)) continue;
 
-    const classification = await classifyFeedback(message.content, prefs, feedbackRunContext(prefs), scoringClient, prefs.scoringModel, ledger);
+    // Reloaded per message, same reasoning as the email channel — and this
+    // merges BOTH channel logs, so a change she made by email yesterday is
+    // still visible when she texts a follow-up today.
+    const conversationHistory = await loadConversationHistory(profile, root);
+    const classification = await classifyFeedback(message.content, prefs, runContext, scoringClient, prefs.scoringModel, ledger, conversationHistory);
     const { applied, rejected } = await applyFeedbackChanges(profile, root, classification.changes, prefs, deps);
     if (applied.length > 0) {
       deps.stdout(`Applied feedback (text) from ${message.remoteNumber}: ${applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
@@ -604,6 +661,9 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
       fromAddress: message.remoteNumber ?? candidatePhone,
       processedAt: new Date().toISOString(),
       appliedFields: applied.map((c) => c.field),
+      messageText: message.content,
+      appliedChanges: applied.map((c) => ({ field: c.field, value: c.value })),
+      replyBody,
       hadQuestion: classification.hasQuestion,
       replied,
     });
@@ -674,7 +734,6 @@ async function runJobsEnrichContact(profile: string, root: string, deps: JobsCom
 }
 
 async function printLatestDigest(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
-  const { readFile } = await import("node:fs/promises");
   try {
     deps.stdout(await readFile(join(root, dataDirFor(profile), "digests", "latest.md"), "utf8"));
     return 0;
