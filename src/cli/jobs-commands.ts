@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runPipeline } from "../jobsearch/pipeline";
-import { renderDigest, digestPayload, type RunSummary } from "../jobsearch/digest";
+import { renderDigest, digestPayload, type DigestPayload, type RunSummary } from "../jobsearch/digest";
 import { sourcesFromWatchlist } from "../jobsearch/sources/registry";
 import { JsonFileJobStore } from "../store/job-store";
 import { createScoringClientFromEnv } from "../jobsearch/scoring-client";
@@ -35,15 +35,20 @@ import {
 import type { CandidateProfile } from "../jobsearch/score";
 import {
   applyFeedbackPatch,
+  buildConversationHistory,
   buildFeedbackReplyBody,
+  buildRunContext,
   classifyFeedback,
   looksLikeDirectMessage,
   looksLikeDirectText,
+  normalizePhone,
+  type ConversationTurn,
   type PatchEntry,
 } from "../jobsearch/feedback";
-import { JsonFileFeedbackLog } from "../jobsearch/feedback-log";
+import { JsonFileFeedbackLog, type FeedbackRecord } from "../jobsearch/feedback-log";
 import { createImessageClientFromEnv } from "../jobsearch/imessage-client";
 import { commitAndPush } from "../integrations/git/auto-commit";
+import { createContactClientFromEnv, type Contact } from "../integrations/inkbox/contact-client";
 
 /**
  * `orchestrator jobs ...` — the pipeline's command surface, and the single
@@ -63,6 +68,7 @@ const USAGE = [
   "  run --profile <name>|--all   Fetch, dedupe, filter, score, and write today's digest",
   "  reconcile --profile <name>   Re-check already-filtered postings against today's rules (after a prefs/filter change) and score any that now pass",
   "  check-feedback --profile <name>|--all   Read new direct replies from the candidate (email and, if DIGEST_IMESSAGE_TO is set, iMessage), answer questions, and auto-apply any preference changes (FEEDBACK_LOOP_ENABLED=true required)",
+  "  enrich-contact --profile <name>|--all   Link DIGEST_IMESSAGE_TO's phone to the candidate's Inkbox contact record (found via DIGEST_EMAIL_TO) and tag it with this profile. Idempotent; safe to re-run.",
   "  digest --profile <name>      Print the most recent digest without running the pipeline",
   "  sources --profile <name>     List the configured sources and check each one's health",
   "  costs                        Show what recent runs have cost (shared ledger)",
@@ -161,6 +167,16 @@ export async function runJobsCommand(args: readonly string[], deps: JobsCommandD
       for (const profile of profiles) {
         if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
         worst = Math.max(worst, await runJobsCheckFeedback(profile, root, deps));
+      }
+      return worst;
+    }
+    case "enrich-contact": {
+      const profiles = await resolveProfiles(rest, root, deps, true);
+      if (!profiles) return 1;
+      let worst = 0;
+      for (const profile of profiles) {
+        if (profiles.length > 1) deps.stdout(`\n===== ${profile} =====\n`);
+        worst = Math.max(worst, await runJobsEnrichContact(profile, root, deps));
       }
       return worst;
     }
@@ -448,9 +464,48 @@ async function applyFeedbackChanges(
   return { applied: patchResult.applied, rejected: patchResult.rejected };
 }
 
-/** Builds the same "Score cutoff: ... Salary floor: ..." context string both channels give the classifier, so a text and an email asking the same thing get judged against identical facts. */
-function feedbackRunContext(prefs: Awaited<ReturnType<typeof loadPreferences>>): string {
-  return `Score cutoff: ${prefs.scoreCutoff}. Salary floor: ${prefs.salaryFloor ?? "none stated"}. Titles tracked: ${prefs.titles.join(", ") || "(none configured)"}. Metros: ${prefs.metros.join(", ") || "(none — remote only)"}.`;
+/**
+ * Reads `digests/latest.json` — the structured payload `jobs run` and
+ * `jobs reconcile` already write on every pass — so the feedback loop can
+ * answer "what did you find today" and "why was X filtered out" from real
+ * data instead of the four static facts it used to be limited to. Missing
+ * or unparseable is treated as "no recent run data", never a guess.
+ */
+async function loadLatestDigestPayload(profile: string, root: string): Promise<DigestPayload | undefined> {
+  try {
+    const raw = await readFile(join(root, dataDirFor(profile), "digests", "latest.json"), "utf8");
+    return JSON.parse(raw) as DigestPayload;
+  } catch {
+    // Missing file, or malformed JSON — either way, honest "no recent run
+    // data" rather than a guess. isNotFoundError isn't needed to
+    // distinguish the two cases since both are handled identically here.
+    return undefined;
+  }
+}
+
+/**
+ * Merges both channel logs (email + iMessage) into one chronological
+ * conversation, because she can text one day and email the next and a
+ * reference like "make it higher" needs to resolve regardless of which
+ * channel carried the turn it refers to. A record from before either log
+ * carried messageText/replyBody (pre-dates this feature) is filtered out by
+ * buildConversationHistory itself, not here.
+ */
+async function loadConversationHistory(profile: string, root: string, limit = 5): Promise<string> {
+  const emailLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback"));
+  const imessageLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback-imessage"));
+  const [emailRecords, imessageRecords] = await Promise.all([emailLog.list(), imessageLog.list()]);
+
+  const toTurn = (record: FeedbackRecord): ConversationTurn => ({
+    processedAt: record.processedAt,
+    messageText: record.messageText ?? "",
+    appliedChanges: record.appliedChanges ?? [],
+    replyBody: record.replyBody ?? "",
+  });
+
+  const turns = [...emailRecords, ...imessageRecords].map(toTurn).sort((a, b) => a.processedAt.localeCompare(b.processedAt));
+
+  return buildConversationHistory(turns, limit);
 }
 
 async function checkEmailFeedback(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
@@ -478,6 +533,8 @@ async function checkEmailFeedback(profile: string, root: string, deps: JobsComma
   const prefs = await loadPreferences(profile, root);
   const feedbackLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback"));
   const ledger = new CostLedger(randomUUID(), join(root, COST_LOG_PATH));
+  const latestRun = await loadLatestDigestPayload(profile, root);
+  const runContext = buildRunContext(prefs, latestRun);
 
   // searchMail can return snippet-level messages (confirmed Sep 14 — the
   // same characteristic alert-mail.ts had to work around) — every candidate
@@ -491,7 +548,11 @@ async function checkEmailFeedback(profile: string, root: string, deps: JobsComma
     if (!looksLikeDirectMessage(summary, candidateEmail, inkboxClient.mailboxAddress)) continue;
 
     const full = (await inkboxClient.getMessage(summary.id)) ?? summary;
-    const classification = await classifyFeedback(full.body, prefs, feedbackRunContext(prefs), scoringClient, prefs.scoringModel, ledger);
+    // Reloaded per message, not once before the loop: if she sent more than
+    // one message since the last check, an earlier one in this same pass
+    // needs to already be in history by the time the next one is classified.
+    const conversationHistory = await loadConversationHistory(profile, root);
+    const classification = await classifyFeedback(full.body, prefs, runContext, scoringClient, prefs.scoringModel, ledger, conversationHistory);
     const { applied, rejected } = await applyFeedbackChanges(profile, root, classification.changes, prefs, deps);
     if (applied.length > 0) {
       deps.stdout(`Applied feedback from ${full.from.address}: ${applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
@@ -520,6 +581,9 @@ async function checkEmailFeedback(profile: string, root: string, deps: JobsComma
       fromAddress: full.from.address,
       processedAt: new Date().toISOString(),
       appliedFields: applied.map((c) => c.field),
+      messageText: full.body,
+      appliedChanges: applied.map((c) => ({ field: c.field, value: c.value })),
+      replyBody,
       hadQuestion: classification.hasQuestion,
       replied,
     });
@@ -560,6 +624,8 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
   const prefs = await loadPreferences(profile, root);
   const feedbackLog = new JsonFileFeedbackLog(join(root, dataDirFor(profile), "feedback-imessage"));
   const ledger = new CostLedger(randomUUID(), join(root, COST_LOG_PATH));
+  const latestRun = await loadLatestDigestPayload(profile, root);
+  const runContext = buildRunContext(prefs, latestRun);
 
   const messages = await imessageClient.listMessages();
   let processed = 0;
@@ -568,7 +634,11 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
     if (await feedbackLog.hasProcessed(message.id)) continue;
     if (!looksLikeDirectText(message, candidatePhone)) continue;
 
-    const classification = await classifyFeedback(message.content, prefs, feedbackRunContext(prefs), scoringClient, prefs.scoringModel, ledger);
+    // Reloaded per message, same reasoning as the email channel — and this
+    // merges BOTH channel logs, so a change she made by email yesterday is
+    // still visible when she texts a follow-up today.
+    const conversationHistory = await loadConversationHistory(profile, root);
+    const classification = await classifyFeedback(message.content, prefs, runContext, scoringClient, prefs.scoringModel, ledger, conversationHistory);
     const { applied, rejected } = await applyFeedbackChanges(profile, root, classification.changes, prefs, deps);
     if (applied.length > 0) {
       deps.stdout(`Applied feedback (text) from ${message.remoteNumber}: ${applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
@@ -591,6 +661,9 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
       fromAddress: message.remoteNumber ?? candidatePhone,
       processedAt: new Date().toISOString(),
       appliedFields: applied.map((c) => c.field),
+      messageText: message.content,
+      appliedChanges: applied.map((c) => ({ field: c.field, value: c.value })),
+      replyBody,
       hadQuestion: classification.hasQuestion,
       replied,
     });
@@ -601,8 +674,66 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
   return 0;
 }
 
+/**
+ * One-time-per-change enrichment, not part of the daily run: finds the
+ * candidate's real Inkbox contact record (Inkbox already auto-creates one
+ * from her inbound mail — this doesn't create a new one) via DIGEST_EMAIL_TO,
+ * links DIGEST_IMESSAGE_TO's phone number onto it if that link doesn't
+ * already exist, and tags it with a custom field naming this profile. Both
+ * checks are idempotent — a phone already present, or a custom field with
+ * the same label+value already present, is left alone rather than
+ * duplicated on every re-run.
+ *
+ * Deliberately does not touch review_status/is_confirmed or try to
+ * suppress retail-forwarding noise via contact rules — see
+ * contact-client.ts's doc comment for why: neither is writable through
+ * Inkbox's documented API today.
+ */
+async function runJobsEnrichContact(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+  const candidateEmail = process.env["DIGEST_EMAIL_TO"];
+  if (!candidateEmail) {
+    deps.stderr("DIGEST_EMAIL_TO is not set — no address to look her Inkbox contact up by.");
+    return 1;
+  }
+
+  const contactClient = createContactClientFromEnv();
+  if (!contactClient) {
+    deps.stderr("INKBOX_API_KEY is not set — cannot reach Inkbox's contacts API.");
+    return 1;
+  }
+
+  const matches = await contactClient.lookup({ email: candidateEmail });
+  const existing = matches[0];
+  if (!existing) {
+    deps.stdout(`No Inkbox contact found for ${candidateEmail} yet — nothing to enrich. One is created automatically once mail from her arrives.`);
+    return 0;
+  }
+
+  const patch: { phones?: Contact["phones"]; customFields?: Contact["customFields"] } = {};
+
+  const candidatePhone = process.env["DIGEST_IMESSAGE_TO"];
+  if (candidatePhone && !existing.phones.some((p) => normalizePhone(p.valueE164) === normalizePhone(candidatePhone))) {
+    patch.phones = [...existing.phones, { valueE164: candidatePhone, label: "mobile", isPrimary: existing.phones.length === 0 }];
+  }
+
+  const tagLabel = "moby-role";
+  const tagValue = `job-search-candidate:${profile}`;
+  if (!existing.customFields.some((f) => f.label === tagLabel && f.value === tagValue)) {
+    patch.customFields = [...existing.customFields, { label: tagLabel, value: tagValue }];
+  }
+
+  if (!patch.phones && !patch.customFields) {
+    deps.stdout(`${existing.preferredName ?? candidateEmail}'s Inkbox contact (${existing.id}) is already up to date.`);
+    return 0;
+  }
+
+  const updated = await contactClient.update(existing.id, patch);
+  const changes = [patch.phones ? "linked her phone" : null, patch.customFields ? "added the profile tag" : null].filter((c): c is string => c !== null);
+  deps.stdout(`Updated Inkbox contact ${updated.id} (${updated.preferredName ?? candidateEmail}): ${changes.join(", ")}.`);
+  return 0;
+}
+
 async function printLatestDigest(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
-  const { readFile } = await import("node:fs/promises");
   try {
     deps.stdout(await readFile(join(root, dataDirFor(profile), "digests", "latest.md"), "utf8"));
     return 0;

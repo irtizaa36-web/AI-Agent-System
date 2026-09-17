@@ -35,7 +35,7 @@ Irtiza is a physician. This search is for **paid clinical-expertise work on AI/g
 
 ## Where things stand (update this section as things change)
 
-**Last verified from Google Drive + Gmail on 2026-09-13.**
+**Last verified from Gmail on 2026-09-16** (resume/Drive facts below last checked 2026-09-13, unchanged since).
 
 ### Resume
 - `profile/irtiza/resume.md` is populated from `Irtiza_Ahmed_CV` (Google Drive, last modified 2026-09-07). Irtiza Ahmed, MD — PGY-2 Internal Medicine at Houston Methodist. USMLE Step 3 passed 2026. ACLS certified through Oct 2026. Prior: Clinical Trial Coordinator (Medpace), COVID-19 clinic manager, UT Southwestern research fellowship.
@@ -46,20 +46,20 @@ All records are in `.orchestrator/jobs/irtiza/applications/`.
 
 | Role | Platform | Status | Next action |
 |---|---|---|---|
-| MD/DO Admissions Consultant | BeMo Academic Consulting | **Interview Wed Sep 16 10:15 AM Central** | Attend Zoom interview |
-| Medical School Admissions Consultant - Resident Physician | Inspira Education Group | **Interview Mon Sep 15 1:45 PM** (confirmed) | Attend interview (TODAY +2 days) |
-| Pharmacologist | Mercor | Submitted Sep 7 (Polar) | Awaiting match/review |
-| Applied Health & Medicine Benchmark Specialist | Mercor | Submitted Sep 7 (Polar) | Awaiting match/review |
-| Medical Writer | Mercor | Submitted Sep 7 (Polar) | Awaiting match/review |
-| Medical Safety Expert | Mercor | Submitted Sep 7 (Polar) | Awaiting match/review |
-| Medical Content Specialist (Contract) | Everlywell (Lever) | Submitted Sep 7 (Polar) | Awaiting review |
-| Veterinary De-ID task ($35/hr) | Centaur Labs | Task accepted Sep 11 | Confirm completion; check for follow-on tasks |
+| MD/DO Admissions Consultant | BeMo Academic Consulting | **Interview attended Wed Sep 16, 10:15 AM Central** (Calendly auto-confirmed) | Awaiting BeMo's decision — no outcome yet |
+| Medical School Admissions Consultant - Resident Physician | Inspira Education Group | Interview was scheduled Mon Sep 15, 1:45 PM — **attendance UNCONFIRMED**, no post-interview email exists (Inspira doesn't auto-confirm the way BeMo's Calendly does) | Ask Irtiza directly whether he attended, or wait for Inspira to follow up |
+| Pharmacologist | Mercor | **Rejected Sep 14** — hiring manager not advancing, stated as project constraints not applicant strength | Closed. No action. |
+| Applied Health & Medicine Benchmark Specialist | Mercor | **Rejected Sep 14** — same stated reason as above | Closed. No action. |
+| Medical Writer | Mercor | Submitted Sep 7 (Polar). Re-checked Sep 16 — still only the Sep 7 confirmation, no rejection or advancement email | Awaiting match/review |
+| Medical Safety Expert | Mercor | Submitted Sep 7 (Polar). Re-checked Sep 16 — still only the Sep 7 confirmation, no rejection or advancement email | Awaiting match/review |
+| Medical Content Specialist (Contract) | Everlywell (Lever) | Submitted Sep 7 (Polar). Re-checked Sep 16 — no new email found | Awaiting review |
+| Veterinary De-ID task ($35/hr) | Centaur Labs | Task opened Sep 11. Re-checked Sep 16 — no completion or follow-on-task email since | Confirm completion status with Irtiza directly; check for follow-on tasks |
+| Med school consulting mock application | scholr (management@scholr.consulting, contact: Kyle) | **Promoted from "unconfirmed" to confirmed Sep 16** — mock application actually completed and submitted Sep 7 ("Hi Kyle, The mock application is complete"). No response since. | Awaiting scholr's response; consider a follow-up if nothing by ~Sep 21 |
 
-### Not yet confirmed in Gmail (unverified from Polar transcripts)
-- Turing (~16 min interview) — no confirmation email found in Gmail. Status unknown.
-- Handshake AI (ID + payout blocking $200/hr) — Handshake account active (OTP Sep 10), but no AJE-style application found.
-- AJE (staged at reCAPTCHA) — not found in Gmail. Status unknown.
-- scholr / Kyle follow-up (~Sep 12) — not found in Gmail. Status unknown.
+### Still genuinely unconfirmed after a real Gmail search (not just unchecked)
+- **Turing** — account created Sep 7 ("Welcome to Turing!" onboarding email exists), but no interview confirmation, invite, or any further correspondence found anywhere in Gmail. The "~16 min interview" mentioned in earlier notes has no corresponding email at all — can't confirm it happened, was scheduled, or is still pending.
+- **Handshake AI** — account active, OTP verified Sep 10, receives generic weekly job-recommendation digests. No email evidence of an actual submitted application, an ID/payout-verification step, or the "$200/hr" role previously mentioned. Status genuinely unknown from Gmail alone.
+- **AJE** (American Journal Experts) — zero matching emails under either name. No evidence of an application ever reaching AJE's own systems, despite the earlier note that it was "staged at reCAPTCHA."
 
 ### Mercor profile
 - Profile live in Physician Talent Network as of Sep 7 2026. Phone verified.

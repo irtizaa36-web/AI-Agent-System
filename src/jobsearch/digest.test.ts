@@ -127,7 +127,7 @@ test("a run with nothing filtered out shows no filter-reasons line", () => {
 });
 
 test("the dashboard payload reports whether pay was stated, without inventing a figure", () => {
-  const payload = digestPayload(summary()) as { shortlisted: { salaryStated: boolean; salaryMin: number | null }[] };
+  const payload = digestPayload(summary());
   assert.equal(payload.shortlisted[0]?.salaryStated, false);
   assert.equal(payload.shortlisted[0]?.salaryMin, null);
 });
