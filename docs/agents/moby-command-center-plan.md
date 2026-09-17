@@ -133,3 +133,27 @@ honestly. Verify mobile, keyboard and desktop behavior, then recommend the model
 for Step 3. No external deployment, branch merge or live worker activation has
 occurred. This checkpoint must be pushed before another client can retrieve it
 from GitHub; local preparation alone is not cross-client synchronization.
+
+## Implementation update — Steps 2 and 3 vertical slice
+
+Implemented on `team-b/moby-command-center-plan` after this architecture
+checkpoint. The dashboard home route is now a responsive Moby AI command center;
+the former operational dashboard remains at `/legacy`. Start it from the repository
+with `npm run cli:env -- dashboard`, then open `http://localhost:4317` on the Mac
+mini. The server still binds to localhost and is not available safely from a phone.
+
+The composer now calls `POST /api/orchestrator/messages`. The application service
+persists the user message, asks the existing Dispatcher for a plan, executes that
+plan through registered Agents and the existing workflow runner, persists each Run
+and Workflow, then records a linked assistant result with a next action. History is
+restored through `GET /api/orchestrator/conversation` and stored outside Git at
+`.orchestrator/conversation.json`. Existing recorded constraints apply to both
+planning and execution. Missing provider credentials and planning/execution
+failures are displayed as failures rather than simulated success.
+
+Current intentional limits: one local conversation, synchronous message execution,
+CLI-only approval/resume for paused workflows, and no concurrency/idempotency or
+independent result verification yet. Those are Step 4 concerns. A real run also
+requires the configured provider credentials in `.env`; deterministic tests do not.
+Validation after the vertical slice: 586 tests passed, 0 failed, 0 skipped, plus a
+localhost smoke check of the page and conversation endpoint.

@@ -1,8 +1,7 @@
 /**
  * The chat-first Moby AI command center. This first interface slice reads
- * the existing dashboard snapshot and offers an explicit, deterministic
- * preview of the future Orchestrator conversation. It does not call a model
- * or enqueue work yet; the operational board remains available at /legacy.
+ * the existing dashboard snapshot and talks to the persistent Orchestrator
+ * application service. The operational board remains available at /legacy.
  */
 export const COMMAND_CENTER_HTML = `<!doctype html>
 <html lang="en">
@@ -163,6 +162,8 @@ export const COMMAND_CENTER_HTML = `<!doctype html>
   }
   .bubble p { margin: 0; }
   .bubble p + p { margin-top: 8px; }
+  .message-meta { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+  .message.user .message-meta { border-color: rgba(255, 255, 255, 0.25); color: #dbeafe; }
   .quick-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
   .quick-action {
     padding: 8px 11px;
@@ -298,7 +299,7 @@ export const COMMAND_CENTER_HTML = `<!doctype html>
       <h1>Moby AI</h1>
       <p id="sync-status">Loading current work…</p>
     </div>
-    <div class="mode-pill"><span class="mode-dot"></span>Interface preview</div>
+    <div class="mode-pill"><span class="mode-dot"></span>Local Orchestrator</div>
   </header>
 
   <main class="layout">
@@ -322,14 +323,14 @@ export const COMMAND_CENTER_HTML = `<!doctype html>
       <div class="conversation-head">
         <p class="eyebrow">Orchestrator</p>
         <h2 id="chat-heading">What should we work on?</h2>
-        <p>This preview reads current local status. Agent execution arrives in the next step.</p>
+        <p>Plans work, delegates to registered Agents, and records the result.</p>
       </div>
       <div class="messages" id="messages" aria-live="polite">
         <article class="message assistant">
           <div class="avatar" aria-hidden="true">M</div>
           <div class="bubble">
-            <p>I am the Moby AI interface preview. I can summarize the current task board without sending work to an Agent.</p>
-            <p>Try a status question below.</p>
+            <p>I am Moby AI. Give me a goal and I will plan it, delegate it to the registered Agent best suited to the work, and preserve the result here.</p>
+            <p>Consequential actions still pause for your approval.</p>
           </div>
         </article>
         <div class="quick-actions" id="quick-actions">
@@ -341,10 +342,10 @@ export const COMMAND_CENTER_HTML = `<!doctype html>
       <div class="composer-wrap">
         <form class="composer" id="composer">
           <label class="visually-hidden" for="message-input">Message Moby AI</label>
-          <input id="message-input" autocomplete="off" placeholder="Message Moby AI…" required>
-          <button class="send" type="submit" aria-label="Send message">↑</button>
+          <input id="message-input" autocomplete="off" placeholder="Message Moby AI…" required disabled>
+          <button class="send" type="submit" aria-label="Send message" disabled>…</button>
         </form>
-        <p class="composer-note">Preview mode: messages stay in this browser and do not invoke a model.</p>
+        <p class="composer-note">Local mode · Conversation, workflow, and run history are saved on this machine.</p>
       </div>
     </section>
 
@@ -386,6 +387,8 @@ export const COMMAND_CENTER_HTML = `<!doctype html>
   var snapshot = null;
   var messages = document.getElementById("messages");
   var input = document.getElementById("message-input");
+  var sendButton = document.querySelector(".send");
+  var busy = true;
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -465,11 +468,14 @@ export const COMMAND_CENTER_HTML = `<!doctype html>
     });
   }
 
-  function addMessage(role, text) {
+  function addMessage(role, text, details) {
     var article = el("article", "message " + role);
     article.appendChild(el("div", "avatar", role === "user" ? "You" : "M"));
     var bubble = el("div", "bubble");
     bubble.appendChild(el("p", null, text));
+    if (details && details.nextAction) {
+      bubble.appendChild(el("p", "message-meta", "Next: " + details.nextAction));
+    }
     article.appendChild(bubble);
     var quick = document.getElementById("quick-actions");
     if (quick) quick.remove();
@@ -477,43 +483,69 @@ export const COMMAND_CENTER_HTML = `<!doctype html>
     messages.scrollTop = messages.scrollHeight;
   }
 
-  function previewReply(question) {
-    if (!snapshot) return "Current status is still loading. Please try again in a moment.";
-    var query = question.toLowerCase();
-    var c = counts();
-    if (query.indexOf("attention") !== -1 || query.indexOf("block") !== -1) {
-      if (!snapshot.attention.length) return "Nothing in the current snapshot needs attention.";
-      return snapshot.attention.length + " item(s) need review. First: " + snapshot.attention[0].reason + ". Open Activity for the evidence and timestamp.";
-    }
-    if (query.indexOf("done") !== -1 || query.indexOf("complete") !== -1) {
-      return c.done + " task(s) are marked done. Completion is inherited from the legacy board and is not yet an independent verification result.";
-    }
-    if (query.indexOf("current") !== -1 || query.indexOf("status") !== -1 || query.indexOf("work") !== -1) {
-      return "The current snapshot has " + c.in_progress + " active, " + c.pending + " queued, and " + c.done + " done task(s), with " + snapshot.attention.length + " attention item(s).";
-    }
-    if (query.indexOf("project") !== -1) {
-      return "This preview shows " + snapshot.projects.length + " legacy task(s). Persistent project grouping will be added with the Orchestrator state in Step 3.";
-    }
-    return "Preview mode can answer questions about current work, completed tasks, and attention items. It does not plan or assign Agent work yet.";
+  function setBusy(value) {
+    busy = value;
+    input.disabled = value;
+    sendButton.disabled = value;
+    sendButton.textContent = value ? "…" : "↑";
   }
 
   function submitMessage(text) {
     var clean = text.trim();
-    if (!clean) return;
+    if (!clean || busy) return;
     addMessage("user", clean);
-    addMessage("assistant", previewReply(clean));
+    setBusy(true);
+    fetch("/api/orchestrator/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: clean })
+    })
+      .then(function (response) {
+        return response.json().then(function (body) {
+          if (!response.ok) throw new Error(body.error || "Orchestrator request failed");
+          return body;
+        });
+      })
+      .then(function (message) { addMessage("assistant", message.content, message); })
+      .catch(function (error) {
+        addMessage("assistant", "The Orchestrator request failed: " + error.message, {
+          nextAction: "Check the dashboard process and local provider configuration."
+        });
+      })
+      .finally(function () {
+        setBusy(false);
+        input.focus();
+      });
   }
 
   document.getElementById("composer").addEventListener("submit", function (event) {
     event.preventDefault();
     submitMessage(input.value);
     input.value = "";
-    input.focus();
   });
 
   document.querySelectorAll(".quick-action").forEach(function (button) {
     button.addEventListener("click", function () { submitMessage(button.textContent || ""); });
   });
+
+  fetch("/api/orchestrator/conversation")
+    .then(function (response) {
+      if (!response.ok) throw new Error("Conversation request failed");
+      return response.json();
+    })
+    .then(function (conversation) {
+      if (!conversation.messages || !conversation.messages.length) return;
+      messages.innerHTML = "";
+      conversation.messages.forEach(function (message) {
+        addMessage(message.role, message.content, message);
+      });
+    })
+    .catch(function () {
+      addMessage("assistant", "Saved conversation history is unavailable.", {
+        nextAction: "Restart the dashboard and check its local data directory."
+      });
+    })
+    .finally(function () { setBusy(false); });
 
   function selectScreen(screen) {
     document.querySelectorAll(".mobile-nav button").forEach(function (button) {

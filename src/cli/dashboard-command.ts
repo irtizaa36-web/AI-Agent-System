@@ -1,5 +1,8 @@
 import { parseArgs } from "node:util";
+import { join } from "node:path";
 import { createDashboardServer } from "../dashboard/server";
+import { JsonFileConversationStore } from "../application/conversation-store";
+import { OrchestratorService } from "../application/orchestrator-service";
 import type { CliDeps } from "./index";
 
 export const DEFAULT_DASHBOARD_PORT = 4317;
@@ -22,6 +25,13 @@ export async function runDashboardCommand(args: readonly string[], deps: CliDeps
     agentStatusStore: deps.agentStatusStore,
     recommendationStore: deps.recommendationStore,
     operationalUpdateStore: deps.operationalUpdateStore,
+    orchestrator: new OrchestratorService({
+      registry: deps.registry,
+      runStore: deps.store,
+      workflowStore: deps.workflowStore,
+      conversationStore: new JsonFileConversationStore(join(deps.cwd, ".orchestrator", "conversation.json")),
+      constraintsStore: deps.constraintsStore,
+    }),
   });
 
   await new Promise<void>((resolve, reject) => {

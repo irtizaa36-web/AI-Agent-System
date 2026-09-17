@@ -16,12 +16,19 @@ import type { OperationalUpdateStore } from "./operational-update-store";
 import { buildDashboardSnapshot } from "./snapshot";
 import { COMMAND_CENTER_HTML } from "./command-center-page";
 import { DASHBOARD_HTML as LEGACY_DASHBOARD_HTML } from "./page";
+import type { Conversation, ConversationMessage } from "../application/conversation-store";
+
+export interface DashboardOrchestrator {
+  getConversation(): Promise<Conversation>;
+  submit(content: string): Promise<ConversationMessage>;
+}
 
 export interface DashboardServerDeps {
   readonly coworkerStore: CoworkerTaskStore;
   readonly agentStatusStore: AgentStatusStore;
   readonly recommendationStore: RecommendationStore;
   readonly operationalUpdateStore: OperationalUpdateStore;
+  readonly orchestrator?: DashboardOrchestrator;
 }
 
 // A dashboard form submission is tiny; this just bounds abuse from a malformed/huge body.
@@ -220,6 +227,30 @@ export function createDashboardServer(deps: DashboardServerDeps): Server {
           deps.operationalUpdateStore.list(),
         ]);
         sendJson(res, 200, buildDashboardSnapshot(tasks, agentStatuses, recommendations, undefined, undefined, operationalUpdates));
+        return;
+      }
+
+      if (req.method === "GET" && req.url === "/api/orchestrator/conversation") {
+        if (!deps.orchestrator) {
+          sendJson(res, 503, { error: "Orchestrator service is not configured" });
+          return;
+        }
+        sendJson(res, 200, await deps.orchestrator.getConversation());
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/api/orchestrator/messages") {
+        if (!deps.orchestrator) {
+          sendJson(res, 503, { error: "Orchestrator service is not configured" });
+          return;
+        }
+        const body = await readJsonBody(req);
+        const message = typeof body["message"] === "string" ? body["message"] : "";
+        if (!message.trim()) {
+          sendJson(res, 400, { error: '"message" must be a non-empty string' });
+          return;
+        }
+        sendJson(res, 201, await deps.orchestrator.submit(message));
         return;
       }
 

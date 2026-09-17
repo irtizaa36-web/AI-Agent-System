@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
-import { createDashboardServer } from "./server";
+import { createDashboardServer, type DashboardOrchestrator } from "./server";
+import { createConversationMessage } from "../application/conversation-store";
 import { InMemoryCoworkerTaskStore } from "../coworker/store";
 import { InMemoryAgentStatusStore } from "./agent-status-store";
 import { InMemoryRecommendationStore } from "./recommendation-store";
@@ -12,6 +13,7 @@ import { createRecommendation } from "./recommendation";
 
 async function withServer(
   fn: (baseUrl: string, deps: { coworkerStore: InMemoryCoworkerTaskStore; agentStatusStore: InMemoryAgentStatusStore; recommendationStore: InMemoryRecommendationStore; operationalUpdateStore: InMemoryOperationalUpdateStore }) => Promise<void>,
+  orchestrator?: DashboardOrchestrator,
 ): Promise<void> {
   const deps = {
     coworkerStore: new InMemoryCoworkerTaskStore(),
@@ -19,7 +21,7 @@ async function withServer(
     recommendationStore: new InMemoryRecommendationStore(),
     operationalUpdateStore: new InMemoryOperationalUpdateStore(),
   };
-  const server = createDashboardServer(deps);
+  const server = createDashboardServer({ ...deps, orchestrator });
   await new Promise<void>((resolve) => server.listen(0, "localhost", resolve));
   const port = (server.address() as AddressInfo).port;
   try {
@@ -36,12 +38,65 @@ test("GET / serves the Moby AI command center", async () => {
     assert.match(res.headers.get("content-type") ?? "", /text\/html/);
     const body = await res.text();
     assert.match(body, /Moby AI/);
-    assert.match(body, /Interface preview/);
+    assert.match(body, /Local Orchestrator/);
     assert.match(body, /Orchestrator/);
     assert.match(body, /href="\/legacy"/);
     assert.match(body, /fetch\("\/api\/snapshot"\)/);
-    assert.match(body, /messages stay in this browser and do not invoke a model/);
+    assert.match(body, /fetch\("\/api\/orchestrator\/messages"/);
   });
+});
+
+test("Orchestrator API restores conversation history and accepts a message", async () => {
+  const saved = createConversationMessage("assistant", "Saved result", { status: "succeeded" });
+  const created = createConversationMessage("assistant", "Delegated result", {
+    status: "succeeded",
+    workflowId: "workflow-1",
+    nextAction: "Review it.",
+  });
+  const submitted: string[] = [];
+  const orchestrator: DashboardOrchestrator = {
+    async getConversation() {
+      return { id: "primary", messages: [saved], updatedAt: saved.createdAt };
+    },
+    async submit(content) {
+      submitted.push(content);
+      return created;
+    },
+  };
+
+  await withServer(async (baseUrl) => {
+    const history = await fetch(`${baseUrl}/api/orchestrator/conversation`);
+    assert.equal(history.status, 200);
+    assert.equal(((await history.json()) as { messages: { content: string }[] }).messages[0]?.content, "Saved result");
+
+    const response = await fetch(`${baseUrl}/api/orchestrator/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Handle this goal" }),
+    });
+    assert.equal(response.status, 201);
+    assert.equal(((await response.json()) as { workflowId: string }).workflowId, "workflow-1");
+    assert.deepEqual(submitted, ["Handle this goal"]);
+  }, orchestrator);
+});
+
+test("Orchestrator API reports unavailable service and rejects empty messages", async () => {
+  await withServer(async (baseUrl) => {
+    assert.equal((await fetch(`${baseUrl}/api/orchestrator/conversation`)).status, 503);
+  });
+
+  const orchestrator: DashboardOrchestrator = {
+    async getConversation() { return { id: "primary", messages: [], updatedAt: new Date().toISOString() }; },
+    async submit() { throw new Error("should not be called"); },
+  };
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/orchestrator/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "   " }),
+    });
+    assert.equal(response.status, 400);
+  }, orchestrator);
 });
 
 test("GET /legacy preserves the operational dashboard", async () => {
