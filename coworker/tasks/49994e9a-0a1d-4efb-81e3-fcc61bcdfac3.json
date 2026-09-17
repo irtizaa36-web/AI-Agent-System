@@ -5,7 +5,15 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "dispatched",
+      "dispatchedAt": "2026-09-17T05:16:07.998Z"
     }
-  }
+  },
+  "updates": [
+    {
+      "at": "2026-09-17T05:17:25.207Z",
+      "by": "macmini",
+      "note": "Verdict: key present and evidence of real successful deliveries. Non-empty key (~43 chars) in .env; 861 real message.received/message.sent events in webhook-receiver.log with zero signature-mismatch or missing-header rejections ever; most recent log line is from moments ago, a live inbound message correctly processed under today's exclude-recipients fix - proves the key works right now, not just historically. Health endpoint and launchctl both confirm the receiver is live and running. Full verdict posted to issue #1 addressed to Irtiza. Did not touch Inkbox's console."
+    }
+  ]
 }

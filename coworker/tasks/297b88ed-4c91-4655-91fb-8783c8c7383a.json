@@ -5,7 +5,8 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "dispatched",
+      "dispatchedAt": "2026-09-17T05:09:32.125Z"
     }
   }
 }

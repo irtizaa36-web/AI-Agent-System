@@ -5,7 +5,10 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "succeeded",
+      "dispatchedAt": "2026-09-17T05:09:15.409Z",
+      "finishedAt": "2026-09-17T05:09:15.478Z",
+      "output": "Resolved directly by Irtiza - INKBOX_TUNNEL_NAME=toozy, tunnel URL is https://toozy.inkboxwire.com. No action needed."
     }
   }
 }

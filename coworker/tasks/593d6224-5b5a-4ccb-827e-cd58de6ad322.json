@@ -5,7 +5,15 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "dispatched",
+      "dispatchedAt": "2026-09-17T05:12:12.401Z"
     }
-  }
+  },
+  "updates": [
+    {
+      "at": "2026-09-17T05:13:02.525Z",
+      "by": "macmini",
+      "note": "Confirmed .orchestrator/browser-sessions/ is missing (step 1). Cannot complete step 2 myself: 'browser login target https://www.target.com' opens a real visible browser and then blocks on a terminal prompt waiting for a human to press Enter after logging in themselves - by design (the code's own comment: 'this project never types a password on anyone's behalf'). That's not a permission-classifier block, it's the correct designed behavior, but it means Irtiza himself needs to run that command (or sit at this terminal while it runs) and do the actual login/2FA - I have no way to supply his credentials or to know he's finished without him telling me. Leaving this dispatched rather than completing or failing it. I did not set RETURNS_AUTOPILOT_ENABLED and did not attempt any workaround."
+    }
+  ]
 }
