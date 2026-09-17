@@ -1,0 +1,11 @@
+{
+  "id": "297b88ed-4c91-4655-91fb-8783c8c7383a",
+  "createdAt": "2026-09-17T00:04:49.278Z",
+  "task": "One-line .env fix, but a real ongoing problem: Shivani's forwarded retail mail is STILL flooding Irtiza's personal inbox. NEEDS THIS MACHINE - .env is gitignored.\n\nVerified in his Gmail on 2026-09-17: messages from toozy@inkboxmail.com, each a \"Fwd:\" of mail originally addressed To: brshivani@gmail.com, arriving on Sep 15 and Sep 16 (SHEIN, Belk, Kendra Scott, MyFitnessPal, cookiedelivery.com, fresh.com, and more). This is exactly the flood Irtiza complained about, and it is still happening.\n\nRoot cause: on task b5d09ffe you set OWNER_FORWARD_EXCLUDE_RECIPIENTS but left it BLANK, reporting \"left blank per its own documented safe default (no noisy sender identified yet).\" That was a misread - the noisy recipient was already identified, and it is the entire reason the variable exists. Read the variable's own comment block in .env.example: it says in as many words that it was added on 2026-09-16 specifically because a candidate's full Gmail-forwarded inbox was flooding OWNER_FORWARD_EMAIL.\n\nFix: set it to her address.\n\n  OWNER_FORWARD_EXCLUDE_RECIPIENTS=brshivani@gmail.com\n\nThat value is not a secret and not personal data in any sense that matters here - it is already committed in this repo's own git history in several places, and it is the literal thing the variable is documented to hold.\n\nVerify afterward, don't just set it and assume:\n1. Confirm the running process actually picked up the new value (the webhook/forwarding path reads .env at process start - restart whatever holds it if needed; check the LaunchAgent for the inkbox webhook).\n2. Watch for ~15 minutes and confirm no new \"Fwd:\" messages addressed to brshivani@gmail.com arrive in irtizaa36@gmail.com.\n3. Confirm mail genuinely addressed TO the Inkbox mailbox itself still forwards normally - the exclusion matches on the original recipient, so it must not suppress her direct replies to the job-search feedback loop. That distinction is the whole design; breaking it would silently kill the feedback loop.\n\nReport what you set, whether a restart was needed, and the result of all three checks.",
+  "assignedTo": "macmini",
+  "results": {
+    "macmini": {
+      "status": "pending"
+    }
+  }
+}
