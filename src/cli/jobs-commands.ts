@@ -424,7 +424,7 @@ async function runJobsReconcile(profile: string, root: string, deps: JobsCommand
  * step (applyFeedbackChanges below), since which channel she happened to
  * use has no bearing on how a change to preferences.json gets made durable.
  */
-async function runJobsCheckFeedback(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+export async function runJobsCheckFeedback(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
   if (process.env["FEEDBACK_LOOP_ENABLED"] !== "true") return 0;
 
   const emailResult = await checkEmailFeedback(profile, root, deps);
