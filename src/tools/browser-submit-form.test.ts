@@ -3,9 +3,39 @@ import assert from "node:assert/strict";
 import { createBrowserSubmitFormTool } from "./browser-submit-form";
 import { FakeFormFillingClient } from "../integrations/browser/fake-form-client";
 
-test("browser-submit-form is marked requiresApproval — the Orchestrator never auto-executes it", () => {
-  const tool = createBrowserSubmitFormTool(new FakeFormFillingClient());
-  assert.equal(tool.requiresApproval, true);
+function withAutopilot(value: string | undefined, fn: () => void): void {
+  const original = process.env["RETURNS_AUTOPILOT_ENABLED"];
+  try {
+    if (value === undefined) delete process.env["RETURNS_AUTOPILOT_ENABLED"];
+    else process.env["RETURNS_AUTOPILOT_ENABLED"] = value;
+    fn();
+  } finally {
+    if (original === undefined) delete process.env["RETURNS_AUTOPILOT_ENABLED"];
+    else process.env["RETURNS_AUTOPILOT_ENABLED"] = original;
+  }
+}
+
+test("browser-submit-form is marked requiresApproval by default — the Orchestrator never auto-executes it", () => {
+  withAutopilot(undefined, () => {
+    const tool = createBrowserSubmitFormTool(new FakeFormFillingClient());
+    assert.equal(tool.requiresApproval, true);
+  });
+});
+
+test("RETURNS_AUTOPILOT_ENABLED=true drops the approval gate, so the Orchestrator will auto-execute a live submit (ADR 0018)", () => {
+  withAutopilot("true", () => {
+    const tool = createBrowserSubmitFormTool(new FakeFormFillingClient());
+    assert.equal(tool.requiresApproval, false);
+  });
+});
+
+test("only the literal string \"true\" opens the gate — a truthy-looking value does not", () => {
+  for (const value of ["1", "yes", "TRUE", "true ", ""]) {
+    withAutopilot(value, () => {
+      const tool = createBrowserSubmitFormTool(new FakeFormFillingClient());
+      assert.equal(tool.requiresApproval, true, `${JSON.stringify(value)} must not be treated as enabled`);
+    });
+  }
 });
 
 test("browser-submit-form fills, submits, and returns the confirmation text", async () => {
