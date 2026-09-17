@@ -5,7 +5,9 @@
   "assignedTo": "macmini",
   "results": {
     "macmini": {
-      "status": "pending"
+      "status": "succeeded",
+      "finishedAt": "2026-09-17T07:38:54Z",
+      "output": "Reported in full on issue #1 (comment id 5710784659, 2026-09-17T07:38:54Z) but never committed here — recorded now to close that gap, transcribed from that comment, nothing added or guessed: pulled PR #37/#38 to main (git log -1 confirmed \"Merge pull request #38\"); npm ci && npm run build && npm test: 608/608 passing; set FEEDBACK_LOOP_PROFILE=shivani in .env; restarted com.aiagentsystem.inkbox-webhook (launchctl kickstart -k), fresh PID confirmed (33462 -> 40423); startup log showed no \"FEEDBACK_LOOP_PROFILE is not set\" warning. Real verification: watched the live log for 15 minutes - a genuine inbound message arrived and the feedback check fired immediately after that message.received event (\"No new direct feedback emails found.\" / \"No new direct feedback texts found.\"), proving the real-time trigger itself works on live traffic. Caveat worth keeping visible: that particular message was forwarded retail mail correctly excluded from owner-forwarding, not a direct message from Shivani herself - so the wiring is proven, but a full round trip (she writes in, gets an immediate reply) still hasn't happened on a real message from her yet. Also reconfirmed in passing: 297b88ed still holding clean; 593d6224 unchanged, still waiting on Irtiza."
     }
   }
 }
