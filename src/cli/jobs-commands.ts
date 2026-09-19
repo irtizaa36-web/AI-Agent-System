@@ -558,7 +558,7 @@ async function checkEmailFeedback(profile: string, root: string, deps: JobsComma
       deps.stdout(`Applied feedback from ${full.from.address}: ${applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
     }
 
-    const replyBody = buildFeedbackReplyBody(classification, applied, rejected);
+    const replyBody = buildFeedbackReplyBody(classification, applied, rejected, latestRun);
     let replied = false;
     if (replyBody.length > 0) {
       try {
@@ -644,7 +644,7 @@ async function checkImessageFeedback(profile: string, root: string, deps: JobsCo
       deps.stdout(`Applied feedback (text) from ${message.remoteNumber}: ${applied.map((c) => `${c.field} -> ${JSON.stringify(c.value)}`).join(", ")}`);
     }
 
-    const replyBody = buildFeedbackReplyBody(classification, applied, rejected);
+    const replyBody = buildFeedbackReplyBody(classification, applied, rejected, latestRun);
     let replied = false;
     if (replyBody.length > 0) {
       try {

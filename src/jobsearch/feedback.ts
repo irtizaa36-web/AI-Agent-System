@@ -353,6 +353,7 @@ export function buildFeedbackReplyBody(
   classification: FeedbackClassification,
   applied: readonly PatchEntry[],
   rejected: readonly PatchEntry[],
+  latestRun?: DigestPayload,
 ): string {
   const lines: string[] = [];
 
@@ -371,7 +372,27 @@ export function buildFeedbackReplyBody(
     for (const item of unresolved) lines.push(`- ${item}`);
   }
 
+  if (lines.length === 0) return buildPureAckReply(latestRun);
+
   return lines.join("\n").trim();
+}
+
+/**
+ * The reply for a message that was neither a question nor a change request
+ * — a "thanks", a stray text, anything that would otherwise get silence. A
+ * chat channel that intermittently swallows messages trains her to stop
+ * trusting it, which is the one thing the whole feedback loop depends on
+ * her not doing — so this always says something. It earns its place with
+ * one real, current fact rather than a bare "ok", and never invents a
+ * number: with no recent run on file, it says so plainly instead of
+ * guessing at source or match counts.
+ */
+function buildPureAckReply(latestRun?: DigestPayload): string {
+  if (!latestRun) return "Noted — nothing to change on my end. No recent run on file yet to share numbers from.";
+
+  const sources = latestRun.health.length;
+  const matches = latestRun.counts.shortlisted;
+  return `Noted — nothing to change on my end. Still watching ${sources} source${sources === 1 ? "" : "s"}; ${matches} new ${matches === 1 ? "match" : "matches"} in the latest digest.`;
 }
 
 function matchesFieldType(field: AllowedPatchField, value: unknown): boolean {

@@ -359,7 +359,71 @@ test("buildFeedbackReplyBody surfaces both unclear items and rejected changes, i
   assert.match(body, /say more and I'll apply it/);
 });
 
-test("buildFeedbackReplyBody is empty when there's genuinely nothing to say — no question, nothing applied, nothing unclear", () => {
+test("buildFeedbackReplyBody never goes silent — a message with no question and no change still gets an ack", () => {
   const classification = { hasQuestion: false, answerDraft: null, changes: [], unclear: [] };
-  assert.equal(buildFeedbackReplyBody(classification, [], []), "");
+  const body = buildFeedbackReplyBody(classification, [], []);
+  assert.notEqual(body, "");
+  assert.match(body, /Noted — nothing to change/);
+});
+
+test("buildFeedbackReplyBody's ack is honest about having no recent run to cite, rather than inventing numbers", () => {
+  const classification = { hasQuestion: false, answerDraft: null, changes: [], unclear: [] };
+  const body = buildFeedbackReplyBody(classification, [], [], undefined);
+  assert.match(body, /No recent run on file/);
+  assert.doesNotMatch(body, /\d+ source/);
+});
+
+test("buildFeedbackReplyBody's ack cites real source and match counts when a recent run is on file", () => {
+  const classification = { hasQuestion: false, answerDraft: null, changes: [], unclear: [] };
+  const latestRun = {
+    runId: "r1",
+    startedAt: "x",
+    finishedAt: "x",
+    counts: { fetched: 100, new: 10, duplicates: 90, filtered: 6, scored: 4, shortlisted: 3 },
+    filterReasons: [],
+    costUsd: 0,
+    shortlisted: [],
+    health: [
+      { sourceId: "a", state: "ok" as const, postingCount: 1, error: null, checkedAt: "x" },
+      { sourceId: "b", state: "ok" as const, postingCount: 1, error: null, checkedAt: "x" },
+    ],
+    failures: [],
+  };
+  const body = buildFeedbackReplyBody(classification, [], [], latestRun);
+  assert.match(body, /Still watching 2 sources; 3 new matches/);
+});
+
+test("buildFeedbackReplyBody's ack uses singular wording for exactly one source or one match", () => {
+  const classification = { hasQuestion: false, answerDraft: null, changes: [], unclear: [] };
+  const latestRun = {
+    runId: "r1",
+    startedAt: "x",
+    finishedAt: "x",
+    counts: { fetched: 10, new: 1, duplicates: 9, filtered: 0, scored: 1, shortlisted: 1 },
+    filterReasons: [],
+    costUsd: 0,
+    shortlisted: [],
+    health: [{ sourceId: "a", state: "ok" as const, postingCount: 1, error: null, checkedAt: "x" }],
+    failures: [],
+  };
+  const body = buildFeedbackReplyBody(classification, [], [], latestRun);
+  assert.match(body, /Still watching 1 source; 1 new match in/);
+});
+
+test("buildFeedbackReplyBody still prefers an actual answer/update/unclear body over the pure ack when there's something real to say", () => {
+  const classification = { hasQuestion: true, answerDraft: "Your floor is $120,000.", changes: [], unclear: [] };
+  const latestRun = {
+    runId: "r1",
+    startedAt: "x",
+    finishedAt: "x",
+    counts: { fetched: 1, new: 1, duplicates: 0, filtered: 0, scored: 1, shortlisted: 1 },
+    filterReasons: [],
+    costUsd: 0,
+    shortlisted: [],
+    health: [],
+    failures: [],
+  };
+  const body = buildFeedbackReplyBody(classification, [], [], latestRun);
+  assert.equal(body, "Your floor is $120,000.");
+  assert.doesNotMatch(body, /Noted — nothing to change/);
 });
