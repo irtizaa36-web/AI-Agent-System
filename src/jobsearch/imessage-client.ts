@@ -12,7 +12,7 @@
  * Inkbox's own published API docs, not guessed — the same discipline this
  * project already holds itself to everywhere else (see sms-client.ts,
  * real-client.ts). `send_style` is deliberately omitted from the POST body:
- * the existing digest-send code in jobs-commands.ts already found that
+ * the digest send (now jobs-delivery.ts, through this client) found that
  * including it causes a 422.
  */
 

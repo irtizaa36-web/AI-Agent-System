@@ -117,7 +117,7 @@ src/jobsearch/
   health.ts                # per-source health ledger, degrade-don't-crash
   cost.ts                  # logs/costs.jsonl ledger
 src/store/job-store.ts     # JobRecord / ApplicationRecord / CompanyRecord
-src/cli/jobs-commands.ts   # orchestrator jobs run | digest | sources | profiles
+src/cli/jobs-commands.ts   # orchestrator jobs run | digest | sources | profiles (+ jobs-delivery.ts, jobs-feedback.ts, jobs-context.ts)
 config/job-search/<key>/   # one directory per person (ADR 0017)
   preferences.json         # titles, comp floor, exclusions, score cutoff  (committed)
   watchlist.json           # 20-50 companies + ATS type + board token      (committed)

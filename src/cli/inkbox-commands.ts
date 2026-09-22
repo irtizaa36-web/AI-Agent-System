@@ -8,7 +8,7 @@ import { getOwnerForwardAddress, shouldForwardInbound } from "../integrations/in
 import { INKBOX_WEBHOOK_PATH } from "../integrations/inkbox/webhook";
 import { startInkboxWebhookServer } from "../integrations/inkbox/webhook-server";
 import { connectTunnel, getTunnelConfigFromEnv, type ConnectedTunnel } from "../integrations/inkbox/tunnel";
-import { runJobsCheckFeedback } from "./jobs-commands";
+import { runJobsCheckFeedback } from "./jobs-feedback";
 import type { CliDeps } from "./index";
 
 const DEFAULT_WEBHOOK_PORT = 8787;
@@ -373,7 +373,7 @@ async function serveWebhookCommand(_args: readonly string[], deps: CliDeps): Pro
           const profile = feedbackCheckProfileFor(result.event, feedbackLoopEnabled, feedbackLoopProfile);
           if (profile) {
             feedbackCheckChain = feedbackCheckChain
-              .then(() => runJobsCheckFeedback(profile, ".", { stdout: deps.stdout, stderr: deps.stderr }))
+              .then(() => runJobsCheckFeedback(profile, { stdout: deps.stdout, stderr: deps.stderr }))
               .then(() => undefined)
               .catch((error: unknown) => {
                 deps.stderr(`[inkbox webhook] real-time feedback check failed: ${(error as Error).message}`);

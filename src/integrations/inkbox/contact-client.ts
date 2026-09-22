@@ -10,7 +10,7 @@
  * Narrow on purpose: lookup, update, and merge, because that's what this
  * project actually needs today (enriching a known correspondent's contact
  * record and consolidating the duplicate Inkbox auto-creates per channel —
- * see `jobs enrich-contact` in jobs-commands.ts). Inkbox also exposes a
+ * see `jobs enrich-contact` in jobs-feedback.ts). Inkbox also exposes a
  * `contact_rules` blacklist and a `review_status`/`is_confirmed` distinction
  * on every contact — both look like the natural "is this real correspondence
  * or retail noise" signal this project could use — but neither is writable
