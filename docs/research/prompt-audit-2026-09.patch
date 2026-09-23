@@ -1,0 +1,832 @@
+diff --git a/.claude/agents/job-search-steward-irtiza.md b/.claude/agents/job-search-steward-irtiza.md
+index c7bd1eb..f847fd1 100644
+--- a/.claude/agents/job-search-steward-irtiza.md
++++ b/.claude/agents/job-search-steward-irtiza.md
+@@ -14,7 +14,7 @@ You are **Job Search Steward (Irtiza)**, the specialist who owns Irtiza's own jo
+ 
+ Irtiza is a physician. This search is for **paid clinical-expertise work on AI/gig platforms** — Mercor, Turing, Handshake AI, AJE, BeMo, scholr and similar — not for salaried roles on ATS boards. That difference is structural, not cosmetic:
+ 
+-- **Discovery matters less; tracking matters more.** Shivani's side is "find new postings across 43 boards." This side is a handful of live applications moving through multi-step funnels (e.g. BeMo's Application → Skills Assessment → Interview → References). The valuable question most days is *what is owed next, and by whom* — not *what's new*.
++- **Discovery matters less; tracking matters more.** Shivani's side is "find new postings across every board in her watchlist." This side is a handful of live applications moving through multi-step funnels (e.g. BeMo's Application → Skills Assessment → Interview → References). The valuable question most days is *what is owed next, and by whom* — not *what's new*.
+ - **These platforms aren't Greenhouse/Lever/Ashby.** The existing ATS source adapters do not apply to them. Don't force them into `watchlist.json`'s ATS shape; if a platform needs a source adapter at all, it needs its own, and it needs the same live verification every other source got before being trusted.
+ - **The stakes on accuracy are higher.** Applications here carry a real name, a real NPI, and a real medical license. A fabricated or mis-keyed detail isn't a typo, it's a misrepresentation under a professional credential.
+ 
+diff --git a/.claude/agents/job-search-steward-shivani.md b/.claude/agents/job-search-steward-shivani.md
+index ac52bb2..4f03910 100644
+--- a/.claude/agents/job-search-steward-shivani.md
++++ b/.claude/agents/job-search-steward-shivani.md
+@@ -30,11 +30,10 @@ You are **Job Search Steward (Shivani)**, the specialist who owns Shivani's job
+ 
+ ## Where things actually stand (update this section as things change)
+ 
+-- Pipeline is live: 43 verified companies, her real resume, $120k floor, 3–6 years experience band, Houston/Dallas/NY/remote with that priority order, postings ≤14 days old.
++- Pipeline is live: the verified companies and job-board feeds in `config/job-search/shivani/watchlist.json`, her real resume, $120k floor, 3–6 years experience band, Houston/Dallas/NY/remote with that priority order, postings ≤14 days old.
+ - LinkedIn/Indeed coverage exists in code (`sources/alert-mail.ts`) but its HTML extraction has **not** been checked against a real forwarded alert — flag this every time it comes up until someone confirms it against real output.
+ - Texting the digest (`sms-client.ts`, `digest-sms.ts`) is built and gated off — explicitly sidelined by Irtiza for now. Don't re-enable or promote it without being asked.
+ - The `launchd` schedule (`scripts/com.mobyai.jobsearch.plist`) is written but not yet installed on the real Mac mini.
+-- Work happens on `claude/polar-job-search-agent-n8d0kn`; commit messages end with the attribution footer already established in this session.
+ 
+ ## Working style
+ 
+diff --git a/src/core/orchestrator.test.ts b/src/core/orchestrator.test.ts
+index e027d98..d97e305 100644
+--- a/src/core/orchestrator.test.ts
++++ b/src/core/orchestrator.test.ts
+@@ -56,6 +56,17 @@ test("advance fails a Run whose response was truncated (max_tokens), rather than
+   assert.equal(next.result?.output, "");
+ });
+ 
++test("advance fails a Run whose response was a refusal, rather than treating an empty answer as succeeded", async () => {
++  const task = createTask("do something the safeguards decline");
++  const run = startRun(task, agent());
++  const provider = new FakeProvider([{ content: "", toolCalls: [], stopReason: "refusal" }]);
++
++  const next = await advance(run, agent(), { provider, tools: new Map() });
++
++  assert.equal(next.status, "failed");
++  assert.match(next.result?.error ?? "", /refusal/);
++});
++
+ test("advance executes a requested Tool and keeps the Run running", async () => {
+   const echoTool: Tool = {
+     name: "echo",
+diff --git a/src/core/orchestrator.ts b/src/core/orchestrator.ts
+index 3714d82..21fa895 100644
+--- a/src/core/orchestrator.ts
++++ b/src/core/orchestrator.ts
+@@ -82,6 +82,7 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
+     role: "assistant",
+     content: response.content,
+     toolCalls: response.toolCalls,
++    ...(response.providerContent !== undefined ? { providerContent: response.providerContent } : {}),
+   });
+ 
+   const step: Step = {
+@@ -110,6 +111,19 @@ export async function advance(run: Run, agent: AgentDefinition, deps: RunDepende
+     };
+   }
+ 
++  // A refusal ends the turn with no answer; reporting it as a success would
++  // hand back an empty result as if the task were done.
++  if (response.stopReason === "refusal") {
++    return {
++      ...run,
++      session,
++      steps,
++      status: "failed",
++      result: { status: "failed", output: "", error: "The model declined this request (stop_reason: refusal)." },
++      completedAt: new Date().toISOString(),
++    };
++  }
++
+   if (response.stopReason === "end_turn" || response.toolCalls.length === 0) {
+     return {
+       ...run,
+diff --git a/src/core/session.ts b/src/core/session.ts
+index d6069d0..0f22758 100644
+--- a/src/core/session.ts
++++ b/src/core/session.ts
+@@ -15,6 +15,13 @@ export interface Message {
+   readonly content: string;
+   readonly toolCalls?: readonly ToolCall[];
+   readonly toolCallId?: string;
++  /**
++   * The provider's own verbatim content for an assistant turn, replayed
++   * unchanged on the next request. Opaque to Core: only the Provider that
++   * produced it reads it (Anthropic needs its thinking blocks sent back
++   * alongside the tool calls they led to).
++   */
++  readonly providerContent?: unknown;
+ }
+ 
+ export interface Session {
+diff --git a/src/jobsearch/feedback.test.ts b/src/jobsearch/feedback.test.ts
+index d128820..4034057 100644
+--- a/src/jobsearch/feedback.test.ts
++++ b/src/jobsearch/feedback.test.ts
+@@ -10,6 +10,7 @@ import {
+   looksLikeDirectMessage,
+   looksLikeDirectText,
+   parseFeedbackClassification,
++  FEEDBACK_OUTPUT_SCHEMA,
+   type ConversationTurn,
+ } from "./feedback";
+ import { DEFAULT_PREFERENCES, type Preferences } from "./records";
+@@ -275,6 +276,7 @@ test("classifyFeedback round-trips through a fake scoring client", async () => {
+   const result = await classifyFeedback("add Austin too", prefs, "160 new, 0 shortlisted today", client, "claude-haiku-4-5");
+   assert.equal(result.changes[0]?.field, "metros");
+   assert.deepEqual(result.changes[0]?.value, ["Houston", "Dallas", "New York", "Austin"]);
++  assert.equal(client.requests[0]?.outputSchema, FEEDBACK_OUTPUT_SCHEMA);
+ });
+ 
+ test("classifyFeedback passes conversation history all the way through to the actual prompt sent", async () => {
+diff --git a/src/jobsearch/feedback.ts b/src/jobsearch/feedback.ts
+index b09c001..dc70deb 100644
+--- a/src/jobsearch/feedback.ts
++++ b/src/jobsearch/feedback.ts
+@@ -235,8 +235,7 @@ export function buildFeedbackPrompt(
+     "- If a request doesn't map cleanly onto one of those fields and values, or the mapping is genuinely ambiguous, put the relevant part of her message in \"unclear\" and do NOT put anything in \"changes\" for it. An honest 'I couldn't map this' beats a wrong guess every time.",
+     "- For an array field (titles, metros, etc.), the value you output is the FULL new array — you have the current array below, so add or remove from it as her message asks and output the complete result, not just a delta.",
+     "- If she asks a question, answer it ONLY from the current preferences, run context, and conversation history given below. If you don't have what's needed to answer honestly, say so plainly in the draft rather than guessing.",
+-    "- Output ONLY a JSON object, no prose before or after, matching this shape exactly:",
+-    '{"hasQuestion": boolean, "answerDraft": string | null, "changes": [{"field": string, "value": <matching type>, "quote": string}], "unclear": [string]}',
++    "- In each change, \"quote\" is the part of her message that asked for it. Set answerDraft to null when she asked no question.",
+   ].join("\n");
+ 
+   const user = [
+@@ -297,6 +296,33 @@ export function parseFeedbackClassification(responseText: string): FeedbackClass
+   return { hasQuestion, answerDraft, changes, unclear };
+ }
+ 
++/** Enforced by the API (structured outputs). Field types are still re-checked by applyFeedbackPatch, since one schema covers every field. */
++export const FEEDBACK_OUTPUT_SCHEMA: Record<string, unknown> = {
++  type: "object",
++  properties: {
++    hasQuestion: { type: "boolean" },
++    answerDraft: { anyOf: [{ type: "string" }, { type: "null" }] },
++    changes: {
++      type: "array",
++      items: {
++        type: "object",
++        properties: {
++          field: { type: "string", enum: [...ALLOWED_PATCH_FIELDS] },
++          value: {
++            anyOf: [{ type: "array", items: { type: "string" } }, { type: "number" }, { type: "boolean" }, { type: "null" }],
++          },
++          quote: { type: "string" },
++        },
++        required: ["field", "value", "quote"],
++        additionalProperties: false,
++      },
++    },
++    unclear: { type: "array", items: { type: "string" } },
++  },
++  required: ["hasQuestion", "answerDraft", "changes", "unclear"],
++  additionalProperties: false,
++};
++
+ export async function classifyFeedback(
+   messageText: string,
+   currentPrefs: Preferences,
+@@ -307,7 +333,7 @@ export async function classifyFeedback(
+   conversationHistory?: string,
+ ): Promise<FeedbackClassification> {
+   const { system, user } = buildFeedbackPrompt(messageText, currentPrefs, runContext, conversationHistory);
+-  const result = await client.complete({ model, system, user, maxTokens: 1500 });
++  const result = await client.complete({ model, system, user, maxTokens: 1500, outputSchema: FEEDBACK_OUTPUT_SCHEMA });
+   if (ledger) await ledger.record("feedback-classification", model, result.usage);
+   return parseFeedbackClassification(result.text);
+ }
+diff --git a/src/jobsearch/pipeline.test.ts b/src/jobsearch/pipeline.test.ts
+index 8c2d0e6..18572b4 100644
+--- a/src/jobsearch/pipeline.test.ts
++++ b/src/jobsearch/pipeline.test.ts
+@@ -61,7 +61,7 @@ test("a full run discovers, filters, scores and shortlists a matching role", asy
+       this.requests.push(request);
+       const ids = [...request.user.matchAll(/"id": "([^"]+)"/g)].map((match) => match[1]);
+       const body = ids.map((id) => `{"id":"${id}","score":90,"confidence":"high","rationale":"Strong fit.","gaps":[]}`);
+-      return { text: `[${body.join(",")}]`, usage: { inputTokens: 1200, outputTokens: 200 } };
++      return { text: `{"scores":[${body.join(",")}]}`, usage: { inputTokens: 1200, outputTokens: 200 } };
+     }
+   })();
+ 
+@@ -90,7 +90,7 @@ test("re-running finds nothing new and spends nothing — the run is idempotent"
+     store,
+     prefs,
+     profile,
+-    scoringClient: new FakeScoringClient(['[]', '[]']),
++    scoringClient: new FakeScoringClient(['{"scores":[]}', '{"scores":[]}']),
+     costLogPath: LEDGER,
+     politeDelay: false,
+   };
+@@ -112,7 +112,7 @@ test("a broken source degrades and is reported; the rest of the run completes",
+     store,
+     prefs,
+     profile,
+-    scoringClient: new FakeScoringClient(["[]"]),
++    scoringClient: new FakeScoringClient(['{"scores":[]}']),
+     costLogPath: LEDGER,
+     politeDelay: false,
+   });
+@@ -127,7 +127,7 @@ test("a broken source degrades and is reported; the rest of the run completes",
+ 
+ test("a non-remote role is filtered before any model call", async () => {
+   const store = new InMemoryJobStore();
+-  const client = new FakeScoringClient(["[]"]);
++  const client = new FakeScoringClient(['{"scores":[]}']);
+ 
+   const summary = await runPipeline({
+     sources: [source("greenhouse:acme", [posting({ location: "Chicago, IL", body: "<p>On-site role in our Chicago office.</p>" })])],
+@@ -146,7 +146,7 @@ test("a non-remote role is filtered before any model call", async () => {
+ 
+ test("a remote role with no US option is filtered under usRemoteOnly, before any model call", async () => {
+   const store = new InMemoryJobStore();
+-  const client = new FakeScoringClient(["[]"]);
++  const client = new FakeScoringClient(['{"scores":[]}']);
+   const usRemotePrefs: Preferences = { ...prefs, usRemoteOnly: true };
+ 
+   const summary = await runPipeline({
+@@ -175,7 +175,7 @@ test("a remote role that states a US option clears usRemoteOnly and reaches scor
+       this.requests.push(request);
+       const ids = [...request.user.matchAll(/"id": "([^"]+)"/g)].map((match) => match[1]);
+       const body = ids.map((id) => `{"id":"${id}","score":90,"confidence":"high","rationale":"Good.","gaps":[]}`);
+-      return { text: `[${body.join(",")}]`, usage: { inputTokens: 800, outputTokens: 100 } };
++      return { text: `{"scores":[${body.join(",")}]}`, usage: { inputTokens: 800, outputTokens: 100 } };
+     }
+   })();
+ 
+@@ -247,7 +247,7 @@ test("the same role on two boards produces one shortlisted record with both link
+       this.requests.push(request);
+       const ids = [...request.user.matchAll(/"id": "([^"]+)"/g)].map((match) => match[1]);
+       const body = ids.map((id) => `{"id":"${id}","score":88,"confidence":"high","rationale":"Good.","gaps":[]}`);
+-      return { text: `[${body.join(",")}]`, usage: { inputTokens: 1000, outputTokens: 150 } };
++      return { text: `{"scores":[${body.join(",")}]}`, usage: { inputTokens: 1000, outputTokens: 150 } };
+     }
+   })();
+ 
+diff --git a/src/jobsearch/score.test.ts b/src/jobsearch/score.test.ts
+index fca910c..fc673fb 100644
+--- a/src/jobsearch/score.test.ts
++++ b/src/jobsearch/score.test.ts
+@@ -1,6 +1,6 @@
+ import { test } from "node:test";
+ import assert from "node:assert/strict";
+-import { buildBatchPrompt, buildSystemPrompt, chunk, parseScoringResponse, scoreRecords } from "./score";
++import { buildBatchPrompt, buildSystemPrompt, chunk, parseScoringResponse, scoreRecords, SCORING_OUTPUT_SCHEMA } from "./score";
+ import { DEFAULT_PREFERENCES, type JobRecord, type Preferences } from "./records";
+ import { FakeScoringClient } from "./scoring-client";
+ import { CostLedger } from "./cost";
+@@ -62,30 +62,33 @@ test("a posting with no stated salary is described as not stated, not omitted",
+   assert.match(buildBatchPrompt([job("a")]), /"salary": "not stated"/);
+ });
+ 
+-test("parseScoringResponse reads a clean array", () => {
+-  const parsed = parseScoringResponse('[{"id":"a","score":88,"confidence":"high","rationale":"Good.","gaps":[]}]');
++test("parseScoringResponse reads the scores array", () => {
++  const parsed = parseScoringResponse('{"scores":[{"id":"a","score":88,"confidence":"high","rationale":"Good.","gaps":[]}]}');
+   assert.equal(parsed.length, 1);
+   assert.equal(parsed[0]?.score, 88);
+   assert.equal(parsed[0]?.confidence, "high");
+ });
+ 
+-test("parseScoringResponse tolerates a code fence but not a missing id", () => {
+-  const fenced = parseScoringResponse('```json\n[{"id":"a","score":70,"confidence":"medium","rationale":"ok","gaps":[]}]\n```');
+-  assert.equal(fenced[0]?.id, "a");
++test("parseScoringResponse rejects an entry with no id", () => {
++  assert.throws(() => parseScoringResponse('{"scores":[{"score":70}]}'), /no id/);
++});
+ 
+-  assert.throws(() => parseScoringResponse('[{"score":70}]'), /no id/);
++test("scoreRecords asks the API to enforce the scoring schema", async () => {
++  const client = new FakeScoringClient(['{"scores":[]}']);
++  await scoreRecords([job("a")], profile, prefs, client, new CostLedger("run-0", ledgerPath));
++  assert.equal(client.requests[0]?.outputSchema, SCORING_OUTPUT_SCHEMA);
+ });
+ 
+ test("parseScoringResponse clamps an out-of-range score and defaults an unknown confidence to low", () => {
+-  const parsed = parseScoringResponse('[{"id":"a","score":120,"confidence":"certain","rationale":"x","gaps":[]}]');
++  const parsed = parseScoringResponse('{"scores":[{"id":"a","score":120,"confidence":"certain","rationale":"x","gaps":[]}]}');
+   assert.equal(parsed[0]?.score, 100);
+   assert.equal(parsed[0]?.confidence, "low");
+ });
+ 
+ test("scoreRecords shortlists above the cutoff and merely scores below it", async () => {
+   const client = new FakeScoringClient([
+-    '[{"id":"a","score":90,"confidence":"high","rationale":"Strong.","gaps":[]},' +
+-      '{"id":"b","score":40,"confidence":"medium","rationale":"Wrong level.","gaps":["People management"]}]',
++    '{"scores":[{"id":"a","score":90,"confidence":"high","rationale":"Strong.","gaps":[]},' +
++      '{"id":"b","score":40,"confidence":"medium","rationale":"Wrong level.","gaps":["People management"]}]}',
+   ]);
+ 
+   const result = await scoreRecords([job("a"), job("b")], profile, prefs, client, new CostLedger("run-1", ledgerPath));
+@@ -103,13 +106,13 @@ test("a failed batch is reported and its postings stay unscored rather than vani
+ 
+   assert.equal(result.scored.length, 0);
+   assert.equal(result.failures.length, 1);
+-  assert.match(result.failures[0] ?? "", /not a JSON array/);
++  assert.match(result.failures[0] ?? "", /JSON/);
+ });
+ 
+ test("the cached system prefix is byte-identical across batches, so the cache can actually hit", async () => {
+   const client = new FakeScoringClient([
+-    '[{"id":"a","score":70,"confidence":"high","rationale":"x","gaps":[]},{"id":"b","score":70,"confidence":"high","rationale":"x","gaps":[]}]',
+-    '[{"id":"c","score":70,"confidence":"high","rationale":"x","gaps":[]}]',
++    '{"scores":[{"id":"a","score":70,"confidence":"high","rationale":"x","gaps":[]},{"id":"b","score":70,"confidence":"high","rationale":"x","gaps":[]}]}',
++    '{"scores":[{"id":"c","score":70,"confidence":"high","rationale":"x","gaps":[]}]}',
+   ]);
+ 
+   await scoreRecords([job("a"), job("b"), job("c")], profile, prefs, client, new CostLedger("run-3", ledgerPath));
+diff --git a/src/jobsearch/score.ts b/src/jobsearch/score.ts
+index 43a01aa..ee00ed9 100644
+--- a/src/jobsearch/score.ts
++++ b/src/jobsearch/score.ts
+@@ -50,9 +50,31 @@ Rules you must follow:
+ - If a posting does not state salary, that is unknown, not a negative. Do not speculate about pay.
+ - The rationale is at most two short sentences, written to her, saying why this is or is not worth her time. No preamble, no restating the job title.
+ 
+-Return ONLY a JSON array, no prose and no code fences, shaped exactly:
+-[{"id":"<the id given>","score":<0-100>,"confidence":"low|medium|high","rationale":"<=2 sentences","gaps":["..."]}]
+-Return one object for every posting you were given, in the same order.`;
++Return one entry in "scores" for every posting you were given, in the same order, using the id given.`;
++
++/** Enforced by the API. Score range is checked in parseScoringResponse, since the schema can't carry numeric bounds. */
++export const SCORING_OUTPUT_SCHEMA: Record<string, unknown> = {
++  type: "object",
++  properties: {
++    scores: {
++      type: "array",
++      items: {
++        type: "object",
++        properties: {
++          id: { type: "string" },
++          score: { type: "integer" },
++          confidence: { type: "string", enum: ["low", "medium", "high"] },
++          rationale: { type: "string" },
++          gaps: { type: "array", items: { type: "string" } },
++        },
++        required: ["id", "score", "confidence", "rationale", "gaps"],
++        additionalProperties: false,
++      },
++    },
++  },
++  required: ["scores"],
++  additionalProperties: false,
++};
+ 
+ /**
+  * The cached prefix. Everything that is identical for every batch in a run
+@@ -100,21 +122,14 @@ export function buildBatchPrompt(batch: readonly JobRecord[]): string {
+ }
+ 
+ /**
+- * Parses the model's reply. Deliberately strict about the shape and
+- * deliberately forgiving about the wrapper: a model that wraps valid JSON in
+- * a code fence has not actually failed, but one that invents a score of 120
+- * or drops the id has, and that must not pass silently into the digest.
++ * Parses the model's reply. The API enforces the JSON shape; this still
++ * checks what the schema can't — a score of 120 or a missing id must not
++ * pass silently into the digest.
+  */
+ export function parseScoringResponse(text: string): readonly ScoredPosting[] {
+-  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+-  const start = cleaned.indexOf("[");
+-  const end = cleaned.lastIndexOf("]");
+-  if (start === -1 || end === -1 || end < start) {
+-    throw new Error(`scoring response was not a JSON array: ${cleaned.slice(0, 200)}`);
+-  }
+-
+-  const parsed: unknown = JSON.parse(cleaned.slice(start, end + 1));
+-  if (!Array.isArray(parsed)) throw new Error("scoring response did not parse to an array");
++  const reply: unknown = JSON.parse(text);
++  const parsed = typeof reply === "object" && reply !== null ? (reply as Record<string, unknown>)["scores"] : undefined;
++  if (!Array.isArray(parsed)) throw new Error(`scoring response had no "scores" array: ${text.slice(0, 200)}`);
+ 
+   return parsed.map((entry, index) => {
+     const item = entry as Record<string, unknown>;
+@@ -178,6 +193,7 @@ export async function scoreRecords(
+         user: buildBatchPrompt(batch),
+         // ~180 tokens of JSON per posting, with headroom.
+         maxTokens: Math.max(1024, batch.length * 220),
++        outputSchema: SCORING_OUTPUT_SCHEMA,
+       });
+       await ledger.record("score", prefs.scoringModel, result.usage);
+ 
+diff --git a/src/jobsearch/scoring-client.ts b/src/jobsearch/scoring-client.ts
+index e07f09d..a390508 100644
+--- a/src/jobsearch/scoring-client.ts
++++ b/src/jobsearch/scoring-client.ts
+@@ -18,6 +18,8 @@ export interface CompletionRequest {
+   readonly system: string;
+   readonly user: string;
+   readonly maxTokens: number;
++  /** JSON Schema the reply must match, enforced by the API (structured outputs) rather than by prompt wording. */
++  readonly outputSchema?: Record<string, unknown>;
+ }
+ 
+ export interface CompletionResult {
+@@ -61,6 +63,7 @@ export class AnthropicScoringClient implements ScoringClient {
+         // once per run rather than once per batch.
+         system: [{ type: "text", text: request.system, cache_control: { type: "ephemeral" } }],
+         messages: [{ role: "user", content: request.user }],
++        ...(request.outputSchema ? { output_config: { format: { type: "json_schema", schema: request.outputSchema } } } : {}),
+       }),
+     });
+ 
+@@ -76,6 +79,10 @@ export class AnthropicScoringClient implements ScoringClient {
+     if (body.stop_reason === "max_tokens") {
+       throw new Error("scoring response hit max_tokens — batch size is too large for the output budget");
+     }
++    // A refusal's text need not match the output schema, so it is a failure too.
++    if (body.stop_reason === "refusal") {
++      throw new Error("model declined the request (stop_reason: refusal)");
++    }
+ 
+     const text = (body.content ?? [])
+       .filter((block) => block.type === "text")
+@@ -102,7 +109,7 @@ export class FakeScoringClient implements ScoringClient {
+ 
+   async complete(request: CompletionRequest): Promise<CompletionResult> {
+     this.requests.push(request);
+-    const text = this.responses[this.requests.length - 1] ?? "[]";
++    const text = this.responses[this.requests.length - 1] ?? '{"scores":[]}';
+     return { text, usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 0, cacheWriteTokens: 0 } };
+   }
+ }
+diff --git a/src/packs/ai-research/pack.ts b/src/packs/ai-research/pack.ts
+index 541847c..3189a21 100644
+--- a/src/packs/ai-research/pack.ts
++++ b/src/packs/ai-research/pack.ts
+@@ -13,14 +13,14 @@ const CASE_REPORT_WRITER_SYSTEM_PROMPT = `You are the Case Report Writer Agent,
+ Hard rule on patient identifiers: if anything the user gives you contains a patient's name, initials treated as an identifier, MRN, exact date of birth, or any other direct identifier, do not repeat it anywhere in your response. Replace it with a generic reference ("the patient") and tell the user plainly, near the top of your response, that you removed an identifier and why — never silently drop it without saying so, and never silently pass it through. Age (in years), sex, and month/year-level dates are fine to keep; anything that could identify the specific person is not.
+ 
+ Reference: 2027 AAAAI Annual Meeting (New Orleans, LA, February 19-22, 2027). Sourced from a live web search on 2026-09-02 — verified but not exhaustively, and case-report portal pages returned errors when fetched directly, so say so plainly rather than presenting unverified formatting rules as fact:
+-- General research abstracts closed August 27, 2026 (already past).
++- General research abstracts closed August 27, 2026.
+ - A separate, later track exists specifically for first-year fellows-in-training, medical students, and residents to submit case reports, due September 21, 2026, through a different submission portal from the general abstract site.
+ - Exact word/character limits, required sections, and author-count rules for that case-report track could NOT be verified from a live source as of this writing — state this gap explicitly in "Missing Information" every time, and tell the user to confirm current formatting against the actual submission portal before they submit, rather than presenting a guessed format as the real requirement.
+ 
+ Always structure your entire response using exactly these section headings, in this order:
+ 
+ ## Requirements Checklist
+-Deadline and submission track (state the Sept 21, 2026 case-report deadline plainly; do not calculate days remaining), and the status of each section below (done / in progress / not started) based only on what's been provided in this conversation so far.
++Deadline and submission track: state the September 21, 2026 case-report deadline plainly, and say it may already have passed — you have no reliable clock, so tell the user to confirm on the portal whether the track still accepts submissions before relying on this draft for it. Then give the status of each section below (done / in progress / not started) based only on what's been provided in this conversation so far.
+ 
+ ## Missing Information
+ Every clinical or bibliographic fact still needed — be specific (e.g. "physical exam findings at the June 2022 admission," "which labs were drawn and their values," "what treatment was given and the patient's response," "current status/follow-up," "target journal or conference category if not already the AAAAI case-report track"). Always include the case-report format/word-limit verification gap here too.
+diff --git a/src/packs/career-advisor/pack.ts b/src/packs/career-advisor/pack.ts
+index 1363ac6..9fc0aff 100644
+--- a/src/packs/career-advisor/pack.ts
++++ b/src/packs/career-advisor/pack.ts
+@@ -16,7 +16,7 @@ Reference: The Chrysalis Project (AAAAI). Sourced directly from aaaai.org/about/
+ - A real AAAAI (American Academy of Allergy, Asthma & Immunology) program for residents/medical students exploring a career in allergy/immunology.
+ - Application deadline: October 23, 2026 (11:59am CT).
+ - Eligibility: an AAAAI member, or applied for membership, AND one of: MD/PhD student in research training years; 3rd/4th-year medical student; 1st-year resident (IM, Peds, or MedPeds); 2nd-year resident (IM, Peds, or MedPeds) — AAAAI notes this cycle especially wants 2nd-years without an allergy/immunology program at their own institution; or a 3rd-year MedPeds resident, or 3rd-year IM/Peds resident in a chief year. Previous Chrysalis participants cannot reapply. AAAAI states priority goes to medical students and junior residents who are still unsure of their career path, over senior residents already committed to fellowship — worth naming honestly in "Missing Information" if the user seems firmly decided already, rather than glossing over it.
+-- Required components: (1) a personal statement — AAAAI's own instructions say it's "your opportunity to ... promote yourself to the reviewers," covering "your interest in exploring the field, any exposure you have had to the field and whether you have access to the field at your current or previous institutions"; no page/word limit is specified. (2) an updated CV, no specific format mandated. (3) one letter from a faculty member the applicant selects, uploaded with the application (not emailed separately by the letter writer). AAAAI's exact prompt to that letter writer: "Please describe your experience working with the applicant and discuss why you think the applicant would benefit from the Chrysalis Project program. Given the number of applications received and the competitiveness of program, the details and strength of the letter can make a difference in the application process." Use this exact wording in the Faculty Letter Request Message section below — you no longer need to ask the user for it.
++- Required components: (1) a personal statement — AAAAI's own instructions say it's "your opportunity to ... promote yourself to the reviewers," covering "your interest in exploring the field, any exposure you have had to the field and whether you have access to the field at your current or previous institutions"; no page/word limit is specified. (2) an updated CV, no specific format mandated. (3) one letter from a faculty member the applicant selects, uploaded with the application (not emailed separately by the letter writer). AAAAI's exact prompt to that letter writer: "Please describe your experience working with the applicant and discuss why you think the applicant would benefit from the Chrysalis Project program. Given the number of applications received and the competitiveness of program, the details and strength of the letter can make a difference in the application process." Use this exact wording in the Faculty Letter Request Message section below.
+ 
+ Always structure your entire response using exactly these section headings, in this order:
+ 
+@@ -24,7 +24,7 @@ Always structure your entire response using exactly these section headings, in t
+ List every requirement relevant to this application (for Chrysalis: AAAAI membership status, personal statement, CV, faculty letter) and mark each as done, in progress, or not started, based only on what's actually been provided in this conversation so far. State the deadline plainly (do not attempt to calculate days remaining — you have no reliable clock).
+ 
+ ## Missing Information
+-Every fact you still need from the user to move a requirement forward — be specific (e.g. "which publications, with what role/authorship position," "which faculty member, and do you have the exact letter-writer prompt wording from the portal").
++Every fact you still need from the user to move a requirement forward — be specific (e.g. "which publications, with what role/authorship position," "which faculty member").
+ 
+ ## Personal Statement Draft
+ Built only from facts the user has actually given you. If there isn't enough yet, say so here instead of filling in something generic-sounding.
+@@ -33,7 +33,7 @@ Built only from facts the user has actually given you. If there isn't enough yet
+ Same rule: real information only, organized clearly. If the user supplied an existing CV (e.g. via read-file), update it with what they've told you rather than rewriting it from assumptions.
+ 
+ ## Faculty Letter Request Message
+-A short, polite message the user can send to their chosen faculty member asking them to serve as the letter writer. Include the application's actual prompt question for the letter writer only if the user has given you its exact wording; otherwise state plainly that you need it from the user (from the application portal) before including it, rather than guessing. Never draft the recommendation letter itself — that must be the faculty member's own genuine assessment, not something you produce on their behalf.
++A short, polite message the user can send to their chosen faculty member asking them to serve as the letter writer. Include the application's actual prompt question for the letter writer: the verified AAAAI wording above for Chrysalis, or, for any other application, the exact wording the user gave you — if they haven't, say you need it from the portal rather than guessing. Never draft the recommendation letter itself — that must be the faculty member's own genuine assessment, not something you produce on their behalf.
+ 
+ ## Requires your approval
+ Sending the faculty request message (or anything else) is never automatic — the send-email tool always pauses for explicit human approval first, exactly like any other use of it. Submitting the actual application through AAAAI's portal is always a manual step the user does themselves; you have no ability to do it and should never imply otherwise.
+diff --git a/src/packs/core-demo/pack.ts b/src/packs/core-demo/pack.ts
+index 122593c..2a483d2 100644
+--- a/src/packs/core-demo/pack.ts
++++ b/src/packs/core-demo/pack.ts
+@@ -13,7 +13,10 @@ export const coreDemoPack: Pack = {
+       name: "default",
+       providerName: "claude",
+       model: "claude-sonnet-5",
+-      systemPrompt: "You are a helpful, concise assistant.",
++      systemPrompt:
++        "You are the fallback assistant in this repository's agent orchestrator, used for simple questions and local file reads that don't fit a specialized agent. " +
++        "You can read local text files with read-file; you cannot send, submit, or change anything. " +
++        "If a request needs a capability you don't have, say so and name what's missing instead of guessing. Keep answers to the length the question needs.",
+       toolNames: ["read-file"],
+       description: "A general-purpose assistant for simple questions or file reads that don't fit any other agent.",
+     });
+diff --git a/src/packs/personal-assistant/pack.test.ts b/src/packs/personal-assistant/pack.test.ts
+index 62548f9..0f04cbc 100644
+--- a/src/packs/personal-assistant/pack.test.ts
++++ b/src/packs/personal-assistant/pack.test.ts
+@@ -61,7 +61,7 @@ test("personalAssistantPack registers personal-admin with Claude, read-file, and
+   assert.match(agent.systemPrompt, /browser-list-form-fields/);
+   assert.match(agent.systemPrompt, /browser-fill-form-preview/);
+   assert.match(agent.systemPrompt, /browser-submit-form/);
+-  assert.match(agent.systemPrompt, /is never executed by you automatically, no matter how confident you are — it always pauses/);
++  assert.match(agent.systemPrompt, /Its description says whether it pauses for human approval on this host/);
+ });
+ 
+ test("browser-submit-form is the only new browser tool marked requiresApproval", () => {
+diff --git a/src/packs/personal-assistant/pack.ts b/src/packs/personal-assistant/pack.ts
+index 4812d73..c51c5da 100644
+--- a/src/packs/personal-assistant/pack.ts
++++ b/src/packs/personal-assistant/pack.ts
+@@ -7,7 +7,7 @@ import type { Pack } from "../../registry/pack";
+  * Result has a schema for them. Promote to real types later only if a
+  * second agent needs the same structure enforced in code.
+  */
+-const PERSONAL_ADMIN_SYSTEM_PROMPT = `You are the Personal Admin Agent, a personal assistant that helps the user plan and draft responses to real-world administrative tasks — for example, handling a defective-item return or refund dispute, or arranging a group restaurant reservation. You have no ability to make a phone call or verify live information beyond what a Tool result actually gives you. You do have real, gated tools for sending email and submitting a web form — but every consequential one of them (sending, submitting) always pauses for a human to review and approve the exact action first; you never imply something has happened before a Tool result proves it. Your job is to think clearly, ask for what's missing, and either produce a draft the user can act on, or carry it through the approval-gated tools to the point just before anything consequential happens.
++const PERSONAL_ADMIN_SYSTEM_PROMPT = `You are the Personal Admin Agent, a personal assistant that helps the user plan and draft responses to real-world administrative tasks — for example, handling a defective-item return or refund dispute, or arranging a group restaurant reservation. You have no ability to make a phone call or verify live information beyond what a Tool result actually gives you. You do have real tools for sending email and submitting a web form. Sending always pauses for a human to review and approve the exact draft first; whether submitting a form pauses too depends on the host, and browser-submit-form's description says which. Never imply something has happened before a Tool result proves it. Your job is to think clearly, ask for what's missing, and either produce a draft the user can act on, or carry it through the approval-gated tools to the point just before anything consequential happens.
+ 
+ Always structure your entire response using exactly these section headings, in this order:
+ 
+@@ -33,7 +33,7 @@ Anything consequential that must never happen without the user explicitly approv
+ The actual text the user could send or say — a return request message, or a reservation inquiry — ready to copy, edit, or read aloud. If more than one message might eventually be needed (e.g. an initial inquiry vs. a later confirmation), draft only the first one.
+ 
+ ## Status
+-State explicitly and unambiguously that this is planning/drafting only: nothing has been sent, submitted, confirmed, or booked, and no business or person has been contacted. Never use language that could be read as claiming the task is underway or complete. Never claim you contacted someone, sent a message, checked availability, made a reservation, or completed any action unless a recorded tool result actually proves it — a tool result is the only acceptable evidence for any of those claims.
++State plainly what has and hasn't happened. Unless a recorded tool result in this run proves a send, submission, or booking, say that this is planning/drafting only: nothing has been sent, submitted, confirmed, or booked, and no business or person has been contacted. When a tool result does prove one, name exactly that action and say everything else is still undone. A tool result is the only acceptable evidence that you contacted someone, sent a message, checked availability, made a reservation, or completed any action.
+ 
+ You have tools to search the mailbox, read a thread, save an email draft, and send an email. Searching, reading, and saving a draft are all safe — use them freely to gather real information or prepare a message. Sending is different: the send-email tool is never executed by you automatically, no matter how confident you are — it always pauses for a human to review and approve the exact draft first. So when a task calls for sending something, your job stops at saving a good draft and explaining in "Requires your approval" that sending it is the next step; do not describe sending as already done or as something you are about to do unassisted.
+ 
+@@ -42,7 +42,7 @@ You also have a read-web-page tool that reads the visible text of a page using a
+ For a task that involves an actual web form (e.g. a retailer's online return/refund request), you have three more tools, meant to be used in this exact order:
+ 1. browser-list-form-fields — read-only. Shows you the real fields the form actually has (selectors, labels, types) so you never guess at a field name.
+ 2. browser-fill-form-preview — safe. Fills in the values you've gathered and shows you exactly what would be submitted. Nothing external happens yet — this is the equivalent of saving an email draft.
+-3. browser-submit-form — consequential. This is the ONLY tool that actually clicks submit on a live external site. It is never executed by you automatically, no matter how confident you are — it always pauses for a human to review and approve the exact values and submit button first, the same as send-email. Never propose calling it until you've shown the human the exact preview from step 2 and explained in "Requires your approval" that this is the next step.
++3. browser-submit-form — consequential: the only tool that clicks submit on a live external site. Its description says whether it pauses for human approval on this host; believe the description. Don't call it until you've shown the human the exact preview from step 2 and explained in "Requires your approval" that this is the next step.
+ 
+ Some sites need a previously-logged-in session (pass the site name the human used with \`browser login\`); a public form that needs no login can be used with no site at all. Never assume a site is safe or appropriate to automate against — some platforms' own terms restrict automated interaction with their site, which is a real-world judgment call for the user to make before you ever attempt browser-list-form-fields on a new site, not something you should assume is fine.
+ 
+diff --git a/src/providers/anthropic.test.ts b/src/providers/anthropic.test.ts
+index bd8b25a..5ea3e8a 100644
+--- a/src/providers/anthropic.test.ts
++++ b/src/providers/anthropic.test.ts
+@@ -70,6 +70,31 @@ test("parseResponseBody maps a max_tokens stop_reason distinctly, rather than co
+   assert.equal(result.stopReason, "max_tokens");
+ });
+ 
++test("an assistant turn is replayed with its thinking blocks, verbatim and in order", () => {
++  const content = [
++    { type: "thinking", thinking: "", signature: "sig-1" },
++    { type: "tool_use", id: "call-1", name: "read-file", input: { path: "a.txt" } },
++  ];
++  const parsed = parseResponseBody({ content: content as never, stop_reason: "tool_use" });
++
++  const body = buildRequestBody({
++    model: "claude-sonnet-5",
++    messages: [
++      { role: "user", content: "read the file" },
++      { role: "assistant", content: parsed.content, toolCalls: parsed.toolCalls, providerContent: parsed.providerContent },
++      { role: "tool", content: "file contents", toolCallId: "call-1" },
++    ],
++    tools: [],
++  });
++
++  assert.deepEqual(body.messages[1], { role: "assistant", content });
++});
++
++test("parseResponseBody maps a refusal stop_reason distinctly, rather than collapsing it into end_turn", () => {
++  const result = parseResponseBody({ content: [], stop_reason: "refusal" });
++  assert.equal(result.stopReason, "refusal");
++});
++
+ test("buildRequestBody defaults max_tokens high enough for a real structured multi-section response", () => {
+   const body = buildRequestBody({ model: "claude-sonnet-5", messages: [], tools: [] });
+   assert.equal(body.max_tokens, 16000);
+diff --git a/src/providers/anthropic.ts b/src/providers/anthropic.ts
+index 89c02fe..68f9d44 100644
+--- a/src/providers/anthropic.ts
++++ b/src/providers/anthropic.ts
+@@ -67,6 +67,14 @@ function toAnthropicMessage(message: Message): AnthropicMessage {
+     };
+   }
+ 
++  // Replay the model's own content verbatim when we have it. Claude
++  // Sonnet 5 runs adaptive thinking by default, and a tool-use turn replayed
++  // without the thinking blocks that preceded its tool calls loses that
++  // reasoning and can be rejected for block ordering.
++  if (message.role === "assistant" && Array.isArray(message.providerContent)) {
++    return { role: "assistant", content: message.providerContent as readonly AnthropicContentBlock[] };
++  }
++
+   if (message.role === "assistant" && message.toolCalls && message.toolCalls.length > 0) {
+     const blocks: AnthropicContentBlock[] = [];
+     if (message.content) blocks.push({ type: "text", text: message.content });
+@@ -96,7 +104,11 @@ export function parseResponseBody(body: AnthropicResponseBody): GenerateResult {
+   return {
+     content: textBlocks.map((b) => b.text).join(""),
+     toolCalls: toolUseBlocks.map((b) => ({ id: b.id, toolName: b.name, input: b.input })),
+-    stopReason: body.stop_reason === "tool_use" ? "tool_use" : body.stop_reason === "max_tokens" ? "max_tokens" : "end_turn",
++    stopReason:
++      body.stop_reason === "tool_use" || body.stop_reason === "max_tokens" || body.stop_reason === "refusal"
++        ? body.stop_reason
++        : "end_turn",
++    providerContent: body.content,
+   };
+ }
+ 
+diff --git a/src/providers/provider.ts b/src/providers/provider.ts
+index b9e7d9b..466dafe 100644
+--- a/src/providers/provider.ts
++++ b/src/providers/provider.ts
+@@ -10,8 +10,10 @@ export interface GenerateRequest {
+ export interface GenerateResult {
+   readonly content: string;
+   readonly toolCalls: readonly ToolCall[];
+-  /** "max_tokens" means the model was cut off before finishing — advance() treats that as a failure, never as a usable final answer (see orchestrator.ts). */
+-  readonly stopReason: "end_turn" | "tool_use" | "max_tokens";
++  /** "max_tokens" (cut off before finishing) and "refusal" (declined by the model's safeguards) are both failures to advance(), never a usable final answer (see orchestrator.ts). */
++  readonly stopReason: "end_turn" | "tool_use" | "max_tokens" | "refusal";
++  /** The provider's verbatim assistant content, stored on the assistant Message as `providerContent` and replayed unchanged. */
++  readonly providerContent?: unknown;
+ }
+ 
+ /**
+diff --git a/src/tools/browser-submit-form.test.ts b/src/tools/browser-submit-form.test.ts
+index 06a6cde..ffc5389 100644
+--- a/src/tools/browser-submit-form.test.ts
++++ b/src/tools/browser-submit-form.test.ts
+@@ -19,6 +19,7 @@ test("browser-submit-form is marked requiresApproval by default — the Orchestr
+   withAutopilot(undefined, () => {
+     const tool = createBrowserSubmitFormTool(new FakeFormFillingClient());
+     assert.equal(tool.requiresApproval, true);
++    assert.match(tool.description, /pauses the run until a human approves/);
+   });
+ });
+ 
+@@ -26,6 +27,7 @@ test("RETURNS_AUTOPILOT_ENABLED=true drops the approval gate, so the Orchestrato
+   withAutopilot("true", () => {
+     const tool = createBrowserSubmitFormTool(new FakeFormFillingClient());
+     assert.equal(tool.requiresApproval, false);
++    assert.match(tool.description, /submits immediately, with no human review/);
+   });
+ });
+ 
+diff --git a/src/tools/browser-submit-form.ts b/src/tools/browser-submit-form.ts
+index fd32194..ffd401c 100644
+--- a/src/tools/browser-submit-form.ts
++++ b/src/tools/browser-submit-form.ts
+@@ -56,10 +56,15 @@ function returnsAutopilotEnabled(): boolean {
+  * generic and cannot tell a return form from a checkout page.
+  */
+ export function createBrowserSubmitFormTool(client: FormFillingClient): Tool {
++  const requiresApproval = !returnsAutopilotEnabled();
++  // The description is the model's only view of the gate, so it must say
++  // what this instance actually does.
++  const gate = requiresApproval
++    ? "Consequential: calling it pauses the run until a human approves these exact values; nothing is submitted before that."
++    : "Consequential, and NOT gated on this host (returns autopilot is on): calling it submits immediately, with no human review. Call it only after reading back browser-fill-form-preview's output and confirming the page is a return or refund form.";
+   return {
+     name: "browser-submit-form",
+-    description:
+-      "Fills the given field values into a web page's form and clicks the given submit control. Consequential: only ever runs after exact-match human approval of these exact values.",
++    description: `Fills the given field values into a web page's form and clicks the given submit control. ${gate}`,
+     inputSchema: {
+       type: "object",
+       properties: {
+@@ -70,7 +75,7 @@ export function createBrowserSubmitFormTool(client: FormFillingClient): Tool {
+       },
+       required: ["url", "values", "submitSelector"],
+     },
+-    requiresApproval: !returnsAutopilotEnabled(),
++    requiresApproval,
+     async execute(input: unknown): Promise<string> {
+       if (!isSubmitFormInput(input)) {
+         throw new Error('browser-submit-form requires { "url": string, "values": {selector: string}, "submitSelector": string, "site"?: string }');
+diff --git a/src/tools/inkbox-save-draft.ts b/src/tools/inkbox-save-draft.ts
+index eddb125..67bff4c 100644
+--- a/src/tools/inkbox-save-draft.ts
++++ b/src/tools/inkbox-save-draft.ts
+@@ -25,15 +25,18 @@ function isSaveDraftInput(value: unknown): value is SaveDraftInput {
+ export function createInkboxSaveDraftTool(client: InkboxClient): Tool {
+   return {
+     name: "inkbox-save-draft",
+-    description: "Saves or updates an email draft in the Inkbox Drafts folder. Safe — never sends anything.",
++    description:
++      "Saves a new email draft, or updates an existing one, in the Inkbox Drafts folder. Safe — never sends anything. " +
++      "Returns the draft's draftId, revision, recipients (including any bcc added automatically), subject, and body; send-email needs those exact values. " +
++      "Every update produces a new revision.",
+     inputSchema: {
+       type: "object",
+       properties: {
+-        to: { type: "array", items: { type: "object" } },
++        to: { type: "array", items: { type: "object" }, description: 'Recipients, each {"address": string}.' },
+         subject: { type: "string" },
+-        body: { type: "string" },
+-        threadId: { type: "string" },
+-        draftId: { type: "string" },
++        body: { type: "string", description: "Plain-text body." },
++        threadId: { type: "string", description: "Thread to reply within, from inkbox-search-mail or inkbox-read-thread. Omit for a new conversation." },
++        draftId: { type: "string", description: "An existing draft to update. Omit to create a new draft." },
+       },
+       required: ["to", "subject", "body"],
+     },
+diff --git a/src/tools/inkbox-search-mail.ts b/src/tools/inkbox-search-mail.ts
+index 331fc4b..501dbf9 100644
+--- a/src/tools/inkbox-search-mail.ts
++++ b/src/tools/inkbox-search-mail.ts
+@@ -5,10 +5,12 @@ import type { InkboxClient } from "../integrations/inkbox/client";
+ export function createInkboxSearchMailTool(client: InkboxClient): Tool {
+   return {
+     name: "inkbox-search-mail",
+-    description: "Searches or lists mail in the Inkbox mailbox. Read-only.",
++    description:
++      "Searches the Inkbox mailbox, or lists its most recent messages when no query is given. Read-only. " +
++      "Returns up to 50 messages as headers only (id, threadId, sender, subject, received time), not bodies; read a message's content with inkbox-read-thread and its threadId.",
+     inputSchema: {
+       type: "object",
+-      properties: { query: { type: "string" } },
++      properties: { query: { type: "string", description: "Free-text search terms, e.g. a sender, subject words, or an order number. Omit to list recent mail." } },
+     },
+     async execute(input: unknown): Promise<string> {
+       const query = isRecord(input) && typeof input.query === "string" ? input.query : undefined;
+diff --git a/src/tools/read-file.ts b/src/tools/read-file.ts
+index a98adbb..fba75a8 100644
+--- a/src/tools/read-file.ts
++++ b/src/tools/read-file.ts
+@@ -15,10 +15,12 @@ function isReadFileInput(input: unknown): input is ReadFileInput {
+  */
+ export const readFileTool: Tool = {
+   name: "read-file",
+-  description: "Reads the contents of a UTF-8 text file at the given path.",
++  description:
++    "Reads the contents of a UTF-8 text file on the local machine. Read-only. " +
++    "Fails if the file doesn't exist or can't be read; binary files such as PDFs or .docx don't come back as readable text.",
+   inputSchema: {
+     type: "object",
+-    properties: { path: { type: "string" } },
++    properties: { path: { type: "string", description: "Absolute path, or a path relative to the directory the orchestrator runs from." } },
+     required: ["path"],
+   },
+   async execute(input: unknown): Promise<string> {
+diff --git a/src/tools/send-email.ts b/src/tools/send-email.ts
+index c2d2276..6ce17fd 100644
+--- a/src/tools/send-email.ts
++++ b/src/tools/send-email.ts
+@@ -38,16 +38,19 @@ function sameAddresses(a: readonly EmailAddress[], b: readonly EmailAddress[]):
+ export function createSendEmailTool(client: InkboxClient): Tool {
+   return {
+     name: "send-email",
+-    description: "Sends an email draft. Consequential: only ever runs after exact-match human approval.",
++    description:
++      "Sends a draft previously saved with inkbox-save-draft. Consequential: calling it pauses the run until a human approves these exact values; nothing is sent before that. " +
++      "Copy every field from the latest inkbox-save-draft result for this draft. If the draft changed after that result (a different revision, subject, body, or recipients), sending fails and the draft must be re-saved and re-approved. " +
++      "Returns the sent message's id, thread id, recipients, and time.",
+     inputSchema: {
+       type: "object",
+       properties: {
+-        to: { type: "array", items: { type: "object" } },
+-        subject: { type: "string" },
+-        body: { type: "string" },
+-        bcc: { type: "array", items: { type: "object" } },
+-        draftId: { type: "string" },
+-        revision: { type: "string" },
++        to: { type: "array", items: { type: "object" }, description: 'Recipients exactly as the saved draft has them, each {"address": string}.' },
++        subject: { type: "string", description: "The saved draft's subject, unchanged." },
++        body: { type: "string", description: "The saved draft's body, unchanged." },
++        bcc: { type: "array", items: { type: "object" }, description: "The bcc list from the inkbox-save-draft result (it may add the mailbox owner); [] when that result shows none." },
++        draftId: { type: "string", description: "draftId from the inkbox-save-draft result." },
++        revision: { type: "string", description: "revision from the latest inkbox-save-draft result." },
+       },
+       required: ["to", "subject", "body", "bcc", "draftId", "revision"],
+     },
+diff --git a/src/tools/with-summarization.test.ts b/src/tools/with-summarization.test.ts
+index c975f5f..da02f73 100644
+--- a/src/tools/with-summarization.test.ts
++++ b/src/tools/with-summarization.test.ts
+@@ -33,7 +33,7 @@ test("withSummarization condenses results over the char threshold via the cheap
+   const result = await tool.execute({});
+ 
+   assert.equal(provider.calls, 1);
+-  assert.match(result, /^\[Condensed by claude-3-5-haiku-20241022/);
++  assert.match(result, /^\[Condensed by claude-haiku-4-5/);
+   assert.match(result, /the short version$/);
+ });
+ 
+@@ -47,13 +47,14 @@ test("withSummarization respects a custom maxChars and cheapModel", async () =>
+   assert.match(result, /tiny$/);
+ });
+ 
+-test("withSummarization preserves the wrapped tool's name, description, and schema", () => {
++test("withSummarization preserves the wrapped tool's name and schema, and tells the model results may be condensed", () => {
+   const provider = new FakeProvider([]);
+   const inner = fakeTool("anything");
+   const tool = withSummarization(inner, { provider });
+ 
+   assert.equal(tool.name, inner.name);
+-  assert.equal(tool.description, inner.description);
++  assert.ok(tool.description.startsWith(inner.description));
++  assert.match(tool.description, new RegExp(`over ${DEFAULT_MAX_CHARS} characters are condensed`));
+   assert.equal(tool.inputSchema, inner.inputSchema);
+ });
+ 
+diff --git a/src/tools/with-summarization.ts b/src/tools/with-summarization.ts
+index e640aea..4a9c652 100644
+--- a/src/tools/with-summarization.ts
++++ b/src/tools/with-summarization.ts
+@@ -6,7 +6,7 @@ import type { ModelProvider } from "../providers/provider";
+  * tool output — never for anything the user or an approval gate treats as
+  * a real answer.
+  */
+-export const DEFAULT_CHEAP_MODEL = "claude-3-5-haiku-20241022";
++export const DEFAULT_CHEAP_MODEL = "claude-haiku-4-5";
+ 
+ /**
+  * Hard cutoff, checked in code. Spotify's own writeup on this pattern is
+@@ -47,6 +47,9 @@ export function withSummarization(tool: Tool, options: SummarizationOptions): To
+ 
+   return {
+     ...tool,
++    description:
++      `${tool.description} Results over ${maxChars} characters are condensed by a smaller model before you see them; ` +
++      "a condensed result starts with a [Condensed by ...] note, and exact wording from the original may be lost.",
+     async execute(input: unknown): Promise<string> {
+       const raw = String(await tool.execute(input));
+       if (raw.length <= maxChars) {
