@@ -20,6 +20,12 @@ import { RealFormFillingClient } from "../integrations/browser/real-form-client"
 import { createBrowserListFormFieldsTool } from "../tools/browser-list-form-fields";
 import { createBrowserFillFormPreviewTool } from "../tools/browser-fill-form-preview";
 import { createBrowserSubmitFormTool } from "../tools/browser-submit-form";
+import type { PolymarketClient } from "../integrations/polymarket/client";
+import { createPolymarketClientFromEnv } from "../integrations/polymarket/real-client";
+import { createPolymarketFindMarketsTool } from "../tools/polymarket-find-markets";
+import { createPolymarketGetQuoteTool } from "../tools/polymarket-get-quote";
+import { createPolymarketPreviewOrderTool } from "../tools/polymarket-preview-order";
+import { createPolymarketPlaceOrderTool } from "../tools/polymarket-place-order";
 import { createReadJobBoardPageTool } from "../tools/read-job-board-page";
 import { withSummarization } from "../tools/with-summarization";
 import { createGraphRecallTool } from "../tools/graph-recall";
@@ -32,13 +38,14 @@ import { careerAdvisorPack } from "../packs/career-advisor/pack";
 import { aiResearchPack } from "../packs/ai-research/pack";
 import { jobSearchPack } from "../packs/job-search/pack";
 import { publicAgentCreationPack } from "../packs/public-agent-creation/pack";
+import { predictionMarketsPack } from "../packs/prediction-markets/pack";
 
 /**
  * Packs enabled by default. A future CLI flag or config file can change
  * which Packs load without touching the engine — this list is the only
  * place that currently decides.
  */
-const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack, publicAgentCreationPack];
+const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack, publicAgentCreationPack, predictionMarketsPack];
 
 /** Agents the Dispatcher should never route a goal to: itself, and utility agents with no real conversational job (ADR 0008). */
 const NOT_DISPATCHABLE = new Set(["dispatcher", "inkbox-send", "demo"]);
@@ -84,6 +91,7 @@ export function loadDefaultConfig(
   formFillingClient: FormFillingClient = new RealFormFillingClient(),
   jobBoardClient: BrowserClient = createPublicBrowserClient("job-boards"),
   graphStore: GraphStore = new InMemoryGraphStore(),
+  polymarketClient: PolymarketClient = createPolymarketClientFromEnv(),
 ): Registry {
   const registry = new Registry();
 
@@ -110,6 +118,10 @@ export function loadDefaultConfig(
   registry.registerTool(withSummarization(createReadJobBoardPageTool(jobBoardClient), summarization));
   registry.registerTool(createGraphRecallTool(graphStore));
   registry.registerTool(createGraphRecordTool(graphStore));
+  registry.registerTool(createPolymarketFindMarketsTool(polymarketClient));
+  registry.registerTool(createPolymarketGetQuoteTool(polymarketClient));
+  registry.registerTool(createPolymarketPreviewOrderTool(polymarketClient));
+  registry.registerTool(createPolymarketPlaceOrderTool(polymarketClient));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);
