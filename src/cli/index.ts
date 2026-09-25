@@ -30,6 +30,9 @@ import { JsonFilePickemStore } from "../sleeper/pickem/store";
 import { JsonFilePlayersCache, createRealSleeperClient } from "../integrations/sleeper/real-client";
 import { createSleeperWriteClientFromEnv } from "../integrations/sleeper/graphql-client";
 import type { SleeperDeps } from "../config/load";
+import { runSettlementsCommand } from "./settlements-commands";
+import { createSettlementsDeps, type SettlementsDeps } from "../settlements/deps";
+import { JsonFileTrackerStorage } from "../settlements/storage";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { WorkflowStore } from "../store/workflow-store";
@@ -66,6 +69,8 @@ export interface CliDeps {
   readonly constraintsStore?: ConstraintsStore;
   /** Sleeper read/write clients and the pick'em log for `orchestrator sleeper ...` (ADR 0021) — the same instances the Registry's Sleeper tools use. */
   readonly sleeper?: SleeperDeps;
+  /** The settlement tracker and research sources for `orchestrator settlements ...` (ADR 0022) — the same instance the Registry's settlements tools use. */
+  readonly settlements?: SettlementsDeps;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -94,6 +99,8 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator sleeper leagues|preview|waivers <username>     Read-only Sleeper fantasy monitoring",
       "  orchestrator sleeper write --action <file> [--confirm]      Dry-run (default) or send one Sleeper league change",
       "  orchestrator sleeper pickem research|slip|log|settle|bankroll Pick'em research and bankroll; you place every entry",
+      "  orchestrator settlements deadlines|alerts|review|research   Settlement claims: deadlines, nudges, eligibility, new-settlement research",
+      "  orchestrator settlements add|status|verdict|action|...      Record what you did; you file every claim yourself (settlements help)",
       '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
       "  orchestrator constraints list                                List recorded corrections",
       "  orchestrator help                                           Show this message",
@@ -343,6 +350,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return runSleeperCommand(rest, deps);
   }
 
+  if (command === "settlements") {
+    return runSettlementsCommand(rest, deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
@@ -355,7 +366,8 @@ async function main(): Promise<void> {
     writeClient: createSleeperWriteClientFromEnv(),
     pickemStore: new JsonFilePickemStore(join(cwd, ".orchestrator", "sleeper", "pickem.json")),
   };
-  const registry = loadDefaultConfig(inkboxClient, undefined, undefined, undefined, undefined, undefined, sleeper);
+  const settlements = createSettlementsDeps({ storage: new JsonFileTrackerStorage(join(cwd, ".orchestrator", "settlements", "tracker.json")) });
+  const registry = loadDefaultConfig(inkboxClient, undefined, undefined, undefined, undefined, undefined, sleeper, { settlements });
   const store = new JsonFileRunStore(join(cwd, ".orchestrator", "runs"));
   const workflowStore = new JsonFileWorkflowStore(join(cwd, ".orchestrator", "workflows"));
   const coworkerStore = new JsonFileCoworkerTaskStore(join(cwd, "coworker", "tasks"));
@@ -378,6 +390,7 @@ async function main(): Promise<void> {
     operationalUpdateStore,
     constraintsStore,
     sleeper,
+    settlements,
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });
