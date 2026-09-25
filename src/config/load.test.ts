@@ -22,8 +22,8 @@ test("loadDefaultConfig wires up engine providers/tools plus the enabled packs' 
     .listAgents()
     .map((agent) => agent.name)
     .sort();
-  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "demo", "dispatcher", "inkbox-send", "job-search-agent", "personal-admin", "polymarket-trader", "public-agent-builder"]);
-  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant", "dispatcher", "career-advisor", "ai-research", "job-search", "public-agent-creation", "prediction-markets"]);
+  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "demo", "dispatcher", "inkbox-send", "job-search-agent", "personal-admin", "pickem-researcher", "polymarket-trader", "public-agent-builder", "sleeper-manager"]);
+  assert.deepEqual(registry.listPacks(), ["core-demo", "personal-assistant", "dispatcher", "career-advisor", "ai-research", "job-search", "public-agent-creation", "prediction-markets", "sleeper"]);
 });
 
 test("dispatchableAgents excludes the dispatcher itself and utility/demo agents, keeping only agents with a description", () => {
@@ -31,5 +31,5 @@ test("dispatchableAgents excludes the dispatcher itself and utility/demo agents,
   const names = dispatchableAgents(registry)
     .map((a) => a.name)
     .sort();
-  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "job-search-agent", "personal-admin", "polymarket-trader", "public-agent-builder"]);
+  assert.deepEqual(names, ["career-advisor", "case-report-writer", "default", "job-search-agent", "personal-admin", "pickem-researcher", "polymarket-trader", "public-agent-builder", "sleeper-manager"]);
 });
