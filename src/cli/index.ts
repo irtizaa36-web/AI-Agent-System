@@ -25,6 +25,11 @@ import { runOperationalUpdateCommand } from "./operational-update-commands";
 import { JsonFileOperationalUpdateStore, type OperationalUpdateStore } from "../dashboard/operational-update-store";
 import { runDashboardCommand } from "./dashboard-command";
 import { runJobsCommand } from "./jobs-commands";
+import { runSleeperCommand } from "./sleeper-commands";
+import { JsonFilePickemStore } from "../sleeper/pickem/store";
+import { JsonFilePlayersCache, createRealSleeperClient } from "../integrations/sleeper/real-client";
+import { createSleeperWriteClientFromEnv } from "../integrations/sleeper/graphql-client";
+import type { SleeperDeps } from "../config/load";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { WorkflowStore } from "../store/workflow-store";
@@ -59,6 +64,8 @@ export interface CliDeps {
   readonly operationalUpdateStore?: OperationalUpdateStore;
   /** Accumulated corrections (see store/constraints-store.ts), prepended to every `run` command's Agent automatically. Optional so existing callers/tests keep working without one. */
   readonly constraintsStore?: ConstraintsStore;
+  /** Sleeper read/write clients and the pick'em log for `orchestrator sleeper ...` (ADR 0021) — the same instances the Registry's Sleeper tools use. */
+  readonly sleeper?: SleeperDeps;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -84,6 +91,9 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator dashboard [--port N]                           Serve the local agents/projects dashboard",
       "  orchestrator jobs run                                       Run the job-search pipeline and write today's digest",
       "  orchestrator jobs digest|sources|costs                      Read the last digest, check sources, or review model spend",
+      "  orchestrator sleeper leagues|preview|waivers <username>     Read-only Sleeper fantasy monitoring",
+      "  orchestrator sleeper write --action <file> [--confirm]      Dry-run (default) or send one Sleeper league change",
+      "  orchestrator sleeper pickem research|slip|log|settle|bankroll Pick'em research and bankroll; you place every entry",
       '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
       "  orchestrator constraints list                                List recorded corrections",
       "  orchestrator help                                           Show this message",
@@ -329,6 +339,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return runJobsCommand(rest, deps);
   }
 
+  if (command === "sleeper") {
+    return runSleeperCommand(rest, deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
@@ -336,7 +350,12 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
 async function main(): Promise<void> {
   const cwd = process.cwd();
   const inkboxClient = createDefaultInkboxClient(new JsonFileDraftStore(join(cwd, ".orchestrator", "inkbox-drafts")));
-  const registry = loadDefaultConfig(inkboxClient);
+  const sleeper: SleeperDeps = {
+    readClient: createRealSleeperClient({ playersCache: new JsonFilePlayersCache(join(cwd, ".orchestrator", "sleeper", "players-nfl.json")) }),
+    writeClient: createSleeperWriteClientFromEnv(),
+    pickemStore: new JsonFilePickemStore(join(cwd, ".orchestrator", "sleeper", "pickem.json")),
+  };
+  const registry = loadDefaultConfig(inkboxClient, undefined, undefined, undefined, undefined, undefined, sleeper);
   const store = new JsonFileRunStore(join(cwd, ".orchestrator", "runs"));
   const workflowStore = new JsonFileWorkflowStore(join(cwd, ".orchestrator", "workflows"));
   const coworkerStore = new JsonFileCoworkerTaskStore(join(cwd, "coworker", "tasks"));
@@ -358,6 +377,7 @@ async function main(): Promise<void> {
     recommendationStore,
     operationalUpdateStore,
     constraintsStore,
+    sleeper,
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });

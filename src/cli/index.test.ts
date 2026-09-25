@@ -124,13 +124,13 @@ test("runCli status reports agent/provider/tool/pack counts and names", async ()
 
   assert.equal(code, 0);
   const output = stdout.join("\n");
-  assert.match(output, /Agents:\s+10 \(default, demo, inkbox-send, personal-admin, dispatcher, career-advisor, case-report-writer, job-search-agent, public-agent-builder, polymarket-trader\)/);
+  assert.match(output, /Agents:\s+12 \(default, demo, inkbox-send, personal-admin, dispatcher, career-advisor, case-report-writer, job-search-agent, public-agent-builder, polymarket-trader, sleeper-manager, pickem-researcher\)/);
   assert.match(output, /Providers:\s+2 \(claude, fake\)/);
   assert.match(
     output,
-    /Tools:\s+16 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email, read-web-page, browser-list-form-fields, browser-fill-form-preview, browser-submit-form, read-job-board-page, graph-recall, graph-record, polymarket-find-markets, polymarket-get-quote, polymarket-preview-order, polymarket-place-order\)/,
+    /Tools:\s+24 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email, read-web-page, browser-list-form-fields, browser-fill-form-preview, browser-submit-form, read-job-board-page, graph-recall, graph-record, polymarket-find-markets, polymarket-get-quote, polymarket-preview-order, polymarket-place-order, sleeper-find-leagues, sleeper-matchup-preview, sleeper-waiver-recommendations, sleeper-preview-write, sleeper-execute-write, pickem-research-line, pickem-bankroll-status, pickem-build-slip\)/,
   );
-  assert.match(output, /Packs:\s+8 \(core-demo, personal-assistant, dispatcher, career-advisor, ai-research, job-search, public-agent-creation, prediction-markets\)/);
+  assert.match(output, /Packs:\s+9 \(core-demo, personal-assistant, dispatcher, career-advisor, ai-research, job-search, public-agent-creation, prediction-markets, sleeper\)/);
   assert.match(output, /Tests:\s+\S/);
   assert.match(output, /Git:\s+\S/);
   assert.match(output, /Capabilities currently available:/);

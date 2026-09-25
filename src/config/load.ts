@@ -39,13 +39,22 @@ import { aiResearchPack } from "../packs/ai-research/pack";
 import { jobSearchPack } from "../packs/job-search/pack";
 import { publicAgentCreationPack } from "../packs/public-agent-creation/pack";
 import { predictionMarketsPack } from "../packs/prediction-markets/pack";
+import type { SleeperReadClient } from "../integrations/sleeper/client";
+import { createRealSleeperClient } from "../integrations/sleeper/real-client";
+import type { SleeperWriteClient } from "../integrations/sleeper/write-gate";
+import { createSleeperWriteClientFromEnv } from "../integrations/sleeper/graphql-client";
+import { createSleeperFindLeaguesTool, createSleeperMatchupPreviewTool, createSleeperWaiverRecommendationsTool } from "../tools/sleeper-read-tools";
+import { createSleeperExecuteWriteTool, createSleeperPreviewWriteTool } from "../tools/sleeper-write-tools";
+import { createPickemBankrollStatusTool, createPickemBuildSlipTool, createPickemResearchLineTool } from "../tools/pickem-tools";
+import { InMemoryPickemStore, type PickemStore } from "../sleeper/pickem/store";
+import { sleeperPack } from "../packs/sleeper/pack";
 
 /**
  * Packs enabled by default. A future CLI flag or config file can change
  * which Packs load without touching the engine — this list is the only
  * place that currently decides.
  */
-const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack, publicAgentCreationPack, predictionMarketsPack];
+const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack, publicAgentCreationPack, predictionMarketsPack, sleeperPack];
 
 /** Agents the Dispatcher should never route a goal to: itself, and utility agents with no real conversational job (ADR 0008). */
 const NOT_DISPATCHABLE = new Set(["dispatcher", "inkbox-send", "demo"]);
@@ -74,6 +83,22 @@ export function createDefaultBrowserClient(siteName: string): BrowserClient {
 }
 
 /**
+ * What the Sleeper Tools run against (ADR 0021). The read client needs no
+ * credentials. The write client exists only when SLEEPER_TOKEN is set — there
+ * is no fake fallback, so nothing can report a write that didn't happen. The
+ * CLI passes a file-backed pick'em store; the default is in-memory.
+ */
+export interface SleeperDeps {
+  readonly readClient: SleeperReadClient;
+  readonly writeClient: SleeperWriteClient | undefined;
+  readonly pickemStore: PickemStore;
+}
+
+export function defaultSleeperDeps(): SleeperDeps {
+  return { readClient: createRealSleeperClient(), writeClient: createSleeperWriteClientFromEnv(), pickemStore: new InMemoryPickemStore() };
+}
+
+/**
  * Builds the default Registry: engine-level Providers and Tools (available
  * to every Pack) plus whichever Packs are enabled. This function never
  * hardcodes a domain-specific Agent itself — that's exactly what Packs are
@@ -92,6 +117,7 @@ export function loadDefaultConfig(
   jobBoardClient: BrowserClient = createPublicBrowserClient("job-boards"),
   graphStore: GraphStore = new InMemoryGraphStore(),
   polymarketClient: PolymarketClient = createPolymarketClientFromEnv(),
+  sleeper: SleeperDeps = defaultSleeperDeps(),
 ): Registry {
   const registry = new Registry();
 
@@ -122,6 +148,14 @@ export function loadDefaultConfig(
   registry.registerTool(createPolymarketGetQuoteTool(polymarketClient));
   registry.registerTool(createPolymarketPreviewOrderTool(polymarketClient));
   registry.registerTool(createPolymarketPlaceOrderTool(polymarketClient));
+  registry.registerTool(createSleeperFindLeaguesTool(sleeper.readClient));
+  registry.registerTool(createSleeperMatchupPreviewTool(sleeper.readClient));
+  registry.registerTool(createSleeperWaiverRecommendationsTool(sleeper.readClient));
+  registry.registerTool(createSleeperPreviewWriteTool(sleeper.readClient));
+  registry.registerTool(createSleeperExecuteWriteTool(sleeper.readClient, sleeper.writeClient));
+  registry.registerTool(createPickemResearchLineTool(sleeper.readClient));
+  registry.registerTool(createPickemBankrollStatusTool(sleeper.pickemStore));
+  registry.registerTool(createPickemBuildSlipTool(sleeper.pickemStore));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);
