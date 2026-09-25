@@ -48,13 +48,16 @@ import { createSleeperExecuteWriteTool, createSleeperPreviewWriteTool } from "..
 import { createPickemBankrollStatusTool, createPickemBuildSlipTool, createPickemResearchLineTool } from "../tools/pickem-tools";
 import { InMemoryPickemStore, type PickemStore } from "../sleeper/pickem/store";
 import { sleeperPack } from "../packs/sleeper/pack";
+import { createSettlementsDeps, type SettlementsDeps } from "../settlements/deps";
+import { createSettlementsTools } from "../tools/settlements-tools";
+import { settlementsPack } from "../packs/settlements/pack";
 
 /**
  * Packs enabled by default. A future CLI flag or config file can change
  * which Packs load without touching the engine — this list is the only
  * place that currently decides.
  */
-const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack, publicAgentCreationPack, predictionMarketsPack, sleeperPack];
+const ENABLED_PACKS: readonly Pack[] = [coreDemoPack, personalAssistantPack, dispatcherPack, careerAdvisorPack, aiResearchPack, jobSearchPack, publicAgentCreationPack, predictionMarketsPack, sleeperPack, settlementsPack];
 
 /** Agents the Dispatcher should never route a goal to: itself, and utility agents with no real conversational job (ADR 0008). */
 const NOT_DISPATCHABLE = new Set(["dispatcher", "inkbox-send", "demo"]);
@@ -94,6 +97,15 @@ export interface SleeperDeps {
   readonly pickemStore: PickemStore;
 }
 
+/**
+ * Optional dependencies passed as one named bag, so adding a domain doesn't
+ * grow loadDefaultConfig's positional parameter list any further.
+ */
+export interface LoadOptions {
+  /** Settlement tracker and research sources (ADR 0022). Default: an in-memory tracker seeded with the owner's pipeline. */
+  readonly settlements?: SettlementsDeps;
+}
+
 export function defaultSleeperDeps(): SleeperDeps {
   return { readClient: createRealSleeperClient(), writeClient: createSleeperWriteClientFromEnv(), pickemStore: new InMemoryPickemStore() };
 }
@@ -118,6 +130,7 @@ export function loadDefaultConfig(
   graphStore: GraphStore = new InMemoryGraphStore(),
   polymarketClient: PolymarketClient = createPolymarketClientFromEnv(),
   sleeper: SleeperDeps = defaultSleeperDeps(),
+  options: LoadOptions = {},
 ): Registry {
   const registry = new Registry();
 
@@ -156,6 +169,7 @@ export function loadDefaultConfig(
   registry.registerTool(createPickemResearchLineTool(sleeper.readClient));
   registry.registerTool(createPickemBankrollStatusTool(sleeper.pickemStore));
   registry.registerTool(createPickemBuildSlipTool(sleeper.pickemStore));
+  for (const tool of createSettlementsTools(options.settlements ?? createSettlementsDeps())) registry.registerTool(tool);
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);
