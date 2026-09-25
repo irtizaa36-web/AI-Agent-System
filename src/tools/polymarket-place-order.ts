@@ -1,5 +1,5 @@
 import type { Tool } from "./tool";
-import { ORDER_INTENTS, TIMES_IN_FORCE, orderNotional, parseLimitOrderRequest, type PolymarketClient } from "../integrations/polymarket/client";
+import { ORDER_INTENTS, TIMES_IN_FORCE, assertWithinCap, orderNotional, parseLimitOrderRequest, type PolymarketClient } from "../integrations/polymarket/client";
 
 export const POLYMARKET_ORDER_INPUT_SCHEMA: Record<string, unknown> = {
   type: "object",
@@ -23,7 +23,10 @@ export const POLYMARKET_ORDER_INPUT_SCHEMA: Record<string, unknown> = {
  * `requiresApproval` is unconditionally true — unlike browser-submit-form
  * (ADR 0018) there is no env var that removes this gate. The Orchestrator
  * never auto-executes it; it only runs via approveAndExecute after a human
- * has matched every field of the order exactly.
+ * has matched every field of the order exactly. The per-order spending cap
+ * (POLYMARKET_MAX_ORDER_USD, default $10) is re-checked here at execution
+ * time, so an order approved under a higher cap still can't go through
+ * after the cap is lowered.
  */
 export function createPolymarketPlaceOrderTool(client: PolymarketClient): Tool {
   return {
@@ -35,6 +38,7 @@ export function createPolymarketPlaceOrderTool(client: PolymarketClient): Tool {
     async execute(input: unknown): Promise<string> {
       const parsed = parseLimitOrderRequest(input);
       if (!parsed.ok) throw new Error(`polymarket-place-order: ${parsed.error}`);
+      assertWithinCap(parsed.request, "polymarket-place-order");
       const result = await client.placeOrder(parsed.request);
       return [
         "placed:true",

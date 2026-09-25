@@ -1,8 +1,9 @@
 /**
- * The Polymarket US trading port (ADR 0019). Deliberately narrow: preview an
- * order (safe, read-only) and place one (consequential). Nothing here can
- * cancel, modify, close a position, or move funds — those are separate
- * decisions, not built until a real need justifies them.
+ * The Polymarket US port (ADRs 0019, 0020). Deliberately narrow: search
+ * markets and read a price (public, read-only), preview an order (safe),
+ * and place one (consequential). Nothing here can cancel, modify, close a
+ * position, or move funds — those are separate decisions, not built until
+ * a real need justifies them.
  *
  * Only limit orders are supported. A limit order's worst-case cost
  * (price × quantity) is fixed at the moment a human approves it; a market
@@ -52,7 +53,34 @@ export interface PlacedOrder {
   readonly executionCount: number;
 }
 
+/** One tradable Yes/No market found by a search. */
+export interface MarketSummary {
+  readonly eventTitle: string;
+  readonly marketSlug: string;
+  /** The market's question, e.g. "Will Kansas City Chiefs win the second half?". */
+  readonly marketTitle: string;
+  /** The side the question is about, e.g. "Kansas City Chiefs". */
+  readonly outcome: string;
+  readonly active: boolean;
+  readonly closed: boolean;
+}
+
+/** Live prices for one market, as USD-per-share decimal strings; a field is absent when Polymarket didn't report it. */
+export interface MarketQuote {
+  readonly marketSlug: string;
+  readonly state?: string;
+  readonly bestBid?: string;
+  readonly bestAsk?: string;
+  /** What one "Yes" (long) share costs to buy right now. */
+  readonly longQuote?: string;
+  /** What one "No" (short) share costs to buy right now. */
+  readonly shortQuote?: string;
+  readonly lastTrade?: string;
+}
+
 export interface PolymarketClient {
+  searchMarkets(query: string): Promise<readonly MarketSummary[]>;
+  getQuote(marketSlug: string): Promise<MarketQuote>;
   previewOrder(request: LimitOrderRequest): Promise<PreviewedOrder>;
   placeOrder(request: LimitOrderRequest): Promise<PlacedOrder>;
 }
@@ -106,7 +134,39 @@ export function parseLimitOrderRequest(value: unknown): { ok: true; request: Lim
   };
 }
 
-/** Worst-case cash outlay for a buy, or worst-case proceeds for a sell, formatted as dollars. */
+/**
+ * The dollars at stake in an order, formatted as dollars. For LONG intents
+ * this is exactly price × quantity. For SHORT intents it isn't verified
+ * whether Polymarket reads the price as the Yes price or the No price, so
+ * this takes the worse of the two (max(price, 1 − price) × quantity) and
+ * the spending cap can never under-count a short order.
+ */
 export function orderNotional(request: LimitOrderRequest): string {
-  return (Number(request.price.value) * request.quantity).toFixed(2);
+  const price = Number(request.price.value);
+  const perShare = request.intent.endsWith("_SHORT") ? Math.max(price, 1 - price) : price;
+  return (perShare * request.quantity).toFixed(2);
+}
+
+export const DEFAULT_MAX_ORDER_USD = 10;
+
+/**
+ * The per-order spending cap: POLYMARKET_MAX_ORDER_USD if it's a positive
+ * number, otherwise $10. Read on every call rather than at startup, so
+ * lowering it takes effect without rebuilding anything.
+ */
+export function maxOrderUsd(): number {
+  const configured = Number(process.env["POLYMARKET_MAX_ORDER_USD"]);
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_MAX_ORDER_USD;
+}
+
+/** Throws when an order's notional exceeds the cap — checked before preview and again before placing. */
+export function assertWithinCap(request: LimitOrderRequest, toolName: string): void {
+  const notional = Number(orderNotional(request));
+  const cap = maxOrderUsd();
+  if (notional > cap) {
+    throw new Error(
+      `${toolName}: this order is $${notional.toFixed(2)}, over the $${cap.toFixed(2)} per-order cap (POLYMARKET_MAX_ORDER_USD). ` +
+        "Use a smaller quantity, or have the owner raise the cap.",
+    );
+  }
 }

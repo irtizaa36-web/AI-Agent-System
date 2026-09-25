@@ -104,18 +104,96 @@ test("an API error surfaces Polymarket's message and status", async () => {
   );
 });
 
-test("createPolymarketClientFromEnv needs both credentials", () => {
+test("without both credentials, public reads work but orders are refused before any request", async () => {
   const saved = { id: process.env["POLYMARKET_KEY_ID"], secret: process.env["POLYMARKET_SECRET_KEY"] };
   try {
     delete process.env["POLYMARKET_SECRET_KEY"];
     process.env["POLYMARKET_KEY_ID"] = "k";
-    assert.equal(createPolymarketClientFromEnv(), undefined);
-    process.env["POLYMARKET_SECRET_KEY"] = testSecret().secret;
-    assert.ok(createPolymarketClientFromEnv());
+    const client = createPolymarketClientFromEnv();
+    const urls: string[] = [];
+    await withFetch(
+      (url) => {
+        urls.push(url);
+        return new Response(JSON.stringify({ marketData: { marketSlug: "m", bestAsk: { value: "0.5" } } }), { status: 200 });
+      },
+      async () => {
+        assert.equal((await client.getQuote("m")).bestAsk, "0.5");
+        await assert.rejects(client.placeOrder(ORDER), /not configured/);
+        await assert.rejects(client.previewOrder(ORDER), /not configured/);
+      },
+    );
+    assert.deepEqual(urls, ["https://gateway.polymarket.us/v1/markets/m/bbo"]);
   } finally {
     if (saved.id === undefined) delete process.env["POLYMARKET_KEY_ID"];
     else process.env["POLYMARKET_KEY_ID"] = saved.id;
     if (saved.secret === undefined) delete process.env["POLYMARKET_SECRET_KEY"];
     else process.env["POLYMARKET_SECRET_KEY"] = saved.secret;
   }
+});
+
+test("getQuote reads the live marketData envelope, including Yes/No prices", async () => {
+  const client = createRealPolymarketClient({ gatewayUrl: "https://gw.test" });
+  // Trimmed from a real gateway response, 2026-09-25.
+  const body = {
+    marketData: {
+      marketSlug: "atc-nfl-kc-lv-2026-10-04-winner-2h-kc",
+      lastTradePx: { value: "0.7400", currency: "USD" },
+      bestAsk: { value: "0.6900", currency: "USD" },
+      bestBid: { value: "0.2500", currency: "USD" },
+      longQuote: { value: "0.6900", currency: "USD" },
+      shortQuote: { value: "0.75", currency: "USD" },
+      state: "MARKET_STATE_OPEN",
+    },
+  };
+  const quote = await withFetch(() => new Response(JSON.stringify(body), { status: 200 }), () => client.getQuote("atc-nfl-kc-lv-2026-10-04-winner-2h-kc"));
+
+  assert.deepEqual(quote, {
+    marketSlug: "atc-nfl-kc-lv-2026-10-04-winner-2h-kc",
+    state: "MARKET_STATE_OPEN",
+    bestBid: "0.2500",
+    bestAsk: "0.6900",
+    longQuote: "0.6900",
+    shortQuote: "0.75",
+    lastTrade: "0.7400",
+  });
+});
+
+test("searchMarkets flattens open markets, using the question as the title and dropping closed ones", async () => {
+  const client = createRealPolymarketClient({ gatewayUrl: "https://gw.test" });
+  let requested = "";
+  const markets = await withFetch(
+    (url) => {
+      requested = url;
+      return new Response(
+        JSON.stringify({
+          events: [
+            {
+              title: "KC Chiefs vs. LV Raiders",
+              markets: [
+                { slug: "atc-kc-2h", question: "Will Kansas City Chiefs win the second half?", title: "Kansas City Chiefs", active: true, closed: false },
+                { slug: "atc-kc-old", question: "Old market", title: "Kansas City Chiefs", active: true, closed: true },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    },
+    () => client.searchMarkets("chiefs super bowl"),
+  );
+
+  const url = new URL(requested);
+  assert.equal(url.pathname, "/v1/search");
+  assert.equal(url.searchParams.get("query"), "chiefs super bowl");
+  assert.equal(url.searchParams.get("status"), "active");
+  assert.deepEqual(markets, [
+    {
+      eventTitle: "KC Chiefs vs. LV Raiders",
+      marketSlug: "atc-kc-2h",
+      marketTitle: "Will Kansas City Chiefs win the second half?",
+      outcome: "Kansas City Chiefs",
+      active: true,
+      closed: false,
+    },
+  ]);
 });

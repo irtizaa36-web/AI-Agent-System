@@ -1,5 +1,5 @@
 import type { Tool } from "./tool";
-import { orderNotional, parseLimitOrderRequest, type PolymarketClient } from "../integrations/polymarket/client";
+import { assertWithinCap, maxOrderUsd, orderNotional, parseLimitOrderRequest, type PolymarketClient } from "../integrations/polymarket/client";
 import { POLYMARKET_ORDER_INPUT_SCHEMA } from "./polymarket-place-order";
 
 /**
@@ -17,6 +17,7 @@ export function createPolymarketPreviewOrderTool(client: PolymarketClient): Tool
     async execute(input: unknown): Promise<string> {
       const parsed = parseLimitOrderRequest(input);
       if (!parsed.ok) throw new Error(`polymarket-preview-order: ${parsed.error}`);
+      assertWithinCap(parsed.request, "polymarket-preview-order");
       const preview = await client.previewOrder(parsed.request);
       return [
         "previewed:true",
@@ -28,6 +29,7 @@ export function createPolymarketPreviewOrderTool(client: PolymarketClient): Tool
         `price:${preview.price.value} ${preview.price.currency}`,
         `quantity:${preview.quantity}`,
         `notionalUSD:${orderNotional(parsed.request)}`,
+        `perOrderCapUSD:${maxOrderUsd().toFixed(2)}`,
         `tif:${parsed.request.tif}`,
         `state:${preview.state}`,
       ].join("\n");
