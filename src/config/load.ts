@@ -20,6 +20,10 @@ import { RealFormFillingClient } from "../integrations/browser/real-form-client"
 import { createBrowserListFormFieldsTool } from "../tools/browser-list-form-fields";
 import { createBrowserFillFormPreviewTool } from "../tools/browser-fill-form-preview";
 import { createBrowserSubmitFormTool } from "../tools/browser-submit-form";
+import type { PolymarketClient } from "../integrations/polymarket/client";
+import { UnconfiguredPolymarketClient, createPolymarketClientFromEnv } from "../integrations/polymarket/real-client";
+import { createPolymarketPreviewOrderTool } from "../tools/polymarket-preview-order";
+import { createPolymarketPlaceOrderTool } from "../tools/polymarket-place-order";
 import { createReadJobBoardPageTool } from "../tools/read-job-board-page";
 import { withSummarization } from "../tools/with-summarization";
 import { createGraphRecallTool } from "../tools/graph-recall";
@@ -84,6 +88,7 @@ export function loadDefaultConfig(
   formFillingClient: FormFillingClient = new RealFormFillingClient(),
   jobBoardClient: BrowserClient = createPublicBrowserClient("job-boards"),
   graphStore: GraphStore = new InMemoryGraphStore(),
+  polymarketClient: PolymarketClient = createPolymarketClientFromEnv() ?? new UnconfiguredPolymarketClient(),
 ): Registry {
   const registry = new Registry();
 
@@ -110,6 +115,10 @@ export function loadDefaultConfig(
   registry.registerTool(withSummarization(createReadJobBoardPageTool(jobBoardClient), summarization));
   registry.registerTool(createGraphRecallTool(graphStore));
   registry.registerTool(createGraphRecordTool(graphStore));
+  // Registered but attached to no Agent yet (ADR 0019): which Agent may
+  // trade, and on whose instructions, is a separate product decision.
+  registry.registerTool(createPolymarketPreviewOrderTool(polymarketClient));
+  registry.registerTool(createPolymarketPlaceOrderTool(polymarketClient));
 
   for (const pack of ENABLED_PACKS) {
     registry.registerPack(pack.name);
