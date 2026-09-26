@@ -38,9 +38,14 @@ function cliDeps(): { deps: CliDeps; out: string[]; err: string[] } {
 
 // ---------- queue auto-advance ----------
 
+/** Seed with Buyer 1's confirmation released, so the chair's pickup slot is open for holds. */
+function openSlot(doc: TrackerDocument): TrackerDocument {
+  return { ...doc, leads: doc.leads.map((l) => (l.id === "buyer-1" ? { ...l, status: "contacted" as const, pickupAt: undefined } : l)) };
+}
+
 test("queue: expired hold drops the lead back and advances the next one", async () => {
   const state = await openSeeded();
-  let doc = state.document;
+  let doc = openSlot(state.document);
   // Put Buyer 2 on an expired hold.
   ({ doc } = holdLead(doc, "chair", "buyer-2", "2026-09-25T00:00:00Z"));
   const { doc: d2, result } = advanceExpiredHolds(doc, "chair", "2026-09-27T00:00:00Z");
@@ -48,6 +53,7 @@ test("queue: expired hold drops the lead back and advances the next one", async 
   assert.equal(result.expired[0].id, "buyer-2");
   assert.equal(result.expired[0].status, "contacted");
   assert.ok(result.advanced, "next lead should advance");
+  // Buyer 1 is owner-handled and Buyer 2 just lapsed, so Buyer 3 is next in line.
   assert.equal(result.advanced!.id, "buyer-3");
   assert.equal(result.advanced!.status, "hold");
   assert.ok(result.advanced!.holdExpiresAt);
@@ -56,7 +62,7 @@ test("queue: expired hold drops the lead back and advances the next one", async 
 
 test("queue: live holds are untouched", async () => {
   const state = await openSeeded();
-  let doc = state.document;
+  let doc = openSlot(state.document);
   ({ doc } = holdLead(doc, "chair", "buyer-2", NOW));
   const { result } = advanceExpiredHolds(doc, "chair", NOW);
   assert.equal(result.expired.length, 0);
@@ -266,6 +272,7 @@ test("channels: draftSmsReply screens scams before rendering", async () => {
 
 const SIDECAR: IntakeSidecar = {
   item: "gaming chair",
+  confidence: 0.9,
   brand: "Generic",
   condition: "used_good",
   flaws: ["small scuff on armrest"],
@@ -335,7 +342,10 @@ test("rentals: booking drafts pending-approval, approve flips to booked", async 
   }, NOW);
   assert.equal(booking.status, "pending-approval");
   assert.equal(booking.deposit.amount, 30);
-  const { booking: b2 } = approveBooking(d1, booking.id, NOW);
+  // Not confirmable until rate + deposit + a specific pickup time are all agreed.
+  assert.throws(() => approveBooking(d1, booking.id, NOW), /not agreed: rate, deposit, specific pickup time/);
+  const agreed = { ...d1, leads: d1.leads.map((l) => (l.id === "renter-1" ? { ...l, rental: { rateAgreed: true, depositCommitted: true, depositMethod: "Venmo", pickupTime: "Sat 10am" } } : l)) };
+  const { booking: b2 } = approveBooking(agreed, booking.id, NOW);
   assert.equal(b2.status, "booked");
 });
 

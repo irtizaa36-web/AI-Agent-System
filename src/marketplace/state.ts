@@ -71,6 +71,7 @@ function validateDocument(parsed: unknown): TrackerDocument {
   if (typeof doc["buyers"] !== "object" || doc["buyers"] === null) doc["buyers"] = {};
   if (typeof doc["watermarks"] !== "object" || doc["watermarks"] === null) doc["watermarks"] = {};
   if (typeof doc["summaries"] !== "object" || doc["summaries"] === null) doc["summaries"] = {};
+  if (typeof doc["ownerActivity"] !== "object" || doc["ownerActivity"] === null) doc["ownerActivity"] = {};
   if (!Array.isArray(doc["activity"])) doc["activity"] = [];
   for (const l of doc["leads"] as Array<Record<string, unknown>>) {
     if (l["awaiting"] !== "them" && l["awaiting"] !== "us") l["awaiting"] = "them";
@@ -330,6 +331,7 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
     buyers: {},
     watermarks: {},
     summaries: {},
+    ownerActivity: {},
     activity: [
       { at: now, kind: "system", text: "Marketplace Agent v2 seeded: chair ($90) + BISSELL rental live; keyboard/mouse and tint hunts cancelled." },
     ],

@@ -50,8 +50,13 @@ export function dueNudges(doc: TrackerDocument, nowIso: string): DueNudge[] {
  * Final-call nudges retire the lead to "dead" after staging — the queue
  * moves on without him having to ask.
  */
-export function sendDueNudges(doc: TrackerDocument, nowIso: string): { doc: TrackerDocument; staged: DueNudge[] } {
-  const due = dueNudges(doc, nowIso);
+export function sendDueNudges(
+  doc: TrackerDocument,
+  nowIso: string,
+  opts: { readonly skipThreads?: ReadonlySet<string> } = {},
+): { doc: TrackerDocument; staged: DueNudge[] } {
+  // Owner watch-only threads get no nudge (state untouched, so it comes due again after the window).
+  const due = dueNudges(doc, nowIso).filter((d) => !opts.skipThreads?.has(d.lead.threadId));
   let next = doc;
   const staged: DueNudge[] = [];
   for (const { lead, level, template } of due) {

@@ -13,7 +13,7 @@ short. Questions go to him one at a time, MCQ-style.
 **SELLING** — `marketplace selling …`
 `status` · `leads` · `confirm` · `reply` · `intake` · `book` ·
 `approve-booking` · `advance` · `sold` · `outbox [flush]` · `sent` ·
-`nudge-due` · `health`
+`nudge-due` · `health` · `offer` · `floor` · `rental`
 
 **BUYING** — `marketplace buying …`
 `status` · `start-hunt` · `pause-hunt` · `cancel-hunt` · `leads`
@@ -76,20 +76,67 @@ PayPal-email phishing, QR-payment prompts): escalate, never reply.
 
 - Confirm sales at the listed/firm price: autonomous (`selling confirm`).
 - Hold placement, hold expiry, queue advance: autonomous. Unconfirmed
-  holds expire; the just-expired lead never re-advances in the same pass.
+  holds expire after 12h by default; the queue advances in strict
+  first-in-line order and the just-expired lead never re-advances in the
+  same pass.
 - Auto-nudge cadence: stale awaiting-them threads get escalating nudges —
   gentle (24h) → firm (72h) → final-call (7d), then the lead retires. He
   never has to say "nudge them" again. `selling nudge-due` (also inside
   `sweep`).
 - Buyer reliability: ghost/lowball/flake signals feed a 0–100 score;
-  flakes sink in the queue automatically; below 30, firmly decline without
-  asking.
+  flakes sink in the `selling leads` view; below 30, firmly decline
+  without asking. (Hold auto-advance ignores the score: strict line order.)
 - Self-healing: zero inquiries in 7 days → one-tap price-drop suggestion
   (`selling health`); listings missing from `my-listings` retire.
 - Pickup messages auto-append the carry constraint; address-
   like text is rejected by the template guard.
 - Owner-activity reconciliation: if Toozy (FB id from the `OWNER_FB_ID` env var) replies
   in a thread himself, sync state and stand down — never double-message.
+
+## Karen upgrades (config: `.orchestrator/marketplace/config.json`, local only)
+
+Defaults live in `src/marketplace/config.ts`; the local JSON file may
+override any value. No feature flag is turned on by default.
+
+- **Negotiation bands** (`selling offer <lead> --amount N`, and automatic
+  in `channels poll`). Under 10% below asking → polite hold, restate the
+  firm price. 10–25% below → exactly ONE firm counter at the listing's
+  floor (`selling floor --listing <id> --price N`), framed as the bottom
+  line; later offers in that band get the bottom line restated. 25%+ below
+  → decline, restate asking. After 2 rounds with no agreement → stop and
+  escalate (`negotiation-stalled`), no more messages. Never below the
+  floor. No floor set → the counter band gets the polite hold.
+- **Queue timeouts.** A hold without a specific pickup time lapses after
+  `holdTimeoutHours` (default 12). The lapsed buyer is told; the next buyer
+  in strict first-in-line order is offered the same terms. One active hold
+  per item, ever; nobody advances past a confirmed sale.
+- **Watch-only.** If the owner wrote in a thread in the last 60 minutes
+  (`ownerActivity.watchOnlyMinutes`), the agent only updates state there:
+  nothing is staged, and `outbox flush` marks anything pending for that
+  thread `suppressed`. Owner vs agent is decided by sender id
+  (`OWNER_FB_ID`, optional `AGENT_FB_ID`) plus matching the agent's own
+  sent outbox messages.
+- **Rental decision tree** (`selling rental <lead> --message "…"`, and
+  automatic in `channels poll`). Delivery / meet elsewhere / shipping →
+  polite decline, pickup in the Highland Village area only. Then rate →
+  $30 refundable deposit (Venmo / Zelle / cash at pickup; never waived) →
+  a specific pickup time ("tomorrow sometime" isn't one). A booking can be
+  approved ONLY when all three are agreed.
+- **Photo-first intake gate.** The sidecar must state `confidence` (0–1)
+  and list any `unknownSpecs`. Below 0.7, missing, or any unknown spec →
+  `selling intake` prints 1–2 clarifying questions and drafts nothing.
+  Never draft with guessed specs.
+- **Stale auto-drop** (`staleDrop`): DISABLED by default. When enabled,
+  after `daysStale` with no new inquiry, cut `dropPercent` (rounded to $5),
+  never below the floor (listing floor, else `floorFraction` of the
+  original price), and only where the ledger grants `price-change`.
+- **Digest** (`marketplace digest`): four fixed sections — active listings
+  + new inquiries · negotiations · rentals · action needed.
+- **Reliability.** CLI and model output is parsed leniently (code fences,
+  log noise). Every parse failure writes one `marketplace.parse_failure`
+  JSON record to stderr with the source and a raw excerpt. Bad items,
+  bad events and failing sweep steps are skipped and reported; one bad
+  payload never crashes a run.
 
 ## Messenger approval-card batching
 

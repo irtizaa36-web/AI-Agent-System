@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import type { TrackerDocument } from "../types";
 import { analyzeComps, type CompSearchRunner } from "./comps";
+import { DEFAULT_CONFIG, type IntakeConfig } from "../config";
+import { logParseFailure, parseJsonLenient } from "../parse";
 
 /**
  * SELLING — photo-first intake (ADR 0024). This is the PRIMARY selling entry
@@ -52,6 +54,18 @@ export interface IntakeSidecar {
   readonly compBasis: string;
   readonly category?: string;
   readonly obo?: boolean;
+  /**
+   * The operating agent's confidence (0..1) that it identified the item and
+   * its specs correctly from the photos. Required: a missing value is
+   * treated as low confidence.
+   */
+  readonly confidence?: number;
+  /** Specs the photos could not establish (e.g. "model number", "size"). Any entry blocks drafting. */
+  readonly unknownSpecs?: readonly string[];
+  /** Questions the agent would ask the owner to pin down the item (the first 1–2 are used). */
+  readonly clarifyingQuestions?: readonly string[];
+  /** Optional hints the owner sent with the photos, carried through for the record. */
+  readonly ownerHints?: string;
 }
 
 export interface IntakeOverrides {
@@ -101,13 +115,46 @@ export function guessCategory(item: string): string {
 
 export function loadSidecar(path: string): IntakeSidecar {
   if (!existsSync(path)) throw new IntakeError(`Sidecar not found: ${path}`);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(path, "utf-8"));
-  } catch (error) {
-    throw new IntakeError(`Sidecar ${path} is not valid JSON (${(error as Error).message}).`);
+  // The sidecar is model output: tolerate code fences / chatter around the JSON, log the raw text when it's unreadable.
+  const raw = readFileSync(path, "utf-8");
+  const parsed = parseJsonLenient(raw, "intake.sidecar");
+  if (!parsed.ok) throw new IntakeError(`Sidecar ${path} is not valid JSON (${parsed.error}). The raw output was logged.`);
+  if (typeof parsed.value !== "object" || parsed.value === null || Array.isArray(parsed.value)) {
+    logParseFailure("intake.sidecar", "sidecar is not a JSON object", raw);
+    throw new IntakeError(`Sidecar ${path} must be a JSON object.`);
   }
-  return parsed as IntakeSidecar;
+  const sidecar = parsed.value as Record<string, unknown>;
+  if (!Array.isArray(sidecar["flaws"])) sidecar["flaws"] = [];
+  return sidecar as unknown as IntakeSidecar;
+}
+
+export type IntakeReadiness =
+  | { readonly ready: true }
+  | { readonly ready: false; readonly reason: string; readonly questions: readonly string[] };
+
+/**
+ * PHOTO-FIRST GATE (Karen upgrade 5): draft only when the item is
+ * identified with confidence and no spec is a guess. Otherwise return the
+ * 1–2 clarifying questions to ask the owner first. NEVER draft a listing
+ * with guessed specs.
+ */
+export function intakeReadiness(sidecar: IntakeSidecar, config: IntakeConfig = DEFAULT_CONFIG.intake): IntakeReadiness {
+  const unknown = (sidecar.unknownSpecs ?? []).filter((x) => typeof x === "string" && x.trim());
+  const confidence = typeof sidecar.confidence === "number" && Number.isFinite(sidecar.confidence) ? sidecar.confidence : undefined;
+  const reasons: string[] = [];
+  if (confidence === undefined) reasons.push("no identification confidence stated");
+  else if (confidence < config.minConfidence) reasons.push(`identification confidence ${confidence} is below ${config.minConfidence}`);
+  if (!sidecar.item || !String(sidecar.item).trim()) reasons.push("item not identified");
+  if (unknown.length > 0) reasons.push(`unconfirmed specs: ${unknown.join(", ")}`);
+  if (reasons.length === 0) return { ready: true };
+
+  const asked = (sidecar.clarifyingQuestions ?? []).filter((q) => typeof q === "string" && q.trim());
+  const generated = unknown.map((spec) => `What's the ${spec}? I couldn't confirm it from the photos.`);
+  if (!sidecar.item || confidence === undefined || confidence < config.minConfidence) {
+    generated.unshift("What exactly is this item (brand and model, if you know)?");
+  }
+  const questions = [...asked, ...generated].slice(0, Math.max(1, config.maxQuestions));
+  return { ready: false, reason: reasons.join("; "), questions };
 }
 
 /** Validate photos + sidecar; returns errors (blockers) and warnings (assumptions). */
@@ -145,6 +192,10 @@ export function termsFooter(firm: boolean, payment: string, meetup: string): str
 }
 
 export function buildIntakeDraft(photos: readonly string[], sidecar: IntakeSidecar, overrides: IntakeOverrides = {}): IntakeDraft {
+  const readiness = intakeReadiness(sidecar);
+  if (!readiness.ready) {
+    throw new IntakeError(`Intake needs answers before drafting (${readiness.reason}):\n- ${readiness.questions.join("\n- ")}`);
+  }
   const { errors } = validateIntake(photos, sidecar, overrides);
   if (errors.length > 0) throw new IntakeError(`Intake blocked:\n- ${errors.join("\n- ")}`);
 
@@ -156,7 +207,7 @@ export function buildIntakeDraft(photos: readonly string[], sidecar: IntakeSidec
   const category = categoryAssumed ? guessCategory(sidecar.item || title) : (overrides.category ?? sidecar.category)!;
   const meetup = DEFAULT_MEETUP.label;
 
-  const flawLine = sidecar.flaws.length > 0 ? ` Flaws: ${sidecar.flaws.join("; ")}.` : "";
+  const flawLine = (sidecar.flaws ?? []).length > 0 ? ` Flaws: ${sidecar.flaws.join("; ")}.` : "";
   const description = `${sidecar.suggestedDescription.trim()}${flawLine}\n\n${termsFooter(firm, DEFAULT_PAYMENT, meetup)}`;
 
   for (const marker of ADDRESS_MARKERS) {
@@ -213,17 +264,15 @@ export function realFacebookCliRunner(args: readonly string[]): Promise<string> 
 }
 
 function parseCreateResponse(stdout: string): { listingId?: string; message: string; productUrl?: string } {
-  try {
-    const parsed = JSON.parse(stdout);
-    const data = parsed?.data ?? parsed;
-    return {
-      listingId: data?.listing_id ? String(data.listing_id) : undefined,
-      message: String(data?.message ?? parsed?.message ?? stdout).slice(0, 300),
-      productUrl: data?.product_url ? String(data.product_url) : undefined,
-    };
-  } catch {
-    return { message: stdout.slice(0, 300) };
-  }
+  const parsed = parseJsonLenient(stdout, "intake.publish");
+  if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return { message: stdout.slice(0, 300) };
+  const root = parsed.value as Record<string, any>;
+  const data = root.data ?? root;
+  return {
+    listingId: data?.listing_id ? String(data.listing_id) : undefined,
+    message: String(data?.message ?? root.message ?? stdout).slice(0, 300),
+    productUrl: data?.product_url ? String(data.product_url) : undefined,
+  };
 }
 
 /**

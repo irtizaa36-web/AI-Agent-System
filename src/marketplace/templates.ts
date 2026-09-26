@@ -85,6 +85,64 @@ const TEMPLATES: Record<string, TemplateDef> = {
     pickupRelated: false,
     body: "Sounds good {{name}} — let me lock in the pickup details and I'll get right back to you shortly!",
   },
+  // --- Negotiation bands (selling/negotiation.ts) ---
+  "offer-hold": {
+    name: "offer-hold",
+    pickupRelated: false,
+    body: "Hey {{name}} — appreciate the offer, but the {{item}} is firm at ${{price}}. It's yours at that price if you want it!",
+  },
+  "offer-counter": {
+    name: "offer-counter",
+    pickupRelated: false,
+    body: "Hey {{name}} — I can't do ${{offer}}, but I can do ${{counter}}. That's my bottom line on the {{item}}. Let me know!",
+  },
+  "offer-bottom-line": {
+    name: "offer-bottom-line",
+    pickupRelated: false,
+    body: "Hey {{name}} — ${{counter}} really is my bottom line on the {{item}}. Let me know if that works!",
+  },
+  "offer-decline": {
+    name: "offer-decline",
+    pickupRelated: false,
+    body: "Hey {{name}} — thanks, but I'll have to pass at ${{offer}}. The {{item}} is ${{price}}.",
+  },
+  // --- Queue timeouts (selling/queue.ts) ---
+  "hold-lapsed": {
+    name: "hold-lapsed",
+    pickupRelated: false,
+    body: "Hey {{name}} — I held the {{item}} for you but didn't get a pickup time, so the hold has lapsed and I'm moving to the next person in line. Feel free to reach out if it's still around later!",
+  },
+  "hold-offer": {
+    name: "hold-offer",
+    pickupRelated: true,
+    body: "Hey {{name}} — good news, the {{item}} opened up and you're next in line. Same terms: ${{price}}, {{payment}}, pickup {{meetup}}. I can hold it {{holdHours}} hours — what specific time works for you?",
+  },
+  // --- Rental decision tree (selling/rental_tree.ts) ---
+  "rental-rate": {
+    name: "rental-rate",
+    pickupRelated: false,
+    body: "Hey {{name}}! It's ${{dayRate}}/day plus a ${{deposit}} refundable deposit ({{depositMethods}}). Does that rate work for you?",
+  },
+  "rental-need-time": {
+    name: "rental-need-time",
+    pickupRelated: false,
+    body: "Hey {{name}} — happy to set that up! What specific time works for pickup (like \"Saturday at 2pm\")? I need an exact time to lock it in.",
+  },
+  "rental-need-deposit": {
+    name: "rental-need-deposit",
+    pickupRelated: false,
+    body: "Hey {{name}} — to confirm a booking I need the ${{deposit}} refundable deposit agreed first ({{depositMethods}}). It comes back in full when the machine is returned. Does that work?",
+  },
+  "rental-no-delivery": {
+    name: "rental-no-delivery",
+    pickupRelated: false,
+    body: "Hey {{name}} — sorry, I can't deliver, ship, or meet elsewhere. Pickup and return are in the {{pickupArea}} only. Would that work for you?",
+  },
+  "rental-ready": {
+    name: "rental-ready",
+    pickupRelated: true,
+    body: "Hey {{name}} — perfect: ${{dayRate}}/day, ${{deposit}} refundable deposit ({{depositMethod}}), pickup {{pickupTime}} in the {{pickupArea}}. Let me get that confirmed and I'll get right back to you!",
+  },
   "sms-availability": {
     name: "sms-availability",
     pickupRelated: false,

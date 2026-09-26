@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Listing, ListingKind, TrackerDocument } from "../types";
 import { ACTIONS, assertAutonomous, sellingScope } from "../policy";
+import { DEFAULT_CONFIG } from "../config";
 
 /**
  * SELLING — listing management (ADR 0024).
@@ -22,6 +23,7 @@ export interface CreateListingInput {
   readonly fbListingId?: string;
   readonly holdTimeoutHours?: number;
   readonly terms?: Listing["terms"];
+  readonly floorPrice?: number;
 }
 
 export function createListing(doc: TrackerDocument, input: CreateListingInput, nowIso: string): { doc: TrackerDocument; listing: Listing } {
@@ -39,7 +41,8 @@ export function createListing(doc: TrackerDocument, input: CreateListingInput, n
     fbListingId: input.fbListingId,
     status: "active",
     monitoring: true,
-    holdTimeoutHours: input.holdTimeoutHours ?? 24,
+    holdTimeoutHours: input.holdTimeoutHours ?? DEFAULT_CONFIG.queue.holdTimeoutHours,
+    floorPrice: input.floorPrice,
     terms: input.terms,
     createdAt: nowIso,
     updatedAt: nowIso,

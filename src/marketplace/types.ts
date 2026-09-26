@@ -43,6 +43,11 @@ export interface Listing {
   /** Hours an unconfirmed hold lives before the queue auto-advances. */
   readonly holdTimeoutHours: number;
   readonly terms?: RentalTerms;
+  /** Lowest price the agent may ever agree to. Unset → no counter below asking. */
+  readonly floorPrice?: number;
+  /** Price before any stale auto-drop, for the drop floor. */
+  readonly originalPrice?: number;
+  readonly lastPriceDropAt?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -76,6 +81,28 @@ export interface Lead {
   readonly nudgeLevel: number;
   readonly lastNudgeAt?: string;
   readonly notes: readonly string[];
+  /** Offer negotiation progress (selling/negotiation.ts). */
+  readonly negotiation?: NegotiationState;
+  /** Rental booking checklist (selling/rental_tree.ts). */
+  readonly rental?: RentalChecklist;
+}
+
+export interface NegotiationState {
+  /** Agent responses to below-asking offers so far. */
+  readonly rounds: number;
+  /** The one firm counter at the floor has been given. */
+  readonly countered: boolean;
+  readonly lastOffer?: number;
+  readonly status: "open" | "agreed" | "escalated";
+  readonly agreedPrice?: number;
+}
+
+export interface RentalChecklist {
+  readonly rateAgreed: boolean;
+  readonly depositCommitted: boolean;
+  readonly depositMethod?: string;
+  /** The renter's specific pickup time, as they stated it. */
+  readonly pickupTime?: string;
 }
 
 export type CampaignStatus = "active" | "paused" | "cancelled";
@@ -118,9 +145,12 @@ export type OutboxKind =
   | "booking"
   | "sms-draft"
   | "nudge"
-  | "sold-notice";
+  | "sold-notice"
+  | "negotiation"
+  | "queue";
 
-export type OutboxStatus = "pending" | "awaiting-tap" | "sent";
+/** "suppressed" = held back at flush because the owner is active in the thread; never sent. */
+export type OutboxStatus = "pending" | "awaiting-tap" | "sent" | "suppressed";
 
 export interface OutboxMessage {
   readonly id: string;
@@ -199,7 +229,7 @@ export interface ThreadSummary {
 
 export interface ActivityEntry {
   readonly at: string;
-  readonly kind: "confirmation" | "booking" | "escalation" | "nudge" | "hunt" | "listing" | "system";
+  readonly kind: "confirmation" | "booking" | "escalation" | "nudge" | "hunt" | "listing" | "system" | "negotiation" | "queue" | "rental" | "parse-failure";
   /** One line, no message bodies. */
   readonly text: string;
 }
@@ -221,6 +251,8 @@ export interface TrackerDocument {
   readonly watermarks: Record<string, string>;
   /** Rolling summaries per thread — never full message bodies. */
   readonly summaries: Record<string, ThreadSummary>;
+  /** Owner's latest own message per thread (ISO) — drives the watch-only window. */
+  readonly ownerActivity: Record<string, string>;
   /** Capped activity log (latest 200) feeding the daily digest. */
   readonly activity: readonly ActivityEntry[];
   readonly updatedAt: string;

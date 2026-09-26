@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { itemsOf, parseJsonLenient } from "../parse";
 /**
  * SELLING — comp-based auto-pricing (ADR 0024).
  *
@@ -45,22 +46,17 @@ function parsePrice(raw: unknown): number | undefined {
 }
 
 export function parseComps(stdout: string): Comp[] {
-  try {
-    const parsed = JSON.parse(stdout);
-    const items = Array.isArray(parsed) ? parsed : parsed?.data ?? [];
-    if (!Array.isArray(items)) return [];
-    const comps: Comp[] = [];
-    for (const item of items) {
-      const price = parsePrice(item?.price);
-      const title = typeof item?.title === "string" ? item.title : "";
-      if (price !== undefined && title) {
-        comps.push({ title, price, condition: typeof item?.condition === "string" ? item.condition : undefined });
-      }
+  const parsed = parseJsonLenient(stdout, "comps.search");
+  if (!parsed.ok) return [];
+  const comps: Comp[] = [];
+  for (const item of itemsOf(parsed.value, "comps.search", stdout) as any[]) {
+    const price = parsePrice(item?.price);
+    const title = typeof item?.title === "string" ? item.title : "";
+    if (price !== undefined && title) {
+      comps.push({ title, price, condition: typeof item?.condition === "string" ? item.condition : undefined });
     }
-    return comps;
-  } catch {
-    return [];
   }
+  return comps;
 }
 
 function median(prices: number[]): number {
