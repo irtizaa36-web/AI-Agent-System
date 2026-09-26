@@ -1,3 +1,5 @@
+import type { PageSnapshot } from "./client";
+
 /**
  * The port for reading and filling a web form (ADR 0011). This is the
  * write-capable counterpart to BrowserClient (ADR 0007), which is
@@ -46,5 +48,26 @@ export interface FormFillingClient {
     url: string,
     values: Readonly<Record<string, string>>,
     submitSelector: string,
-  ): Promise<{ readonly resultText: string }>;
+  ): Promise<SubmitFormResult>;
+
+  /**
+   * Read-only: loads `url` and reports what came back, without filling or
+   * clicking anything — the pre-fill health check (ADR 0026). Optional; a
+   * client without it skips the pre-fill check.
+   */
+  checkPage?(site: string | undefined, url: string): Promise<PageSnapshot>;
+}
+
+export interface SubmitFormResult {
+  readonly resultText: string;
+  /** Where the browser ended up after the click, when known. */
+  readonly finalUrl?: string;
+  /**
+   * Set by the health-checked wrapper (ADR 0026). `unknown` means the submit
+   * was attempted once but the result page was blank, an error shell, or
+   * otherwise ambiguous: a human must check whether it went through. It is
+   * never retried automatically.
+   */
+  readonly outcome?: "submitted" | "unknown";
+  readonly note?: string;
 }

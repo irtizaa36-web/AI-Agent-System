@@ -1,4 +1,13 @@
 import type { BrowserClient } from "../browser/client";
+import {
+  CircuitBreaker,
+  classifyPage,
+  DEFAULT_CIRCUIT_BREAKER_THRESHOLD,
+  DEFAULT_MIN_TEXT_LENGTH,
+  DEFAULT_PACE_MS,
+  pace,
+  realSleep,
+} from "../browser/page-health";
 import { STANDING_X_TOPICS, xSearchUrl, type XTopic } from "./topics";
 
 export type TopicSweepStatus = "ok" | "blocked" | "skipped";
@@ -30,12 +39,16 @@ export interface XSearchSweepOptions {
 }
 
 const DEFAULT_HEALTH_CHECK_URL = "https://x.com/home";
-const DEFAULT_MIN_TEXT_LENGTH = 200;
-const DEFAULT_DELAY_MS = 4000;
-const DEFAULT_CIRCUIT_BREAKER_THRESHOLD = 3;
+/** The sweep's breaker key: every topic is a read against the same X session. */
+const SWEEP_BREAKER_DOMAIN = "x.com";
 
+/**
+ * Length-only classification, exactly as this sweep has always done it
+ * (ADR 0025). The shared module's error-shell markers are switched off
+ * here so extracting page-health.ts changed no sweep behavior.
+ */
 function isBlankOrBlocked(text: string, minTextLength: number): boolean {
-  return text.trim().length < minTextLength;
+  return classifyPage(text, { minTextLength, blockedMarkers: [], emptyMarkers: [] }) === "blocked";
 }
 
 async function fetchTopic(
@@ -52,7 +65,7 @@ async function fetchTopic(
     // Latest tab failed outright (crash, timeout, navigation error) — fall through to the fallback below rather than surfacing raw error noise as the result.
   }
 
-  await options.sleep(options.delayMs);
+  await pace(options.delayMs, options.sleep);
 
   try {
     const fallbackText = await browserClient.getPageText(xSearchUrl(topic.query, { live: false }));
@@ -87,9 +100,9 @@ export async function runXSearchSweep(browserClient: BrowserClient, options: XSe
   const topics = options.topics ?? STANDING_X_TOPICS;
   const healthCheckUrl = options.healthCheckUrl ?? DEFAULT_HEALTH_CHECK_URL;
   const minTextLength = options.minTextLength ?? DEFAULT_MIN_TEXT_LENGTH;
-  const delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
+  const delayMs = options.delayMs ?? DEFAULT_PACE_MS;
   const circuitBreakerThreshold = options.circuitBreakerThreshold ?? DEFAULT_CIRCUIT_BREAKER_THRESHOLD;
-  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const sleep = options.sleep ?? realSleep;
 
   let sessionHealthy: boolean;
   try {
@@ -111,25 +124,25 @@ export async function runXSearchSweep(browserClient: BrowserClient, options: XSe
   }
 
   const results: TopicSweepResult[] = [];
-  let consecutiveBlocked = 0;
+  const breaker = new CircuitBreaker(circuitBreakerThreshold);
 
   for (const topic of topics) {
-    if (consecutiveBlocked >= circuitBreakerThreshold) {
+    if (breaker.isOpen(SWEEP_BREAKER_DOMAIN)) {
       results.push({
         topic: topic.name,
         status: "skipped",
-        note: `Skipped: ${consecutiveBlocked} consecutive topics came back blocked, so the sweep stopped early instead of continuing to hammer a throttled session.`,
+        note: `Skipped: ${breaker.consecutiveFailures(SWEEP_BREAKER_DOMAIN)} consecutive topics came back blocked, so the sweep stopped early instead of continuing to hammer a throttled session.`,
       });
       continue;
     }
 
     if (results.length > 0) {
-      await sleep(delayMs);
+      await pace(delayMs, sleep);
     }
 
     const result = await fetchTopic(browserClient, topic, { minTextLength, delayMs, sleep });
     results.push(result);
-    consecutiveBlocked = result.status === "blocked" ? consecutiveBlocked + 1 : 0;
+    breaker.record(SWEEP_BREAKER_DOMAIN, result.status === "blocked" ? "blocked" : "ok");
   }
 
   return { sessionHealthy: true, results };

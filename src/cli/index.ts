@@ -88,6 +88,7 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator status                                         Show a snapshot of the project",
       "  orchestrator inkbox <subcommand>                            Draft-review-approve email flow (see below)",
       "  orchestrator browser login <site> <url>                     One-time human login, saves an authenticated session",
+      "  orchestrator browser health <site> <url>                    Read-only load + blocked-vs-quiet check; exits 1 unless ok/empty",
       '  orchestrator dispatch run --task "<goal>"                   State a goal in plain English; the Dispatcher plans and runs it',
       "  orchestrator dispatch status|approve|resume <id>            Check on, approve, or resume a paused workflow",
       '  orchestrator coworker add "<task>" --to <persona>           Add a task to the shared coworker list',

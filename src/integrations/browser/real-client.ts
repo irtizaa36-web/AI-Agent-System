@@ -1,4 +1,4 @@
-import type { BrowserClient } from "./client";
+import type { BrowserClient, PageSnapshot } from "./client";
 import { browserSessionPath, hasBrowserSession } from "./session";
 
 export interface RealBrowserClientOptions {
@@ -30,6 +30,11 @@ export class RealBrowserClient implements BrowserClient {
   }
 
   async getPageText(url: string): Promise<string> {
+    return (await this.getPage(url)).text;
+  }
+
+  /** Read-only: the same navigation as getPageText, also reporting where the browser ended up and the document's HTTP status (ADR 0026). */
+  async getPage(url: string): Promise<PageSnapshot> {
     const hasSession = hasBrowserSession(this.siteName);
     if (this.requireSession && !hasSession) {
       throw new Error(
@@ -42,8 +47,9 @@ export class RealBrowserClient implements BrowserClient {
     try {
       const context = hasSession ? await browser.newContext({ storageState: browserSessionPath(this.siteName) }) : await browser.newContext();
       const page = await context.newPage();
-      await page.goto(url, { waitUntil: "networkidle" });
-      return await page.evaluate(() => document.body.innerText);
+      const response = await page.goto(url, { waitUntil: "networkidle" });
+      const text = await page.evaluate(() => document.body?.innerText ?? "");
+      return { text, finalUrl: page.url(), ...(response ? { httpStatus: response.status() } : {}) };
     } finally {
       await browser.close();
     }
