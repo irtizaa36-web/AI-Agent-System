@@ -1,3 +1,8 @@
+---
+name: x-link-research
+description: Research brief for a pasted X/Twitter link. Pulls the full thread, top replies and quote-tweets, verifies the key claims against web sources, and cites every source. Use when the user pastes an X or Twitter link with no other instruction.
+---
+
 # X-Link Research Skill
 
 Shared by Muse and Claude Code. Trigger: the user pastes an X/Twitter link with no other instruction — always run the full brief. No confirmation needed.
