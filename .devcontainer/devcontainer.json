@@ -1,0 +1,35 @@
+{
+  // OpenMuse cloud demo (Codespaces). See demo/CLOUD_DEMO.md for the full walkthrough.
+  "name": "OpenMuse cloud demo",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-24-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  // Codespaces prompts for these on creation; set them once as Codespaces secrets.
+  "secrets": {
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key used natively by OpenMuse (MODEL=anthropic/...).",
+      "documentationUrl": "https://console.anthropic.com/settings/keys"
+    },
+    "CPK_INTELLIGENCE_API_KEY": {
+      "description": "Server-only CopilotKit Intelligence project key. OpenMuse refuses to start without it.",
+      "documentationUrl": "https://docs.copilotkit.ai/intelligence/connect-your-runtime"
+    }
+  },
+  "forwardPorts": [8787, 8081],
+  "portsAttributes": {
+    "8787": { "label": "OpenMuse API", "onAutoForward": "silent" },
+    "8081": { "label": "OpenMuse web UI", "onAutoForward": "openBrowser" },
+    "8790": { "label": "Browser worker (keep private)", "onAutoForward": "ignore" }
+  },
+  "containerEnv": {
+    "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0"
+  },
+  "postCreateCommand": "npm install -g pnpm@11.19.0 && cd openmuse && pnpm install --frozen-lockfile",
+  "customizations": {
+    "codespaces": {
+      "openFiles": ["demo/CLOUD_DEMO.md"]
+    }
+  }
+}
