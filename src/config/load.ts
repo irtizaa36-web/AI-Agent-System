@@ -27,6 +27,7 @@ import { createPolymarketGetQuoteTool } from "../tools/polymarket-get-quote";
 import { createPolymarketPreviewOrderTool } from "../tools/polymarket-preview-order";
 import { createPolymarketPlaceOrderTool } from "../tools/polymarket-place-order";
 import { createReadJobBoardPageTool } from "../tools/read-job-board-page";
+import { createXSearchSweepTool } from "../tools/x-search-sweep";
 import { withSummarization } from "../tools/with-summarization";
 import { createGraphRecallTool } from "../tools/graph-recall";
 import { createGraphRecordTool } from "../tools/graph-record";
@@ -104,6 +105,8 @@ export interface SleeperDeps {
 export interface LoadOptions {
   /** Settlement tracker and research sources (ADR 0022). Default: an in-memory tracker seeded with the owner's pipeline. */
   readonly settlements?: SettlementsDeps;
+  /** The browser client x-search-sweep runs against (ADR 0025). Default: the real, Playwright-backed client if `browser login x <url>` has been run for @WoozyBets, otherwise an in-memory fake. */
+  readonly xBrowserClient?: BrowserClient;
 }
 
 export function defaultSleeperDeps(): SleeperDeps {
@@ -155,6 +158,7 @@ export function loadDefaultConfig(
   registry.registerTool(createBrowserFillFormPreviewTool(formFillingClient));
   registry.registerTool(createBrowserSubmitFormTool(formFillingClient));
   registry.registerTool(withSummarization(createReadJobBoardPageTool(jobBoardClient), summarization));
+  registry.registerTool(withSummarization(createXSearchSweepTool(options.xBrowserClient ?? createDefaultBrowserClient("x")), summarization));
   registry.registerTool(createGraphRecallTool(graphStore));
   registry.registerTool(createGraphRecordTool(graphStore));
   registry.registerTool(createPolymarketFindMarketsTool(polymarketClient));

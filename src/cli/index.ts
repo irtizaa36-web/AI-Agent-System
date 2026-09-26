@@ -32,6 +32,7 @@ import { createSleeperWriteClientFromEnv } from "../integrations/sleeper/graphql
 import type { SleeperDeps } from "../config/load";
 import { runSettlementsCommand } from "./settlements-commands";
 import { runMarketplaceCommandFromCwd } from "./marketplace-commands";
+import { runXCommand } from "./x-commands";
 import { createSettlementsDeps, type SettlementsDeps } from "../settlements/deps";
 import { JsonFileTrackerStorage } from "../settlements/storage";
 import { runVoiceCommand } from "./voice-commands";
@@ -108,6 +109,7 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator settlements add|status|verdict|action|...      Record what you did; you file every claim yourself (settlements help)",
       "  orchestrator voice status|ingest|alerts|drafts|approve|send  Google Voice: matched verification codes, gated SMS replies (voice help)",
       "  orchestrator marketplace selling|buying|channels ...       FB Marketplace selling agent: queues, hunts, outbox (marketplace selling help)",
+      "  orchestrator x search-sweep                                 Standing X search-intel sweep, with session health-check and fallback (ADR 0025)",
       '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
       "  orchestrator constraints list                                List recorded corrections",
       "  orchestrator help                                           Show this message",
@@ -367,6 +369,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
 
   if (command === "marketplace") {
     return runMarketplaceCommandFromCwd(rest, deps);
+  }
+
+  if (command === "x") {
+    return runXCommand(rest, deps);
   }
 
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
