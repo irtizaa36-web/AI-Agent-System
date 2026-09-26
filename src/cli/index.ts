@@ -33,6 +33,7 @@ import type { SleeperDeps } from "../config/load";
 import { runSettlementsCommand } from "./settlements-commands";
 import { runMarketplaceCommandFromCwd } from "./marketplace-commands";
 import { runXCommand } from "./x-commands";
+import { runWatchBriefsCommand } from "./watch-briefs-commands";
 import { createSettlementsDeps, type SettlementsDeps } from "../settlements/deps";
 import { JsonFileTrackerStorage } from "../settlements/storage";
 import { runVoiceCommand } from "./voice-commands";
@@ -111,6 +112,8 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator voice status|ingest|alerts|drafts|approve|send  Google Voice: matched verification codes, gated SMS replies (voice help)",
       "  orchestrator marketplace selling|buying|channels ...       FB Marketplace selling agent: queues, hunts, outbox (marketplace selling help)",
       "  orchestrator x search-sweep                                 Standing X search-intel sweep, with session health-check and fallback (ADR 0025)",
+      "  orchestrator watch-briefs poll                              One poll for new orchestrator briefs on claude/* branches (ADR 0027)",
+      "  orchestrator watch-briefs loop [--interval-ms N]            Repeat that poll every N ms (default ~3 min)",
       '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
       "  orchestrator constraints list                                List recorded corrections",
       "  orchestrator help                                           Show this message",
@@ -374,6 +377,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
 
   if (command === "x") {
     return runXCommand(rest, deps);
+  }
+
+  if (command === "watch-briefs") {
+    return runWatchBriefsCommand(rest, deps);
   }
 
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);

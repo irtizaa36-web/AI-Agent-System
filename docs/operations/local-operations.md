@@ -71,6 +71,15 @@ itself. Check `INKBOX_SMS_PHONE_NUMBER_ID` against the phone number
 actually assigned to this identity in Inkbox before assuming it's right;
 nothing here can look that value up on its own.
 
+## Orchestrator brief watcher
+
+`orchestrator watch-briefs poll|loop` (ADR 0027) needs `GITHUB_TOKEN`
+(read-only content access) in `.env`. `scripts/com.mobyai.watchbriefs.plist`
+runs one poll every 180 seconds via `launchd`, the same install pattern as
+the job-search pipeline's plist above. It only reads GitHub and writes a
+delegation-log stub via local `git push` to the branch a brief names —
+never a PR, never a merge, never the brief's own instructions.
+
 ## Dashboard and coworker loop
 
 The dashboard is local-only and starts with:
