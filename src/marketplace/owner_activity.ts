@@ -9,7 +9,13 @@ import { escalate, type Escalation } from "./policy";
  * stand the agent down on that thread.
  */
 
-export const OWNER_FB_ID = "100066954623124";
+/** The owner's Facebook id, from the local environment only; never committed. Empty when unset. */
+export const OWNER_FB_ID = process.env.OWNER_FB_ID ?? "";
+
+/** True only for a message from the owner. With no owner id configured, nothing matches, so reconciliation no-ops. */
+export function isOwnerSender(senderId: string | undefined, ownerId: string = OWNER_FB_ID): boolean {
+  return ownerId !== "" && senderId === ownerId;
+}
 
 export interface ThreadMessage {
   readonly threadId: string;
@@ -34,12 +40,13 @@ export interface ReconcileReport {
 export function reconcileOwnerActivity(
   doc: TrackerDocument,
   messages: readonly ThreadMessage[],
+  ownerId: string = OWNER_FB_ID,
 ): { doc: TrackerDocument; report: ReconcileReport } {
   const ownerActiveThreads: string[] = [];
   const notes: string[] = [];
   const escalations: Escalation[] = [];
 
-  const ownerMsgs = messages.filter((m) => m.senderId === OWNER_FB_ID);
+  const ownerMsgs = messages.filter((m) => isOwnerSender(m.senderId, ownerId));
   if (ownerMsgs.length === 0) {
     return { doc, report: { ownerActiveThreads, notes, escalations } };
   }
