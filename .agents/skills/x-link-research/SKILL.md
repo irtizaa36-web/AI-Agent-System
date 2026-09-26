@@ -17,10 +17,13 @@ Shared by Muse and Claude Code. Trigger: the user pastes an X/Twitter link with 
 
 ## Research brief (delivered in chat)
 
-1. **Key points** — tight bullets of what the thread actually says. No commentary, no filler.
-2. **Verification** — check the thread's key factual claims against web sources. Mark each claim: confirmed / disputed / unverified.
-3. **Context** — what the thread leaves out; who the authors are if relevant (follower counts, affiliations when public).
-4. **Sources** — every external claim gets a linked source. No bare assertions.
+The single most important section is the first one — always lead with it.
+
+1. **What this means for you** — the actionable core. What is useful to Toozy specifically (he runs an AI agent system: Marketplace agent, voice broker, scheduled build loops, survey/finance automations) and what can be implemented from this link: concrete next steps, tools to adopt, code to write, services to try. Be specific — name the repo, the workflow, the cost. If nothing is actionable, say so in one line.
+2. **Key points** — tight bullets of what the thread actually says. No commentary, no filler.
+3. **Verification** — check the thread's key factual claims against web sources. Mark each claim: confirmed / disputed / unverified.
+4. **Context** — what the thread leaves out; who the authors are if relevant (follower counts, affiliations when public).
+5. **Sources** — every external claim gets a linked source. No bare assertions.
 
 ## Failure handling
 
