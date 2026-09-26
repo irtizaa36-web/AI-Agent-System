@@ -19,7 +19,7 @@ Shared by Muse and Claude Code. Trigger: the user pastes an X/Twitter link with 
 
 The single most important section is the first one — always lead with it.
 
-1. **What this means for you** — the actionable core. What is useful to Toozy specifically (he runs an AI agent system: Marketplace agent, voice broker, scheduled build loops, survey/finance automations) and what can be implemented from this link: concrete next steps, tools to adopt, code to write, services to try. Be specific — name the repo, the workflow, the cost. If nothing is actionable, say so in one line.
+1. **What this means for you** — the actionable core. What is useful to Toozy specifically (he runs an AI agent system: Marketplace agent, voice broker, scheduled build loops, survey/finance automations) and what can be implemented from this link: concrete next steps, tools to adopt, code to write, services to try. Be specific — name the repo, the workflow, the cost. If the link is not worth his time, say so bluntly in the first line (e.g. "Not worth your time — ...") with one line of why, so he doesn't waste more time on it. Never pad a useless link with filler to make it seem worthwhile.
 2. **Key points** — tight bullets of what the thread actually says. No commentary, no filler.
 3. **Verification** — check the thread's key factual claims against web sources. Mark each claim: confirmed / disputed / unverified.
 4. **Context** — what the thread leaves out; who the authors are if relevant (follower counts, affiliations when public).
