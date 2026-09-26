@@ -25,6 +25,17 @@ The single most important section is the first one — always lead with it.
 4. **Context** — what the thread leaves out; who the authors are if relevant (follower counts, affiliations when public).
 5. **Sources** — every external claim gets a linked source. No bare assertions.
 
+## No-API research playbook (default — no X API key)
+
+Do all of this through the logged-in browser session (@WoozyBets). No paid API, no unofficial scraping libraries (ban risk).
+
+1. **Thread extraction** — open the link signed in; pull the full chain, top replies by engagement, quote-tweets (via X search `url:<id>` on Top + Latest tabs). Cap 50 posts.
+2. **Author dossier** — open each key author's profile: bio, follower/following counts, join date, pinned post, recent posts. Note affiliations and credibility signals.
+3. **Outbound links** — follow every substantive link in the thread (articles, docs, repos, products). Summarize what each one actually says; verify claims against them.
+4. **Related threads** — use X advanced search operators (`from:`, `to:`, `since:`, `until:`, `min_faves:`, `min_retweets:`, exact phrases in quotes) to find other threads on the same topic. Compare claims across them.
+5. **Topic search** — when the user asks about a topic rather than pasting a link, run the same pipeline starting from advanced search: top posts, key authors, consensus vs controversy.
+6. **Rate limits** — X throttles aggressive browsing. Space out heavy reads; if a rate limit hits, wait and resume rather than hammering. Never rapid-fire refresh.
+
 ## Failure handling
 
 - If the link is unreadable (deleted post, suspended account, login wall even when signed in): retry once after at least 30 minutes. If still unreadable, report it plainly and stop — one line, no essay.
