@@ -76,6 +76,10 @@ export function createBrowserSubmitFormTool(client: FormFillingClient): Tool {
         throw new Error('browser-submit-form requires { "url": string, "values": {selector: string}, "submitSelector": string, "site"?: string }');
       }
       const result = await client.submitForm(input.site, input.url, input.values, input.submitSelector);
+      if (result.outcome === "unknown") {
+        // Attempted once, result ambiguous (ADR 0026). Never reported as a success, never retried.
+        return `submitted:unknown\nneedsHumanVerification:true\nnote:${result.note ?? ""}\nresultText:${result.resultText}`;
+      }
       return `submitted:true\nresultText:${result.resultText}`;
     },
   };

@@ -1,4 +1,5 @@
-import type { FormField, FormFillingClient } from "./form-client";
+import type { PageSnapshot } from "./client";
+import type { FormField, FormFillingClient, SubmitFormResult } from "./form-client";
 import { browserSessionPath, hasBrowserSession } from "./session";
 
 /**
@@ -42,17 +43,29 @@ function collectFormFields(): { selector: string; label?: string; type: string; 
  * per-call, since a return/refund form frequently needs no login at all.
  */
 export class RealFormFillingClient implements FormFillingClient {
-  private async withPage<T>(site: string | undefined, url: string, fn: (page: import("playwright").Page) => Promise<T>): Promise<T> {
+  private async withPage<T>(
+    site: string | undefined,
+    url: string,
+    fn: (page: import("playwright").Page, response: import("playwright").Response | null) => Promise<T>,
+  ): Promise<T> {
     const { chromium } = await import("playwright");
     const browser = await chromium.launch({ headless: true });
     try {
       const context = site && hasBrowserSession(site) ? await browser.newContext({ storageState: browserSessionPath(site) }) : await browser.newContext();
       const page = await context.newPage();
-      await page.goto(url, { waitUntil: "networkidle" });
-      return await fn(page);
+      const response = await page.goto(url, { waitUntil: "networkidle" });
+      return await fn(page, response);
     } finally {
       await browser.close();
     }
+  }
+
+  /** Read-only pre-fill check (ADR 0026): loads the page and reports its text, final URL, and HTTP status. Fills and clicks nothing. */
+  async checkPage(site: string | undefined, url: string): Promise<PageSnapshot> {
+    return this.withPage(site, url, async (page, response) => {
+      const text = await page.evaluate(() => document.body?.innerText ?? "");
+      return { text, finalUrl: page.url(), ...(response ? { httpStatus: response.status() } : {}) };
+    });
   }
 
   async listFormFields(site: string | undefined, url: string): Promise<readonly FormField[]> {
@@ -71,13 +84,13 @@ export class RealFormFillingClient implements FormFillingClient {
     url: string,
     values: Readonly<Record<string, string>>,
     submitSelector: string,
-  ): Promise<{ readonly resultText: string }> {
+  ): Promise<SubmitFormResult> {
     return this.withPage(site, url, async (page) => {
       await fillFields(page, values);
       await page.click(submitSelector);
       await page.waitForLoadState("networkidle").catch(() => undefined);
-      const resultText = await page.evaluate(() => document.body.innerText);
-      return { resultText };
+      const resultText = await page.evaluate(() => document.body?.innerText ?? "");
+      return { resultText, finalUrl: page.url() };
     });
   }
 }

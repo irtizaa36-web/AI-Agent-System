@@ -1,97 +1,74 @@
-# Delegation log — X search-intel fix (round 1)
+# Delegation log: blocked-vs-quiet browser hardening (brief 2c)
 
-Branch: `claude/x-search-intel-fix-amzqp7`
-PR: https://github.com/irtizaa36-web/AI-Agent-System/pull/56
+Branch: `claude/browser-blocked-hardening-7n8giz`
+PR: _see the PR opened from this branch_
+Protocol: `docs/delegation/PROTOCOL.md` (added in this branch's first commit, Job 1)
+
+The previous round's log (X search-intel fix, PR #56) is in git history on `main`.
 
 ## Diagnosis
 
-Timeline rules out the `f=live` parameter or a URL-format change as the root
-cause — the same query shape worked partially at ~09:00 the same morning. What
-changed in between was a 15-follow burst (~08:48–08:52) that triggered a soft
-account throttle. The next two sweeps came back with zero posts across every
-topic — consistent with that throttle/bot-detection state affecting page
-loads generally, not a per-topic issue. The skill had no way to tell "session
-is blocked" from "topic is quiet," so it couldn't have caught this even once
-it started happening.
+PR #56 / ADR 0025 taught the X sweep to tell a blocked page from a quiet one.
+The other browser Tools had the same blind spot. `read-web-page` and
+`read-job-board-page` passed back whatever text loaded, so a blank or crashed
+page looked to the agent like a page with nothing on it. The form tools filled
+and clicked without checking that the page had loaded, and reported any
+post-click page as `submitted:true`, even a blank one.
 
-## Fix implemented (this repo)
+## Implemented
 
-- `src/integrations/x-research/` (`runXSearchSweep`): pre-flight session
-  health check, blocked-vs-quiet status distinction, one Top-tab fallback
-  retry per topic, a circuit breaker after 3 consecutive blocked topics,
-  paced requests between topics.
-- `src/tools/x-search-sweep.ts` — Tool wrapper, registered in
-  `loadDefaultConfig` via `LoadOptions.xBrowserClient`.
-- `src/cli/x-commands.ts` — `orchestrator x search-sweep`.
-- `docs/adr/0025-x-search-intel-durable-tooling.md` — full root-cause writeup
-  and design rationale.
-- `PROJECT-BRAIN.md` updated to reflect the new tooling.
-- Tests: 867/867 passing (`npm test`, 12 new tests). `tsc --noEmit` clean.
-- No write capability added or exists (`BrowserClient` still has exactly one
-  method, `getPageText`). No credential or session-storage change.
-- Not validated against the live @WoozyBets session — it was already
-  soft-throttled; running more automated traffic against it to test a
-  throttling fix would be the wrong move. The next scheduled sweep is the
-  real validation.
+- `src/integrations/browser/page-health.ts`: `PageStatus`, `classifyPage`,
+  `checkSessionHealth`, `CircuitBreaker` (per domain, trips at 3), `pace`/`Pacer`
+  (default 4 s), `readWithOneRetry`. `sweep.ts` refactored onto it with no
+  behavior change. The x-research tests are unchanged and pass.
+- `BrowserClient.getPage` (optional, read-only): text, final URL, HTTP status.
+  Implemented in the real and fake clients. No write capability added.
+- `read-web-page`: `status:` line, one paced retry, then an explicit blocked or
+  error report.
+- `read-job-board-page`: the same, plus a base-URL health check per board, a
+  per-board breaker, and `urls` for multi-board runs.
+- `orchestrator browser health <site> <url>`: prints the status and exits 1
+  unless the page is ok or empty.
+- `HealthCheckedFormFillingClient` (wired in `loadDefaultConfig`): pre-fill
+  health check, exactly one submit attempt, `unknown` outcome on an ambiguous
+  result, and a per-domain breaker that blocks further submits. Approval gates
+  are unchanged.
+- ADR 0026 and a PROJECT-BRAIN.md entry.
 
-## Delegation log
+## Tests
+
+- Before: 867/867.
+- After: `npm test` 895/895 passing, 0 failing (28 new). `tsc --noEmit` is clean.
+- No live-account traffic was used. Everything was validated with
+  `FakeBrowserClient` and `FakeFormFillingClient`.
+
+## Delegation table
 
 | Subtask | Disposition | Reasoning |
 |---|---|---|
-| Root-cause diagnosis | Handled [RUBRIC] | Weighing timeline evidence against candidate causes — judgment call. |
-| Solution design (health check, fallback, circuit breaker) | Handled [RUBRIC] | Novel design decision with architectural tradeoffs (ADR territory). |
-| Repo implementation + tests | Handled [RUBRIC] | Core engineering; needed tight integration with existing ADR 0007 patterns. |
-| Running `npm ci`/`npm test`/fixing one broken snapshot assertion | Handled [STRUCTURE] | Direct Bash access in this session; round-tripping a <10s command would only add async latency. |
-| Workspace skill file patch (X Search Intel skill, lives outside this repo) | **Delegated to Muse** | Mechanical application of an exact, already-authored patch to a file this session can't reach. |
+| Save PROTOCOL.md + CLAUDE.md pointer (Job 1) | Handled [STRUCTURE] | Exact text supplied; direct repo access; delegating adds only latency. |
+| Extract page-health.ts, refactor sweep.ts | Handled [RUBRIC] | Core engineering; preserving sweep behavior exactly needed judgment (markers switched off for the sweep). |
+| Classification rules (blocked vs empty) | Handled [RUBRIC] | Design tradeoff: false "empty" is the failure being fixed, so ambiguity maps to blocked. |
+| Read tools, CLI health command | Handled [RUBRIC] | Core engineering and tests. |
+| Form wrapper, no-retry-on-submit decision | Handled [RUBRIC] | Safety-critical design (duplicate-submit risk); recorded in ADR 0026. |
+| Tests, `npm test`, `tsc` | Handled [STRUCTURE] | Direct shell access in session. |
+| Delete stale branches (marketplace-agent-v2, voice-broker-real-email-gaps, karen-negotiation-upgrades) | Handled [STRUCTURE] | Verified 0 unmerged commits vs `main` first; git access is in-session. |
 
-### Delegated subtask detail — workspace skill patch
+Nothing was delegated to Muse. No subtask needed Toozy's personal context,
+credentials, or anything sent as him.
 
-- **Input:** exact replacement body for the "X Search Intel" workspace skill
-  (full text below).
-- **Output:** the X Search Intel skill's content updated to that text.
-- **Success criteria:** the Method section no longer describes a raw ad hoc
-  "spawn a browser task" as the primary path; standing topics and the
-  read-only rule (never like/reply/repost/follow/DM) are preserved verbatim;
-  the post-write-burst cool-down rule is present.
+## Budget status (at write-up)
 
-```markdown
-# X Search Intel
+This session can't see its exact spend. Its work was one focused
+implementation pass, estimated to be well under the $7.50 warning line of the
+$15 promo cap. No weekly credits were knowingly used.
 
-Run topic searches on X through the logged-in @WoozyBets browser session and report back the latest posts and news. Read-only: never like, reply, repost, follow, or DM.
+## Pending / integration-round items
 
-Standing topics: NFL betting, college football betting, NBA, UFC/MMA, soccer, tech/AI, stocks, Houston.
-
-## Method (updated 2026-09-26 — see AI-Agent-System ADR 0025)
-
-Run the sweep through the AI-Agent-System repo's tooling instead of spawning a raw ad hoc browser task per topic: `orchestrator x search-sweep` (from the repo root, session `x` — run `orchestrator browser login x https://x.com/login` once if no session is saved yet for @WoozyBets).
-
-That command already:
-- runs a pre-flight health check on the @WoozyBets session before touching any topic;
-- visits `https://x.com/search?q=<query>&src=typed_query&f=live` (Latest tab) per topic;
-- retries once on the Top tab (same query, no `f=live`) if the Latest tab comes back blank or crashes;
-- marks a topic `blocked` (not "quiet") if both tabs come back blank — never reports a block as "no real news";
-- stops early after three consecutive blocked topics instead of continuing to hammer a throttled session;
-- paces requests with a delay between topics and before each fallback retry.
-
-If `orchestrator x search-sweep` isn't runnable in this environment (no repo access), fall back to the original method — spawn a browser task signed in as @WoozyBets, visit the same search URL per topic — but apply the same rules by hand: check a lightweight page (e.g. the home timeline) first if a topic comes back blank, treat a blank/crashed page as "blocked" and say so explicitly rather than folding it into "no real news," and stop the sweep early if several topics in a row are blank rather than working through the full topic list.
-
-Capture 3-5 top posts per topic: author @handle, text (~200 chars), time, engagement if visible, post URL. Skip ads, crypto shills, giveaway spam. If a topic has no real news, say so — never pad. If a topic (or the whole sweep) is `blocked`, say that plainly instead — a block is not the same as "no real news," and reporting it as quiet hides a session problem that needs fixing before the next sweep.
-
-## Cool-down after write activity
-
-Do not run this sweep immediately after any burst of write actions on the @WoozyBets account (follows, likes, replies, posts) — space it out by at least 15-20 minutes. A write burst is the most likely trigger for the kind of soft account throttle that makes search pages start crashing; running a read-heavy sweep right on top of one adds to whatever's already elevated the account's risk signals instead of giving it a chance to cool down.
-```
-
-## Budget / time status
-
-Within the $15 promo cap and the 45-minute wall-time budget as of this
-write-up; the trial cap has not been approached. No SMS/email sent, no
-credential changes, no settings changes. The @WoozyBets account was not
-touched further.
-
-## Integration round 2 (pending)
-
-Waiting on: CI on PR #56 (subscribed; will merge only when green, per the
-standing rule), and confirmation that the workspace skill patch above has
-been applied. Once both land, this file will be updated with the final
-outcome and test counts.
+- The next scheduled real job-board run and returns-autopilot run are the live
+  validation. Watch for `status: blocked` and `submitted:unknown` in their
+  output.
+- Skills or agent instructions that parse `read-web-page` or
+  `read-job-board-page` output should expect the leading `status:` line. The
+  job-search pack consumes the text through the model, so no code change is
+  needed.

@@ -17,6 +17,7 @@ import { FakeBrowserClient } from "../integrations/browser/fake-client";
 import { createBrowserClientFromSession, createPublicBrowserClient } from "../integrations/browser/real-client";
 import type { FormFillingClient } from "../integrations/browser/form-client";
 import { RealFormFillingClient } from "../integrations/browser/real-form-client";
+import { HealthCheckedFormFillingClient } from "../integrations/browser/health-checked-form-client";
 import { createBrowserListFormFieldsTool } from "../tools/browser-list-form-fields";
 import { createBrowserFillFormPreviewTool } from "../tools/browser-fill-form-preview";
 import { createBrowserSubmitFormTool } from "../tools/browser-submit-form";
@@ -128,7 +129,7 @@ export function defaultSleeperDeps(): SleeperDeps {
 export function loadDefaultConfig(
   inkboxClient: InkboxClient = createDefaultInkboxClient(),
   browserClient: BrowserClient = createDefaultBrowserClient("sermo"),
-  formFillingClient: FormFillingClient = new RealFormFillingClient(),
+  formFillingClient: FormFillingClient = new HealthCheckedFormFillingClient(new RealFormFillingClient()),
   jobBoardClient: BrowserClient = createPublicBrowserClient("job-boards"),
   graphStore: GraphStore = new InMemoryGraphStore(),
   polymarketClient: PolymarketClient = createPolymarketClientFromEnv(),
