@@ -85,8 +85,9 @@ function isoNow(): string {
 
 /**
  * Seed document: tonight's real state (2026-09-26).
- * - Chair: $90 firm, Ethan CONFIRMED for Sat 2:30pm; backups Kat, Eric, Aby; Andrea deferred.
- * - BISSELL rental: $30/day + $30 deposit; LaDarrick awaiting a date; Roxy, Zulma, Varela warm.
+ * - Chair: $90 firm, Buyer 1 CONFIRMED for Sat 2:30pm; backups Buyers 2-4; Buyer 5 deferred.
+ * - BISSELL rental: $30/day + $30 deposit; Renter 1 awaiting a date; Renters 2-4 warm.
+ * Buyer/renter names and thread ids are anonymized placeholders; real ones live only in local state.
  * - Both BUYING hunts (keyboard/mouse, tint) CANCELLED.
  * - Authority: chair replies+confirmations autonomous; BISSELL bookings need his tap;
  *   BUYING purchases always need his approval.
@@ -137,10 +138,10 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
     ],
     leads: [
       {
-        id: "ethan",
+        id: "buyer-1",
         listingId: "chair",
-        name: "Ethan Perez",
-        threadId: "cid.g.1595285072273940",
+        name: "Buyer 1",
+        threadId: "buyer-1-chair-thread",
         channel: "messenger",
         status: "confirmed",
         queuePosition: 1,
@@ -151,13 +152,13 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
         needsAgentFollowUp: false,
         awaiting: "them",
         nudgeLevel: 0,
-        notes: ["Owner confirmed pickup himself Sat 2026-09-26 2:30pm, $90, cash or Venmo. Back-surgery carry note sent."],
+        notes: ["Owner confirmed pickup himself Sat 2026-09-26 2:30pm, $90, cash or Venmo. Carry note sent."],
       },
       {
-        id: "kat",
+        id: "buyer-2",
         listingId: "chair",
-        name: "Kat",
-        threadId: "kat-chair-thread",
+        name: "Buyer 2",
+        threadId: "buyer-2-chair-thread",
         channel: "messenger",
         status: "contacted",
         queuePosition: 2,
@@ -166,13 +167,13 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
         needsAgentFollowUp: true,
         awaiting: "them",
         nudgeLevel: 0,
-        notes: ["Offered Friday 2026-09-25 morning pickup, never confirmed. Backup behind Ethan."],
+        notes: ["Offered Friday 2026-09-25 morning pickup, never confirmed. Backup behind Buyer 1."],
       },
       {
-        id: "eric-couto",
+        id: "buyer-3",
         listingId: "chair",
-        name: "Eric Couto",
-        threadId: "eric-chair-thread",
+        name: "Buyer 3",
+        threadId: "buyer-3-chair-thread",
         channel: "messenger",
         status: "contacted",
         queuePosition: 3,
@@ -184,10 +185,10 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
         notes: ["Answered $90 firm, nudged 2026-09-25. Backup."],
       },
       {
-        id: "aby",
+        id: "buyer-4",
         listingId: "chair",
-        name: "Aby",
-        threadId: "aby-chair-thread",
+        name: "Buyer 4",
+        threadId: "buyer-4-chair-thread",
         channel: "messenger",
         status: "contacted",
         queuePosition: 4,
@@ -199,10 +200,10 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
         notes: ["Newest chair inquirer, nudged 2026-09-25. Backup."],
       },
       {
-        id: "andrea",
+        id: "buyer-5",
         listingId: "chair",
-        name: "Andrea",
-        threadId: "andrea-chair-thread",
+        name: "Buyer 5",
+        threadId: "buyer-5-chair-thread",
         channel: "messenger",
         status: "deferred",
         queuePosition: 5,
@@ -214,10 +215,10 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
         notes: ["Deferred to next week (w/c 2026-09-28). Nudge then if chair unsold."],
       },
       {
-        id: "ladarrick",
+        id: "renter-1",
         listingId: "bissell",
-        name: "LaDarrick Turner",
-        threadId: "ladarrick-bissell-thread",
+        name: "Renter 1",
+        threadId: "renter-1-bissell-thread",
         channel: "messenger",
         status: "contacted",
         queuePosition: 1,
@@ -226,13 +227,13 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
         needsAgentFollowUp: true,
         awaiting: "them",
         nudgeLevel: 0,
-        notes: ["Rental terms sent, awaiting which day he needs it."],
+        notes: ["Rental terms sent, awaiting which day they need it."],
       },
       {
-        id: "roxy",
+        id: "renter-2",
         listingId: "bissell",
-        name: "Roxy Sales",
-        threadId: "roxy-bissell-thread",
+        name: "Renter 2",
+        threadId: "renter-2-bissell-thread",
         channel: "messenger",
         status: "contacted",
         queuePosition: 2,
@@ -241,13 +242,13 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
         needsAgentFollowUp: true,
         awaiting: "them",
         nudgeLevel: 0,
-        notes: ["Terms sent, awaiting her timing."],
+        notes: ["Terms sent, awaiting their timing."],
       },
       {
-        id: "zulma",
+        id: "renter-3",
         listingId: "bissell",
-        name: "Zulma Nava",
-        threadId: "zulma-bissell-thread",
+        name: "Renter 3",
+        threadId: "renter-3-bissell-thread",
         channel: "messenger",
         status: "contacted",
         queuePosition: 3,
@@ -259,10 +260,10 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
         notes: ["Availability and price answered."],
       },
       {
-        id: "marina",
+        id: "renter-4",
         listingId: "bissell",
-        name: "Varela Marina",
-        threadId: "marina-bissell-thread",
+        name: "Renter 4",
+        threadId: "renter-4-bissell-thread",
         channel: "messenger",
         status: "contacted",
         queuePosition: 4,
@@ -300,8 +301,8 @@ export function seedDocument(now: string = isoNow()): TrackerDocument {
     ],
     constraints: [
       {
-        id: "back-surgery",
-        text: "Just a heads up — I had back surgery a few days ago so I can't help carry or lift anything heavy. If you can, please bring a friend to help load it.",
+        id: "carry",
+        text: "Just a heads up — I can't help carry or lift heavy items, so please bring a friend to help load it.",
         appliesTo: "pickup",
         active: true,
       },

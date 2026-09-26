@@ -4,8 +4,8 @@ import type { TrackerDocument } from "./types";
  * Message templates with automatic seller-constraint injection (ADR 0024).
  *
  * Tone: friendly, brief, casual, authentic — aggressive + authentic on
- * listings, per Toozy. Active `pickup` constraints (e.g. the back-surgery
- * note) are appended to every pickup-related message automatically so the
+ * listings, per Toozy. Active `pickup` constraints (e.g. the carry
+ * constraint) are appended to every pickup-related message automatically so the
  * owner never retypes them.
  *
  * Hard rule: no template may reveal the apartment street address. Templates

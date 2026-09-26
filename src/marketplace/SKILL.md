@@ -86,9 +86,9 @@ PayPal-email phishing, QR-payment prompts): escalate, never reply.
   asking.
 - Self-healing: zero inquiries in 7 days → one-tap price-drop suggestion
   (`selling health`); listings missing from `my-listings` retire.
-- Pickup messages auto-append the back-surgery carry constraint; address-
+- Pickup messages auto-append the carry constraint; address-
   like text is rejected by the template guard.
-- Owner-activity reconciliation: if Toozy (FB id 100066954623124) replies
+- Owner-activity reconciliation: if Toozy (FB id from the `OWNER_FB_ID` env var) replies
   in a thread himself, sync state and stand down — never double-message.
 
 ## Messenger approval-card batching

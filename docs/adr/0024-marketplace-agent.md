@@ -20,7 +20,7 @@ and templated close-outs. Runtime state lives in
 One document holds listings, leads, campaigns, constraints, authority
 grants, the outbox, bookings, buyer scores, watermarks, summaries, and a
 capped activity log. The seed carries his live threads (chair at $90 firm
-with Ethan confirmed 2:30 PM Sat 2026-09-26 and Kat/Eric/Aby as backups;
+with one buyer confirmed 2:30 PM Sat 2026-09-26 and others queued as backups;
 BISSELL rental terms; both hunts cancelled) — placeholders for thread ids
 that were never real are never used for sends.
 
@@ -46,8 +46,10 @@ compresses into the daily digest (`marketplace digest`).
   movement, no pickup commitment, no "I'll take it." Ping framing: "Seller
   said yes at your price — here's the deal, want it?"
 
-**Owner-message reconciliation.** His Facebook id (100066954623124) is
-recognized in managed threads: when he handles a thread himself the agent
+**Owner-message reconciliation.** His Facebook id is read from the
+`OWNER_FB_ID` environment variable (never committed; with it unset,
+reconciliation does nothing) and recognized in managed threads: when he
+handles a thread himself the agent
 syncs state and stands down instead of double-messaging. Routine stand-downs
 are quiet; only meaningful commitment conflicts escalate.
 
@@ -58,7 +60,7 @@ mail into one event stream. Voice is read-only triage: outbound SMS stays
 drafts through fixed templates, scam screen first, his tap required; never
 relay verification codes to strangers, never place calls. Scam screening
 covers verification-code requests, overpay/shipping schemes, PayPal-email
-phishing, and QR-payment prompts. Pickup templates append the back-surgery
+phishing, and QR-payment prompts. Pickup templates append the
 carry constraint automatically and reject address-like text.
 
 **Autonomy improvements (v2.1).**

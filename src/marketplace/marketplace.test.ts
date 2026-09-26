@@ -9,7 +9,7 @@ import { renderTemplate } from "./templates";
 import { stageMessage, pendingMessages, flushOutbox, recordSent } from "./outbox";
 import { cancelHunt, startHunt, negotiateStep, detectSellerAcceptance, recordOffer } from "./buying/hunts";
 import { screenInbound } from "./scam";
-import { reconcileOwnerActivity, OWNER_FB_ID } from "./owner_activity";
+import { reconcileOwnerActivity, isOwnerSender } from "./owner_activity";
 import { dedupe, matchLead, draftSmsReply, createChannelPollers, type LeadEvent } from "./channels";
 import { isLogisticsHandoff, canAutonomous, needsApproval, escalate } from "./policy";
 import { validateIntake, buildIntakeDraft, approvalSummary, publishApproved, type IntakeSidecar } from "./selling/intake";
@@ -41,14 +41,14 @@ function cliDeps(): { deps: CliDeps; out: string[]; err: string[] } {
 test("queue: expired hold drops the lead back and advances the next one", async () => {
   const state = await openSeeded();
   let doc = state.document;
-  // Put Kat on an expired hold.
-  ({ doc } = holdLead(doc, "chair", "kat", "2026-09-25T00:00:00Z"));
+  // Put Buyer 2 on an expired hold.
+  ({ doc } = holdLead(doc, "chair", "buyer-2", "2026-09-25T00:00:00Z"));
   const { doc: d2, result } = advanceExpiredHolds(doc, "chair", "2026-09-27T00:00:00Z");
   assert.equal(result.expired.length, 1);
-  assert.equal(result.expired[0].id, "kat");
+  assert.equal(result.expired[0].id, "buyer-2");
   assert.equal(result.expired[0].status, "contacted");
   assert.ok(result.advanced, "next lead should advance");
-  assert.equal(result.advanced!.id, "eric-couto");
+  assert.equal(result.advanced!.id, "buyer-3");
   assert.equal(result.advanced!.status, "hold");
   assert.ok(result.advanced!.holdExpiresAt);
   void d2;
@@ -57,7 +57,7 @@ test("queue: expired hold drops the lead back and advances the next one", async 
 test("queue: live holds are untouched", async () => {
   const state = await openSeeded();
   let doc = state.document;
-  ({ doc } = holdLead(doc, "chair", "kat", NOW));
+  ({ doc } = holdLead(doc, "chair", "buyer-2", NOW));
   const { result } = advanceExpiredHolds(doc, "chair", NOW);
   assert.equal(result.expired.length, 0);
   assert.equal(result.advanced, undefined);
@@ -65,7 +65,7 @@ test("queue: live holds are untouched", async () => {
 
 test("queue: confirm is autonomous at the listed price", async () => {
   const state = await openSeeded();
-  const { doc, lead } = confirmLead(state.document, "chair", "aby", { pickupAt: "2026-09-26T15:00:00-05:00" }, NOW);
+  const { doc, lead } = confirmLead(state.document, "chair", "buyer-4", { pickupAt: "2026-09-26T15:00:00-05:00" }, NOW);
   assert.equal(lead.status, "confirmed");
   assert.equal(lead.pickupAt, "2026-09-26T15:00:00-05:00");
   assert.ok(canAutonomous(doc, "selling:chair", "confirm"));
@@ -74,38 +74,38 @@ test("queue: confirm is autonomous at the listed price", async () => {
 
 test("queue: markSold retires other live leads", async () => {
   const state = await openSeeded();
-  const { doc, notify } = markSold(state.document, "chair", "ethan", NOW);
+  const { doc, notify } = markSold(state.document, "chair", "buyer-1", NOW);
   assert.equal(doc.listings.find((l) => l.id === "chair")!.status, "sold");
   assert.ok(notify.length >= 3, `expected backups notified, got ${notify.length}`);
 });
 
 // ---------- templates ----------
 
-test("templates: pickup messages auto-inject the back-surgery constraint", async () => {
+test("templates: pickup messages auto-inject the carry constraint", async () => {
   const state = await openSeeded();
   const body = renderTemplate(state.document, "pickup-confirm", {
-    name: "Ethan", pickupTime: "Sat 2:30pm", price: 90, payment: "cash or Venmo", meetup: "Highland Village area",
+    name: "Buyer 1", pickupTime: "Sat 2:30pm", price: 90, payment: "cash or Venmo", meetup: "Highland Village area",
   });
-  assert.match(body, /back surgery/);
+  assert.match(body, /can't help carry or lift heavy items/);
   assert.match(body, /bring a friend/);
 });
 
 test("templates: non-pickup templates do not inject the constraint", async () => {
   const state = await openSeeded();
-  const body = renderTemplate(state.document, "price-firm", { name: "Kat", price: 90 });
-  assert.doesNotMatch(body, /back surgery/);
+  const body = renderTemplate(state.document, "price-firm", { name: "Buyer 2", price: 90 });
+  assert.doesNotMatch(body, /can't help carry or lift heavy items/);
 });
 
 test("templates: address markers are rejected", async () => {
   const state = await openSeeded();
   assert.throws(() => renderTemplate(state.document, "pickup-confirm", {
-    name: "Ethan", pickupTime: "2:30", price: 90, payment: "cash", meetup: "Apt 1202, Westcreek",
+    name: "Buyer 1", pickupTime: "2:30", price: 90, payment: "cash", meetup: "Apt 1202, Westcreek",
   }), /address-leak/);
 });
 
 test("templates: missing variables throw", async () => {
   const state = await openSeeded();
-  assert.throws(() => renderTemplate(state.document, "pickup-confirm", { name: "Ethan" }), /pickupTime/);
+  assert.throws(() => renderTemplate(state.document, "pickup-confirm", { name: "Buyer 1" }), /pickupTime/);
 });
 
 // ---------- campaign cancel ----------
@@ -174,14 +174,21 @@ test("scam: ship-only + overpay patterns are flagged", () => {
 test("owner_activity: his own messages stand the agent down", async () => {
   const state = await openSeeded();
   const { doc, report } = reconcileOwnerActivity(state.document, [
-    { threadId: "kat-chair-thread", senderId: OWNER_FB_ID, senderName: "Irtiza Ahmed", body: "yes 2pm works", sentAt: NOW },
+    { threadId: "buyer-2-chair-thread", senderId: "owner-test-id", senderName: "Owner", body: "yes 2pm works", sentAt: NOW },
     { threadId: "other", senderId: "999", senderName: "Stranger", body: "hello", sentAt: NOW },
-  ]);
-  assert.deepEqual(report.ownerActiveThreads, ["kat-chair-thread"]);
-  const kat = doc.leads.find((l) => l.id === "kat")!;
-  assert.equal(kat.needsAgentFollowUp, false);
-  assert.equal(kat.ownerRepliedAt, NOW);
+  ], "owner-test-id");
+  assert.deepEqual(report.ownerActiveThreads, ["buyer-2-chair-thread"]);
+  const buyer2 = doc.leads.find((l) => l.id === "buyer-2")!;
+  assert.equal(buyer2.needsAgentFollowUp, false);
+  assert.equal(buyer2.ownerRepliedAt, NOW);
   assert.equal(report.escalations[0].reason, "owner-override");
+
+  // With no owner id configured, reconciliation no-ops, even for messages with an empty sender id.
+  const unset = reconcileOwnerActivity(state.document, [
+    { threadId: "buyer-2-chair-thread", senderId: "", senderName: "Buyer 2", body: "hi", sentAt: NOW },
+  ], "");
+  assert.deepEqual(unset.report.ownerActiveThreads, []);
+  assert.equal(isOwnerSender("", ""), false);
 });
 
 // ---------- policy: hard stops ----------
@@ -227,12 +234,12 @@ test("channels: dedupe drops seen events, matchLead finds threads", async () => 
   const state = await openSeeded();
   const events: LeadEvent[] = [
     { id: "messenger:t1:1", channel: "messenger", threadId: "t1", senderName: "A", body: "hi", sentAt: NOW },
-    { id: "messenger:t1:2", channel: "messenger", threadId: "kat-chair-thread", senderName: "Kat", body: "hi", sentAt: NOW },
+    { id: "messenger:t1:2", channel: "messenger", threadId: "buyer-2-chair-thread", senderName: "Buyer 2", body: "hi", sentAt: NOW },
   ];
   const fresh = dedupe({ ...state.document, seenEvents: ["messenger:t1:1"] }, events);
   assert.equal(fresh.length, 1);
   const lead = matchLead(state.document, fresh[0]);
-  assert.equal(lead!.id, "kat");
+  assert.equal(lead!.id, "buyer-2");
 });
 
 test("channels: pollers never throw — fake exec failures return []", async () => {
@@ -324,7 +331,7 @@ test("intake: publish uses the injected runner — never the real facebook-cli",
 test("rentals: booking drafts pending-approval, approve flips to booked", async () => {
   const state = await openSeeded();
   const { doc: d1, booking } = requestBooking(state.document, "bissell", {
-    leadId: "ladarrick", pickupDate: "2026-09-27", returnDate: "2026-09-28",
+    leadId: "renter-1", pickupDate: "2026-09-27", returnDate: "2026-09-28",
   }, NOW);
   assert.equal(booking.status, "pending-approval");
   assert.equal(booking.deposit.amount, 30);
@@ -346,11 +353,11 @@ test("cli: selling status prints listings and hunts", async () => {
 test("cli: selling confirm stages the pickup message in the outbox", async () => {
   const m = createTestMarketplaceDeps();
   const { deps, out } = cliDeps();
-  await runMarketplaceCommand(["selling", "confirm", "aby", "--pickup", "2026-09-26T15:00:00-05:00"], m, deps);
-  assert.match(out.join("\n"), /Confirmed Aby/);
+  await runMarketplaceCommand(["selling", "confirm", "buyer-4", "--pickup", "2026-09-26T15:00:00-05:00"], m, deps);
+  assert.match(out.join("\n"), /Confirmed Buyer 4/);
   const { deps: d2, out: o2 } = cliDeps();
   await runMarketplaceCommand(["selling", "outbox"], m, d2);
-  assert.match(o2.join("\n"), /back surgery/);
+  assert.match(o2.join("\n"), /can't help carry or lift heavy items/);
 });
 
 test("cli: buying cancel-hunt kills the hunt and stages close-outs", async () => {
@@ -401,7 +408,7 @@ test("rollSummaries: folds messages into living summaries, keeps messageCount", 
   const { rollSummaries, extractiveSummarizer } = await import("./summarize.js");
   const doc = seedDocument(NOW);
   const mk = (threadId: string, body: string, n: number): LeadEvent => ({
-    id: `e${n}`, channel: "messenger", threadId, senderName: "Kat", body, sentAt: NOW,
+    id: `e${n}`, channel: "messenger", threadId, senderName: "Buyer 2", body, sentAt: NOW,
   });
   const d1 = await rollSummaries(doc, [mk("t-kat", "still interested, can I pick up Friday?", 1)], extractiveSummarizer, NOW);
   assert.ok(d1.summaries["t-kat"]);
@@ -417,18 +424,18 @@ test("rollSummaries: injected summarizer receives previous summary + new message
   const doc = seedDocument(NOW);
   const seen: Array<[string, readonly string[]]> = [];
   const fake = async (prev: string, msgs: readonly string[]) => { seen.push([prev, msgs]); return `SUM(${msgs.length})`; };
-  const mk = (body: string): LeadEvent => ({ id: "e1", channel: "voice-sms", threadId: "t-v", senderName: "Roxy", body, sentAt: NOW });
+  const mk = (body: string): LeadEvent => ({ id: "e1", channel: "voice-sms", threadId: "t-v", senderName: "Renter 2", body, sentAt: NOW });
   await rollSummaries(doc, [mk("is Saturday available?")], fake, NOW);
   assert.equal(seen.length, 1);
   assert.equal(seen[0][0], "");
-  assert.ok(seen[0][1][0].includes("Roxy"));
+  assert.ok(seen[0][1][0].includes("Renter 2"));
 });
 
 // ---------- outbox dedup ----------
 
 test("stageMessage: identical body to same thread is never staged twice while pending", () => {
   const doc = seedDocument(NOW);
-  const input = { kind: "nudge" as const, channel: "messenger" as const, threadId: "kat-chair-thread", recipient: "Kat", body: "Hey Kat — just checking in!" };
+  const input = { kind: "nudge" as const, channel: "messenger" as const, threadId: "buyer-2-chair-thread", recipient: "Buyer 2", body: "Hey Buyer 2 — just checking in!" };
   const r1 = stageMessage(doc, input, NOW);
   assert.equal(r1.duplicated, false);
   const r2 = stageMessage(r1.doc, input, NOW);
@@ -439,7 +446,7 @@ test("stageMessage: identical body to same thread is never staged twice while pe
 
 test("stageMessage: same thread, different body is staged normally", () => {
   const doc = seedDocument(NOW);
-  const base = { kind: "nudge" as const, channel: "messenger" as const, threadId: "kat-chair-thread", recipient: "Kat" };
+  const base = { kind: "nudge" as const, channel: "messenger" as const, threadId: "buyer-2-chair-thread", recipient: "Buyer 2" };
   const r1 = stageMessage(doc, { ...base, body: "gentle nudge" }, NOW);
   const r2 = stageMessage(r1.doc, { ...base, body: "firm nudge" }, NOW);
   assert.equal(r2.duplicated, false);
@@ -489,12 +496,12 @@ test("queueFor: known flakes sink below reliable buyers", async () => {
   const { recordReliability } = await import("./selling/reliability.js");
   const { queueFor } = await import("./selling/queue.js");
   const doc = seedDocument(NOW);
-  // Make Kat (queuePosition 1 on chair listing) a known flake.
-  const d = recordReliability(recordReliability(doc, "Kat", "kat-chair-thread", "ghost", NOW), "Kat", "kat-chair-thread", "ghost", NOW);
+  // Make Buyer 2 (queuePosition 1 on chair listing) a known flake.
+  const d = recordReliability(recordReliability(doc, "Buyer 2", "buyer-2-chair-thread", "ghost", NOW), "Buyer 2", "buyer-2-chair-thread", "ghost", NOW);
   const q = queueFor(d, "chair").filter((l) => ["new", "contacted"].includes(l.status));
   assert.ok(q.length >= 2);
-  assert.notEqual(q[0].name, "Kat", "flake should not lead the queue");
-  assert.ok(q.findIndex((l) => l.name === "Kat") > q.findIndex((l) => l.name === "Eric"));
+  assert.notEqual(q[0].name, "Buyer 2", "flake should not lead the queue");
+  assert.ok(q.findIndex((l) => l.name === "Buyer 2") > q.findIndex((l) => l.name === "Buyer 3"));
 });
 
 // ---------- stale-listing detection ----------

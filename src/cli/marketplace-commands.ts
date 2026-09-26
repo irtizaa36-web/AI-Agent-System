@@ -11,7 +11,7 @@ import { requestBooking, approveBooking, bookingsFor } from "../marketplace/sell
 import { loadSidecar, validateIntake, buildIntakeDraft, approvalSummary, publishApproved, messengerCheckRunner, resolveIntakePrice } from "../marketplace/selling/intake";
 import { startHunt, pauseHunt, cancelHunt, detectSellerAcceptance } from "../marketplace/buying/hunts";
 import { createChannelPollers, pollAll, dedupe, matchLead, updateWatermarks, filterByWatermark, type LeadEvent } from "../marketplace/channels";
-import { reconcileOwnerActivity, OWNER_FB_ID } from "../marketplace/owner_activity";
+import { reconcileOwnerActivity, isOwnerSender } from "../marketplace/owner_activity";
 import { screenInbound } from "../marketplace/scam";
 import { isLogisticsHandoff, escalate, AuthorityError } from "../marketplace/policy";
 import { dueNudges, sendDueNudges } from "../marketplace/selling/nudge";
@@ -527,7 +527,7 @@ const CHANNELS: readonly Command[] = [
 
         // Owner-activity reconciliation first — he may have handled threads himself.
         const threadMessages = fresh
-          .filter((e) => e.senderId === OWNER_FB_ID)
+          .filter((e) => isOwnerSender(e.senderId))
           .map((e) => ({ threadId: e.threadId, senderId: e.senderId!, senderName: e.senderName, body: e.body, sentAt: e.sentAt }));
         if (threadMessages.length > 0) {
           const { doc: d3, report } = reconcileOwnerActivity(d2, threadMessages);
@@ -536,7 +536,7 @@ const CHANNELS: readonly Command[] = [
         }
 
         for (const event of fresh) {
-          if (event.senderId === OWNER_FB_ID) continue;
+          if (isOwnerSender(event.senderId)) continue;
           const lead = matchLead(d2, event);
           const screen = screenInbound(event.body);
           if (screen.flagged) {
