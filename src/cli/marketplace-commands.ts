@@ -5,20 +5,25 @@ import { InMemoryMarketplaceStorage } from "../marketplace/state";
 import { formatLeads, formatListing, formatOutbox, formatStatus } from "../marketplace/format";
 import { renderTemplate, templateNames } from "../marketplace/templates";
 import { stageMessage, pendingMessages, flushOutbox, recordSent } from "../marketplace/outbox";
-import { advanceExpiredHolds, confirmLead, holdLead, markSold, queueFor } from "../marketplace/selling/queue";
+import { advanceExpiredHolds, confirmLead, markSold, queueFor, stageAdvanceMessages } from "../marketplace/selling/queue";
 import { createListing, setListingStatus, attachFbListingId } from "../marketplace/selling/listings";
 import { requestBooking, approveBooking, bookingsFor } from "../marketplace/selling/rentals";
-import { loadSidecar, validateIntake, buildIntakeDraft, approvalSummary, publishApproved, messengerCheckRunner, resolveIntakePrice } from "../marketplace/selling/intake";
+import { loadSidecar, validateIntake, buildIntakeDraft, approvalSummary, publishApproved, messengerCheckRunner, resolveIntakePrice, intakeReadiness } from "../marketplace/selling/intake";
 import { startHunt, pauseHunt, cancelHunt, detectSellerAcceptance } from "../marketplace/buying/hunts";
-import { createChannelPollers, pollAll, dedupe, matchLead, updateWatermarks, filterByWatermark, type LeadEvent } from "../marketplace/channels";
-import { reconcileOwnerActivity, isOwnerSender } from "../marketplace/owner_activity";
+import { pollAll, dedupe, matchLead, updateWatermarks, filterByWatermark, type LeadEvent } from "../marketplace/channels";
+import { reconcileOwnerActivity, recordOwnerActivity, classifySender, isWatchOnly, watchOnlyThreads } from "../marketplace/owner_activity";
 import { screenInbound } from "../marketplace/scam";
-import { isLogisticsHandoff, escalate, AuthorityError } from "../marketplace/policy";
+import { isLogisticsHandoff, escalate, AuthorityError, canAutonomous, sellingScope, ACTIONS } from "../marketplace/policy";
 import { dueNudges, sendDueNudges } from "../marketplace/selling/nudge";
-import { detectStaleListings, retireMissingListings } from "../marketplace/selling/health";
+import { detectStaleListings, retireMissingListings, applyStaleDrops } from "../marketplace/selling/health";
 import { recordReliability, detectLowballOffer, buyerScore } from "../marketplace/selling/reliability";
 import { rollSummaries } from "../marketplace/summarize";
 import { logActivity } from "../marketplace/state";
+import { respondToOffer, stageNegotiationReply, extractOffer, setFloorPrice } from "../marketplace/selling/negotiation";
+import { evaluateRentalMessage, stageRentalReply } from "../marketplace/selling/rental_tree";
+import { buildDigest, formatDigest } from "../marketplace/digest";
+import { setParseFailureSink, logParseFailure, type ParseFailure } from "../marketplace/parse";
+import type { TrackerDocument } from "../marketplace/types";
 
 /**
  * `orchestrator marketplace selling|buying|channels ...` (ADR 0024).
@@ -67,6 +72,11 @@ async function withState<T>(m: MarketplaceDeps, fn: (doc: import("../marketplace
   const { doc, value } = await fn(state.document);
   await state.update(() => doc);
   return value;
+}
+
+/** Threads where the owner wrote inside the watch window — the agent may not message them now. */
+function watchOnlySet(doc: TrackerDocument, m: MarketplaceDeps, nowIso: string = m.now()): ReadonlySet<string> {
+  return new Set(watchOnlyThreads(doc, nowIso, m.config().ownerActivity.watchOnlyMinutes));
 }
 
 const SELLING: readonly Command[] = [
@@ -182,6 +192,12 @@ const SELLING: readonly Command[] = [
       });
       const photos = values.photos ?? [];
       const sidecar = loadSidecar(req(values.sidecar, "--sidecar"));
+      // Photo-first gate: low-confidence identification or unconfirmed specs → ask first, never draft on a guess.
+      const readiness = intakeReadiness(sidecar, m.config().intake);
+      if (!readiness.ready) {
+        deps.stdout(`NEEDS ANSWERS before drafting (${readiness.reason}). Ask him:\n${readiness.questions.map((q, i) => `  ${i + 1}. ${q}`).join("\n")}\nThen update the sidecar and rerun. Nothing drafted, nothing published.`);
+        return;
+      }
       // Comp-based auto-pricing: live comps propose the price unless he pinned one.
       const comp = values["no-comps"] || values.price
         ? { price: sidecar.suggestedPrice, compBasis: "skipped — price pinned by sidecar/--price", fromComps: false as const }
@@ -293,15 +309,18 @@ const SELLING: readonly Command[] = [
       const { values } = parse(args, { listing: { type: "string" } });
       const listingId = req(values.listing, "--listing");
       await withState(m, async (doc) => {
-        const { doc: d2, result } = advanceExpiredHolds(doc, listingId, m.now());
+        const skipThreads = watchOnlySet(doc, m);
+        const { doc: d2, result } = advanceExpiredHolds(doc, listingId, m.now(), { skipThreads });
         let d3 = d2;
         for (const e of result.expired) {
           deps.stdout(`Hold expired for ${e.name} — back to backup.`);
           d3 = recordReliability(d3, e.name, e.threadId, "hold-expired", m.now());
         }
-        if (result.advanced) deps.stdout(`Advanced ${result.advanced.name} to hold (expires ${result.advanced.holdExpiresAt}).`);
+        if (result.advanced) deps.stdout(`Advanced ${result.advanced.name} to hold at $${result.offeredPrice} (expires ${result.advanced.holdExpiresAt}).`);
         if (result.expired.length === 0) deps.stdout("No expired holds.");
-        return { doc: d3, value: undefined };
+        const { doc: d4, staged } = stageAdvanceMessages(d3, listingId, result, m.now(), { skipThreads });
+        if (staged > 0) deps.stdout(`Staged ${staged} queue message(s) (hold lapsed / same-terms offer).`);
+        return { doc: d4, value: undefined };
       });
     },
   },
@@ -335,7 +354,8 @@ const SELLING: readonly Command[] = [
       const { positionals } = parse(args, {});
       if (positionals[0] === "flush") {
         await withState(m, async (doc) => {
-          const { doc: d2, spurt } = flushOutbox(doc, m.now());
+          const { doc: d2, spurt, suppressed } = flushOutbox(doc, m.now(), m.config().ownerActivity.watchOnlyMinutes);
+          if (suppressed.length > 0) deps.stdout(`Suppressed ${suppressed.length} message(s): the owner is active in those threads (watch-only). They will not be sent.`);
           if (spurt.length === 0) {
             deps.stdout("Outbox is empty — nothing to flush.");
           } else {
@@ -371,7 +391,7 @@ const SELLING: readonly Command[] = [
     async run(_args, m, deps) {
       await withState(m, async (doc) => {
         const before = dueNudges(doc, m.now()).length;
-        const { doc: d2, staged } = sendDueNudges(doc, m.now());
+        const { doc: d2, staged } = sendDueNudges(doc, m.now(), { skipThreads: watchOnlySet(doc, m) });
         let d3 = d2;
         for (const s of staged) {
           d3 = logActivity(d3, "nudge", `Nudge level ${s.level} (${s.template}) staged for ${s.lead.name} on "${d3.listings.find((l) => l.id === s.lead.listingId)?.title}".`, m.now());
@@ -383,6 +403,80 @@ const SELLING: readonly Command[] = [
         }
         deps.stdout(`${before} due, ${staged.length} staged (outbox dedupes re-runs).`);
         return { doc: d3, value: undefined };
+      });
+    },
+  },
+  {
+    name: "offer",
+    usage: "marketplace selling offer <lead-id> --amount <n>",
+    summary: "Run a buyer's offer through the negotiation bands and stage the reply (autonomous; floor-bounded).",
+    async run(args, m, deps) {
+      const { values, positionals } = parse(args, { amount: { type: "string" } });
+      const leadId = req(positionals[0], "<lead-id>");
+      const amount = Number(req(values.amount, "--amount"));
+      if (!(amount > 0)) throw new UsageError("--amount must be a positive number.");
+      await withState(m, async (doc) => {
+        const lead = doc.leads.find((l) => l.id === leadId);
+        if (!lead) throw new UsageError(`Unknown lead "${leadId}".`);
+        const { doc: d1, decision, lead: updated } = respondToOffer(doc, lead.listingId, leadId, amount, m.now(), m.config().negotiation);
+        deps.stdout(`${lead.name} offered $${amount} (${decision.band}): ${decision.action} — ${decision.reason}`);
+        let d2 = d1;
+        if (isWatchOnly(d2, lead.threadId, m.now(), m.config().ownerActivity.watchOnlyMinutes)) {
+          deps.stdout("Owner is active in this thread — watch-only: state updated, nothing staged.");
+        } else if (decision.template) {
+          d2 = stageNegotiationReply(d2, updated, decision, m.now());
+          deps.stdout("Reply staged in the outbox.");
+        }
+        if (decision.escalation) {
+          deps.stdout(`[${decision.escalation.reason}] ${decision.escalation.summary}`);
+          d2 = logActivity(d2, "escalation", decision.escalation.summary.slice(0, 200), m.now());
+        }
+        d2 = logActivity(d2, "negotiation", `${lead.name} offered $${amount}: ${decision.action}.`, m.now());
+        return { doc: d2, value: undefined };
+      });
+    },
+  },
+  {
+    name: "floor",
+    usage: "marketplace selling floor --listing <id> (--price <n> | --clear)",
+    summary: "Set or clear a listing's floor price — the lowest the agent may ever agree to.",
+    async run(args, m, deps) {
+      const { values } = parse(args, { listing: { type: "string" }, price: { type: "string" }, clear: { type: "boolean", default: false } });
+      const listingId = req(values.listing, "--listing");
+      if (!values.clear && !values.price) throw new UsageError("Pass --price <n> or --clear.");
+      const floor = values.clear ? undefined : Number(values.price);
+      await withState(m, async (doc) => {
+        const d2 = setFloorPrice(doc, listingId, floor, m.now());
+        deps.stdout(floor === undefined ? `Floor cleared on ${listingId} — the counter band now restates the asking price.` : `Floor on ${listingId} set to $${floor}.`);
+        return { doc: d2, value: undefined };
+      });
+    },
+  },
+  {
+    name: "rental",
+    usage: "marketplace selling rental <lead-id> --message <text>",
+    summary: "Route a renter's message through the rental decision tree and stage the reply (never waives the deposit, never delivers).",
+    async run(args, m, deps) {
+      const { values, positionals } = parse(args, { message: { type: "string" } });
+      const leadId = req(positionals[0], "<lead-id>");
+      const message = req(values.message, "--message");
+      await withState(m, async (doc) => {
+        const lead = doc.leads.find((l) => l.id === leadId);
+        if (!lead) throw new UsageError(`Unknown lead "${leadId}".`);
+        const { doc: d1, decision, lead: updated } = evaluateRentalMessage(doc, lead.listingId, leadId, message, m.now(), m.config().rental);
+        deps.stdout(`${lead.name}: ${decision.step}.`);
+        let d2 = d1;
+        if (isWatchOnly(d2, lead.threadId, m.now(), m.config().ownerActivity.watchOnlyMinutes)) {
+          deps.stdout("Owner is active in this thread — watch-only: state updated, nothing staged.");
+        } else {
+          d2 = stageRentalReply(d2, updated, decision, m.now());
+          deps.stdout("Reply staged in the outbox.");
+        }
+        if (decision.escalation) {
+          deps.stdout(`[${decision.escalation.reason}] ${decision.escalation.summary}`);
+          d2 = logActivity(d2, "escalation", decision.escalation.summary.slice(0, 200), m.now());
+        }
+        return { doc: d2, value: undefined };
       });
     },
   },
@@ -402,10 +496,21 @@ const SELLING: readonly Command[] = [
             deps.stdout(`  "${s.title}": ${s.reason} Suggested: ${s.action}${s.suggestedPrice !== undefined ? ` → $${s.suggestedPrice}` : ""}.`);
           }
         }
-        let d2 = doc;
+        // Stale auto-drop: OFF unless the owner enabled it in config.
+        const drops = applyStaleDrops(doc, m.now(), m.config().staleDrop);
+        let d2 = drops.doc;
+        if (drops.disabled) {
+          deps.stdout("Stale auto-drop: disabled (config staleDrop.enabled = false).");
+        } else {
+          for (const d of drops.applied) {
+            deps.stdout(`Auto-dropped "${d.title}" $${d.from} → $${d.to} (floor $${d.floor}).`);
+            d2 = logActivity(d2, "listing", `Auto-dropped "${d.title}" $${d.from} → $${d.to} after ${d.daysQuiet} quiet days.`, m.now());
+          }
+          for (const d of drops.needsApproval) deps.stdout(`Auto-drop needs his approval (no price-change authority): "${d.title}" $${d.from} → $${d.to}.`);
+        }
         if (values["check-live"]) {
           const { execFile } = await import("node:child_process");
-          const { doc: d3, retired } = await retireMissingListings(doc, (a) => new Promise((resolve, reject) => {
+          const { doc: d3, retired } = await retireMissingListings(d2, (a) => new Promise((resolve, reject) => {
             execFile("facebook-cli", [...a], { timeout: 60_000 }, (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message))) : resolve(stdout)));
           }), m.now());
           d2 = d3;
@@ -515,7 +620,7 @@ const CHANNELS: readonly Command[] = [
     async run(args, m, deps) {
       const { values } = parse(args, { since: { type: "string" } });
       const since = values.since ?? new Date(Date.now() - 24 * 3600_000).toISOString();
-      const events = await pollAll(createChannelPollers(), since);
+      const events = await pollAll(m.pollers(), since);
       await withState(m, async (doc) => {
         // Watermark-based incremental reads: skip anything already read per
         // thread, then dedupe by event id. Runaway cap: 200 events per poll.
@@ -525,75 +630,110 @@ const CHANNELS: readonly Command[] = [
         const lines: string[] = [`Polled 3 channels since ${since}: ${events.length} event(s), ${fresh.length} new.`];
         const escalations: string[] = [];
 
-        // Owner-activity reconciliation first — he may have handled threads himself.
-        const threadMessages = fresh
-          .filter((e) => isOwnerSender(e.senderId))
-          .map((e) => ({ threadId: e.threadId, senderId: e.senderId!, senderName: e.senderName, body: e.body, sentAt: e.sentAt }));
-        if (threadMessages.length > 0) {
-          const { doc: d3, report } = reconcileOwnerActivity(d2, threadMessages);
+        const cfg = m.config();
+        const now = m.now();
+        // Owner vs agent by sender id: the agent sends through the owner's account, so a message
+        // from the owner's id that matches an outbox send is the agent's own, anything else is his.
+        const roles = new Map(fresh.map((e) => [e.id, e.senderId ? classifySender(d2, { threadId: e.threadId, senderId: e.senderId, body: e.body }) : "counterparty"]));
+        const ownerEvents = fresh.filter((e) => roles.get(e.id) === "owner");
+        if (ownerEvents.length > 0) {
+          const messages = ownerEvents.map((e) => ({ threadId: e.threadId, senderId: e.senderId!, senderName: e.senderName, body: e.body, sentAt: e.sentAt }));
+          d2 = recordOwnerActivity(d2, messages);
+          const { doc: d3, report } = reconcileOwnerActivity(d2, messages);
           d2 = d3;
           for (const n of report.notes) lines.push(`owner: ${n}`);
         }
 
         for (const event of fresh) {
-          if (isOwnerSender(event.senderId)) continue;
-          const lead = matchLead(d2, event);
-          const screen = screenInbound(event.body);
-          if (screen.flagged) {
-            const esc = escalate("scam-flagged", `Scam-flagged inbound from ${event.senderName} (${event.channel}): ${screen.reasons.join(", ")}`, {
-              sender: event.senderName, channel: event.channel, threadId: event.threadId, reasons: screen.reasons.join(","),
-            });
-            escalations.push(`[${esc.reason}] ${esc.summary} — no auto-reply sent.`);
-            continue;
-          }
-          if (lead && lead.listingId) {
-            const listing = d2.listings.find((l) => l.id === lead.listingId);
-            const priceAccepted = lead.status === "confirmed";
-            if (listing && isLogisticsHandoff(event.body, priceAccepted)) {              // THE selling hard stop: holding reply + escalate, never address/time.
-              const body = renderTemplate(d2, "holding-logistics", { name: event.senderName });
-              const staged = stageMessage(d2, {
-                kind: "reply",
-                channel: event.channel,
-                threadId: event.threadId,
-                recipient: event.senderName,
-                body,
-                listingId: lead.listingId,
-                leadId: lead.id,
-              }, m.now());
-              d2 = staged.doc;
-              const esc = escalate("logistics-handoff",
-                `LOGISTICS HANDOFF: ${event.senderName} accepted $${listing.price}${listing.priceFirm ? " firm" : ""} for "${listing.title}" and is asking for address/pickup time. Holding reply staged — address/time handoff is Toozy's call (suggest Highland Village public meetup).`,
-                { buyer: event.senderName, item: listing.title, price: String(listing.price), threadId: event.threadId, message: event.body.slice(0, 200) });
-              escalations.push(`[${esc.reason}] ${esc.summary}`);
+          if (roles.get(event.id) !== "counterparty") continue;
+          try {
+            // Watch-only: the owner wrote here inside the window — update state, never stage a message.
+            const watchOnly = isWatchOnly(d2, event.threadId, now, cfg.ownerActivity.watchOnlyMinutes);
+            const lead = matchLead(d2, event);
+            const screen = screenInbound(event.body);
+            if (screen.flagged) {
+              const esc = escalate("scam-flagged", `Scam-flagged inbound from ${event.senderName} (${event.channel}): ${screen.reasons.join(", ")}`, {
+                sender: event.senderName, channel: event.channel, threadId: event.threadId, reasons: screen.reasons.join(","),
+              });
+              escalations.push(`[${esc.reason}] ${esc.summary} — no auto-reply sent.`);
               continue;
             }
-          }
-          // BUYING side: seller thread on an active hunt — check the deal-agreed hard stop.
-          const campaign = d2.campaigns.find((c) => c.status === "active" && c.threads.includes(event.threadId));
-          if (campaign) {
-            const acceptance = detectSellerAcceptance(event.body, campaign.maxPrice);
-            if (acceptance.accepted) {
-              const esc = escalate("deal-agreed",
-                `DEAL AGREED: ${event.senderName} said yes${acceptance.price !== undefined ? ` at $${acceptance.price}` : ""} on hunt "${campaign.name}" (${campaign.criteria}). No reply sent to the seller, no pickup committed, no money moved — "seller said yes at your price, here's the deal, want it?"`,
-                { seller: event.senderName, hunt: campaign.name, price: acceptance.price !== undefined ? String(acceptance.price) : "", threadId: event.threadId, message: event.body.slice(0, 200) });
-              escalations.push(`[${esc.reason}] ${esc.summary}`);
+            if (lead && lead.listingId) {
+              const listing = d2.listings.find((l) => l.id === lead.listingId);
+              const priceAccepted = lead.status === "confirmed";
+              if (listing && isLogisticsHandoff(event.body, priceAccepted)) {
+                // THE selling hard stop: holding reply + escalate, never address/time.
+                if (!watchOnly) {
+                  const body = renderTemplate(d2, "holding-logistics", { name: event.senderName });
+                  d2 = stageMessage(d2, {
+                    kind: "reply",
+                    channel: event.channel,
+                    threadId: event.threadId,
+                    recipient: event.senderName,
+                    body,
+                    listingId: lead.listingId,
+                    leadId: lead.id,
+                  }, now).doc;
+                }
+                const esc = escalate("logistics-handoff",
+                  `LOGISTICS HANDOFF: ${event.senderName} accepted $${listing.price}${listing.priceFirm ? " firm" : ""} for "${listing.title}" and is asking for address/pickup time. ${watchOnly ? "You're active in the thread, so no holding reply was staged" : "Holding reply staged"} — address/time handoff is Toozy's call (suggest Highland Village public meetup).`,
+                  { buyer: event.senderName, item: listing.title, price: String(listing.price), threadId: event.threadId, message: event.body.slice(0, 200) });
+                escalations.push(`[${esc.reason}] ${esc.summary}`);
+                continue;
+              }
+            }
+            // BUYING side: seller thread on an active hunt — check the deal-agreed hard stop.
+            const campaign = d2.campaigns.find((c) => c.status === "active" && c.threads.includes(event.threadId));
+            if (campaign) {
+              const acceptance = detectSellerAcceptance(event.body, campaign.maxPrice);
+              if (acceptance.accepted) {
+                const esc = escalate("deal-agreed",
+                  `DEAL AGREED: ${event.senderName} said yes${acceptance.price !== undefined ? ` at $${acceptance.price}` : ""} on hunt "${campaign.name}" (${campaign.criteria}). No reply sent to the seller, no pickup committed, no money moved — "seller said yes at your price, here's the deal, want it?"`,
+                  { seller: event.senderName, hunt: campaign.name, price: acceptance.price !== undefined ? String(acceptance.price) : "", threadId: event.threadId, message: event.body.slice(0, 200) });
+                escalations.push(`[${esc.reason}] ${esc.summary}`);
+                continue;
+              }
+            }
+            if (!lead) {
+              lines.push(`new: ${event.senderName} (${event.channel}, thread ${event.threadId}): "${event.body.slice(0, 100)}"`);
               continue;
             }
-          }
-          if (!lead) {
-            lines.push(`new: ${event.senderName} (${event.channel}, thread ${event.threadId}): "${event.body.slice(0, 100)}"`);
-          } else {
-            lines.push(`lead ${lead.id}: ${event.senderName}: "${event.body.slice(0, 100)}"`);
+            lines.push(`lead ${lead.id}: ${event.senderName}: "${event.body.slice(0, 100)}"${watchOnly ? " [watch-only]" : ""}`);
             // Buyer reliability: contact + lowball pattern detection.
-            d2 = recordReliability(d2, event.senderName, event.threadId, "contact", m.now());
+            d2 = recordReliability(d2, event.senderName, event.threadId, "contact", now);
             const listing = lead.listingId ? d2.listings.find((l) => l.id === lead.listingId) : undefined;
-            if (listing && listing.priceFirm) {
+            if (!listing) continue;
+            if (listing.priceFirm) {
               const lowball = detectLowballOffer(event.body, listing.price);
               if (lowball !== undefined) {
-                d2 = recordReliability(d2, event.senderName, event.threadId, "lowball", m.now());
+                d2 = recordReliability(d2, event.senderName, event.threadId, "lowball", now);
                 lines.push(`  lowball pattern: ${event.senderName} offered $${lowball} vs $${listing.price} firm (reliability score now ${buyerScore(d2, event.senderName)})`);
               }
             }
+            const agentMayReply = lead.needsAgentFollowUp && canAutonomous(d2, sellingScope(listing.id), ACTIONS.REPLY) && ["new", "contacted", "hold"].includes(lead.status);
+            if (!agentMayReply) continue;
+            if (listing.kind === "sale") {
+              // Negotiation bands: polite hold / one firm counter at the floor / decline; stalls escalate.
+              const offer = extractOffer(event.body, listing.price);
+              if (offer === undefined) continue;
+              const current = d2.leads.find((l) => l.id === lead.id)!;
+              const { doc: d3, decision, lead: updated } = respondToOffer(d2, listing.id, current.id, offer, now, cfg.negotiation);
+              d2 = watchOnly ? d3 : stageNegotiationReply(d3, updated, decision, now);
+              lines.push(`  offer $${offer}: ${decision.action}${watchOnly ? " (watch-only, nothing staged)" : decision.template ? " (reply staged)" : ""}`);
+              d2 = logActivity(d2, "negotiation", `${lead.name} offered $${offer} on "${listing.title}": ${decision.action}.`, now);
+              if (decision.escalation) escalations.push(`[${decision.escalation.reason}] ${decision.escalation.summary}`);
+            } else {
+              // Rental decision tree: delivery → decline; rate → deposit → specific time → ready for his tap.
+              const current = d2.leads.find((l) => l.id === lead.id)!;
+              const { doc: d3, decision, lead: updated } = evaluateRentalMessage(d2, listing.id, current.id, event.body, now, cfg.rental);
+              d2 = watchOnly ? d3 : stageRentalReply(d3, updated, decision, now);
+              lines.push(`  rental: ${decision.step}${watchOnly ? " (watch-only, nothing staged)" : " (reply staged)"}`);
+              if (decision.escalation) escalations.push(`[${decision.escalation.reason}] ${decision.escalation.summary}`);
+            }
+          } catch (error) {
+            // One bad event never takes the poll down: log it, keep going.
+            logParseFailure("poll.event", error, event);
+            lines.push(`skipped event ${event.id}: ${(error as Error).message}`);
           }
         }
 
@@ -630,70 +770,93 @@ const TOPLEVEL: readonly Command[] = [
     summary: "One pass, all listings: incremental poll → advance holds → due nudges → stale check (shared sweep window, no per-listing polling).",
     async run(_args, m, deps) {
       const lines = ["SWEEP — one pass, all listings"];
-      // 1. Incremental poll (watermarks; capped events).
-      await findCommand(CHANNELS, "poll").run([], m, { ...deps, stdout: (s: string) => lines.push(s) });
-      // 2. Advance expired holds on every active listing (thread-age cap).
-      const state = await m.openState();
-      const now = m.now();
-      const cutoff = new Date(new Date(now).getTime() - MAX_THREAD_AGE_DAYS * 24 * 3600_000).toISOString();
-      const active = state.document.listings.filter((l) => l.status === "active" && l.monitoring).slice(0, MAX_THREADS_PER_SWEEP);
-      let advanced = 0;
-      let expired = 0;
-      for (const listing of active) {
+      // Reliability: collect this run's parse failures (still logged to stderr with the raw output)
+      // and isolate every step, so one bad payload or one bad listing never crashes the run.
+      const failures: ParseFailure[] = [];
+      const restore = setParseFailureSink((f) => {
+        failures.push(f);
+        process.stderr.write(`${JSON.stringify(f)}\n`);
+      });
+      const step = async (name: string, fn: () => Promise<void>) => {
+        try {
+          await fn();
+        } catch (error) {
+          logParseFailure(`sweep.${name}`, error, "");
+          lines.push(`${name}: FAILED (${(error as Error).message}) — continuing.`);
+        }
+      };
+      const sub = { ...deps, stdout: (s: string) => lines.push(s) };
+      try {
+        // 1. Incremental poll (watermarks; capped events).
+        await step("poll", () => findCommand(CHANNELS, "poll").run([], m, sub));
+        // 2. Advance expired holds on every active listing (thread-age cap), staging lapse/offer messages.
+        await step("advance", async () => {
+          const state = await m.openState();
+          const now = m.now();
+          const cutoff = new Date(new Date(now).getTime() - MAX_THREAD_AGE_DAYS * 24 * 3600_000).toISOString();
+          const active = state.document.listings.filter((l) => l.status === "active" && l.monitoring).slice(0, MAX_THREADS_PER_SWEEP);
+          let advanced = 0;
+          let expired = 0;
+          for (const listing of active) {
+            try {
+              await withState(m, async (doc) => {
+                const skipThreads = watchOnlySet(doc, m, now);
+                const { doc: d2, result } = advanceExpiredHolds(doc, listing.id, now, { skipThreads });
+                let d3 = d2;
+                for (const e of result.expired) {
+                  if (e.firstSeenAt < cutoff) continue; // runaway guard: ancient threads age out quietly
+                  d3 = recordReliability(d3, e.name, e.threadId, "hold-expired", now);
+                  expired++;
+                }
+                if (result.advanced) {
+                  advanced++;
+                  d3 = logActivity(d3, "queue", `Hold lapsed on "${listing.title}"; advanced ${result.advanced.name} at $${result.offeredPrice}.`, now);
+                }
+                const { doc: d4 } = stageAdvanceMessages(d3, listing.id, result, now, { skipThreads });
+                return { doc: d4, value: undefined };
+              });
+            } catch (error) {
+              if (error instanceof AuthorityError) {
+                lines.push(`advance: skipped "${listing.title}" — no advance-queue authority in this scope.`);
+                continue;
+              }
+              logParseFailure("sweep.advance.listing", error, listing.id);
+              lines.push(`advance: "${listing.title}" failed (${(error as Error).message}) — continuing.`);
+            }
+          }
+          lines.push(`advance: ${expired} hold(s) expired, ${advanced} queue(s) advanced.`);
+        });
+        // 3. Due nudges (autonomous, outbox-deduped, watch-only threads skipped).
+        await step("nudge", () => findCommand(SELLING, "nudge-due").run([], m, sub));
+        // 4. Stale-listing suggestions + auto-drop (disabled by default; no live check in the loop — cheap).
+        await step("health", () => findCommand(SELLING, "health").run([], m, sub));
+      } finally {
+        restore();
+      }
+      if (failures.length > 0) {
+        lines.push(`parse failures: ${failures.length} (raw outputs logged to stderr as marketplace.parse_failure records).`);
         try {
           await withState(m, async (doc) => {
-            const { doc: d2, result } = advanceExpiredHolds(doc, listing.id, now);
-            let d3 = d2;
-            for (const e of result.expired) {
-              if (e.firstSeenAt < cutoff) continue; // runaway guard: ancient threads age out quietly
-              d3 = recordReliability(d3, e.name, e.threadId, "hold-expired", now);
-              expired++;
-            }
-            if (result.advanced) advanced++;
-            return { doc: d3, value: undefined };
+            let d2 = doc;
+            for (const f of failures.slice(0, 20)) d2 = logActivity(d2, "parse-failure", `${f.source}: ${f.error.slice(0, 120)}`, m.now());
+            return { doc: d2, value: undefined };
           });
-        } catch (error) {
-          if (error instanceof AuthorityError) {
-            lines.push(`advance: skipped "${listing.title}" — no advance-queue authority in this scope.`);
-            continue;
-          }
-          throw error;
+        } catch {
+          /* recording the failures must not fail the run */
         }
       }
-      lines.push(`advance: ${expired} hold(s) expired, ${advanced} queue(s) advanced.`);
-      // 3. Due nudges (autonomous, outbox-deduped).
-      await findCommand(SELLING, "nudge-due").run([], m, { ...deps, stdout: (s: string) => lines.push(s) });
-      // 4. Stale-listing suggestions (no live check in the loop — cheap).
-      await findCommand(SELLING, "health").run([], m, { ...deps, stdout: (s: string) => lines.push(s) });
       deps.stdout(lines.join("\n"));
     },
   },
   {
     name: "digest",
     usage: "marketplace digest [--since <iso>]",
-    summary: "One short daily digest: confirmations, bookings, escalations, nudges, stale suggestions. Everything else is compressed here.",
+    summary: "End-of-day digest in four sections: active listings + new inquiries, negotiations, rentals, action needed.",
     async run(args, m, deps) {
       const { values } = parse(args, { since: { type: "string" } });
       const since = values.since ?? new Date(Date.now() - 24 * 3600_000).toISOString();
       const state = await m.openState();
-      const doc = state.document;
-      const recent = doc.activity.filter((a) => a.at >= since);
-      const lines = [`MARKETPLACE DIGEST (since ${since})`];
-      if (recent.length === 0) lines.push("  Nothing to report — no confirmations, bookings, escalations, or nudges.");
-      const byKind: Record<string, string[]> = {};
-      for (const a of recent) (byKind[a.kind] ??= []).push(`  [${a.at.slice(0, 16)}] ${a.text}`);
-      for (const [kind, items] of Object.entries(byKind)) {
-        lines.push(`${kind.toUpperCase()} (${items.length}):`);
-        lines.push(...items.slice(0, 10));
-      }
-      const stale = detectStaleListings(doc, m.now());
-      if (stale.length > 0) {
-        lines.push(`STALE LISTINGS (${stale.length}):`);
-        for (const s of stale) lines.push(`  "${s.title}": ${s.reason} Suggest: ${s.action}${s.suggestedPrice !== undefined ? ` → $${s.suggestedPrice}` : ""}`);
-      }
-      const pending = pendingMessages(doc).length;
-      lines.push(`Outbox: ${pending} message(s) pending his tap.`);
-      deps.stdout(lines.join("\n"));
+      deps.stdout(formatDigest(buildDigest(state.document, since, m.now(), m.config())));
     },
   },
 ];

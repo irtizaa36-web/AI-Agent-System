@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Channel, OutboxKind, OutboxMessage, TrackerDocument } from "./types";
+import { DEFAULT_CONFIG } from "./config";
+import { isWatchOnly } from "./owner_activity";
 
 /**
  * Send queue (ADR 0024). Nothing goes straight to Messenger: every outbound
@@ -63,12 +65,28 @@ export function awaitingTap(doc: TrackerDocument): OutboxMessage[] {
  * Flush one spurt: mark every pending message "awaiting-tap" and return them
  * for printing. Printing the exact bodies is the approval surface — the
  * owner taps one card per message in his app.
+ *
+ * Watch-only backstop: a pending message for a thread where the owner wrote
+ * within the watch window is marked "suppressed" and never reaches a card.
  */
-export function flushOutbox(doc: TrackerDocument, now: string = new Date().toISOString()): { doc: TrackerDocument; spurt: OutboxMessage[] } {
-  const spurt = pendingMessages(doc);
+export function flushOutbox(
+  doc: TrackerDocument,
+  now: string = new Date().toISOString(),
+  watchOnlyMinutes: number = DEFAULT_CONFIG.ownerActivity.watchOnlyMinutes,
+): { doc: TrackerDocument; spurt: OutboxMessage[]; suppressed: OutboxMessage[] } {
+  const pending = pendingMessages(doc);
+  const suppressed = pending.filter((m) => isWatchOnly(doc, m.threadId, now, watchOnlyMinutes));
+  const suppressedIds = new Set(suppressed.map((m) => m.id));
+  const spurt = pending.filter((m) => !suppressedIds.has(m.id));
   const ids = new Set(spurt.map((m) => m.id));
-  const outbox = doc.outbox.map((m) => (ids.has(m.id) ? { ...m, status: "awaiting-tap" as const } : m));
-  return { doc: { ...doc, outbox, updatedAt: now }, spurt: spurt.map((m) => ({ ...m, status: "awaiting-tap" as const })) };
+  const outbox = doc.outbox.map((m) =>
+    ids.has(m.id) ? { ...m, status: "awaiting-tap" as const } : suppressedIds.has(m.id) ? { ...m, status: "suppressed" as const } : m,
+  );
+  return {
+    doc: { ...doc, outbox, updatedAt: now },
+    spurt: spurt.map((m) => ({ ...m, status: "awaiting-tap" as const })),
+    suppressed: suppressed.map((m) => ({ ...m, status: "suppressed" as const })),
+  };
 }
 
 /** Record that the owner tapped send on these messages (cards approved). */

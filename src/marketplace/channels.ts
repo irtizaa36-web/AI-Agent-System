@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import type { Channel, TrackerDocument } from "./types";
 import { screenInbound } from "./scam";
 import { renderTemplate } from "./templates";
+import { itemsOf, logParseFailure, parseJsonLenient } from "./parse";
 
 /**
  * Unified inbound monitor (ADR 0024). Normalizes lead events from three
@@ -63,24 +64,28 @@ export interface ChannelPoller {
  */
 export const VOICE_GMAIL_QUERY = "from:voice-noreply@google.com label:Voice newer_than:7d";
 
-function safeParseEvents(stdout: string, channel: Channel, toEvent: (item: any) => LeadEvent | undefined): LeadEvent[] {
-  try {
-    const parsed = JSON.parse(stdout);
-    const items = Array.isArray(parsed) ? parsed : parsed?.data ?? parsed?.messages ?? [];
-    if (!Array.isArray(items)) return [];
-    const events: LeadEvent[] = [];
-    for (const item of items) {
-      try {
-        const e = toEvent(item);
-        if (e) events.push(e);
-      } catch {
-        /* skip malformed item */
-      }
+function safeParseEvents(stdout: string, channel: Channel, toEvent: (item: any) => LeadEvent | undefined, source: string = channel): LeadEvent[] {
+  const parsed = parseJsonLenient(stdout, source);
+  if (!parsed.ok) return [];
+  const items = itemsOf(parsed.value, source, stdout);
+  const events: LeadEvent[] = [];
+  for (const item of items) {
+    try {
+      const e = toEvent(item);
+      if (e) events.push(e);
+    } catch (error) {
+      // One malformed item is logged and skipped; the rest of the payload still counts.
+      logParseFailure(`${source}.item`, error, item);
     }
-    return events;
-  } catch {
-    return [];
   }
+  return events;
+}
+
+/** ISO time from a CLI date field; a garbage date is an error for the item, not a silent "now". */
+function isoFrom(raw: unknown): string {
+  const d = new Date(raw as string | number);
+  if (Number.isNaN(d.getTime())) throw new Error(`unparseable date ${JSON.stringify(raw)}`);
+  return d.toISOString();
 }
 
 export function createChannelPollers(exec: ExecFn = realExec): ChannelPoller[] {
@@ -105,7 +110,7 @@ export function createChannelPollers(exec: ExecFn = realExec): ChannelPoller[] {
           senderName: t.name ?? "unknown",
           senderId,
           body: truncate(String(snippet)),
-          sentAt: new Date(Number(t.updated_at) || Date.now()).toISOString(),
+          sentAt: t.updated_at === undefined ? new Date().toISOString() : isoFrom(Number(t.updated_at) || t.updated_at),
         };
       });
     },
@@ -129,7 +134,7 @@ export function createChannelPollers(exec: ExecFn = realExec): ChannelPoller[] {
           threadId: String(m.threadId ?? m.thread_id ?? id),
           senderName: String(m.from ?? m.sender ?? "Voice SMS"),
           body: truncate(String(m.snippet ?? m.subject ?? "")),
-          sentAt: m.date ? new Date(m.date).toISOString() : new Date().toISOString(),
+          sentAt: m.date ? isoFrom(m.date) : new Date().toISOString(),
         };
       });
     },
@@ -153,7 +158,7 @@ export function createChannelPollers(exec: ExecFn = realExec): ChannelPoller[] {
           threadId: String(m.thread_id ?? m.threadId ?? id),
           senderName: String(m.from ?? "unknown"),
           body: truncate(String(m.subject ? `${m.subject} — ${m.snippet ?? ""}` : (m.snippet ?? ""))),
-          sentAt: m.date ? new Date(m.date).toISOString() : new Date().toISOString(),
+          sentAt: m.date ? isoFrom(m.date) : new Date().toISOString(),
         };
       });
     },

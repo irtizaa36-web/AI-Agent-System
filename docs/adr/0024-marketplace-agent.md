@@ -105,3 +105,40 @@ Not built: automatic sending of anything (every send is staged → flushed
 in 5-minute spurts → his approval-card tap), event-driven message hooks
 (where the runtime doesn't offer them), and live comp-sold data (active
 listings only).
+
+## Addendum — Karen upgrades (2026-09-26)
+
+Eight changes, all inside the existing SELLING mechanism and outbox
+contract (nothing is sent by the CLI; everything is still staged and
+tapped):
+
+1. **Negotiation bands** (`selling/negotiation.ts`): <10% below asking →
+   polite hold; 10–25% → one firm counter at the per-listing `floorPrice`;
+   25%+ → decline. Two rounds without agreement → `negotiation-stalled`
+   escalation and the agent stops. Never below the floor; no floor → no
+   counter.
+2. **Queue timeouts** (`selling/queue.ts`): default hold timeout is now 12h
+   (config); expiry stages a "hold lapsed" note and a same-terms offer to
+   the next buyer in strict first-in-line order (reliability score no
+   longer reorders hold advancement). Invariant: one active hold per item.
+3. **Watch-only** (`owner_activity.ts`): an owner message in the last 60
+   minutes makes the thread watch-only; callers skip staging and
+   `flushOutbox` suppresses any leftovers. This is on top of the existing
+   permanent stand-down in `reconcileOwnerActivity`.
+4. **Rental decision tree** (`selling/rental_tree.ts`): delivery decline →
+   rate → deposit (never waived) → specific pickup time. `approveBooking`
+   refuses until all three are agreed.
+5. **Photo-first gate** (`selling/intake.ts`): sidecars state
+   `confidence` and `unknownSpecs`; low confidence or any unknown spec
+   yields 1–2 clarifying questions instead of a draft.
+6. **Stale auto-drop** (`selling/health.ts`): built and disabled by
+   default; bounded by the floor and by `price-change` authority.
+7. **Digest** (`digest.ts`): four fixed sections.
+8. **Reliability** (`parse.ts`): lenient JSON parsing with a structured
+   stderr record (source, error, raw excerpt) on every failure; per-item,
+   per-event and per-step isolation in the poll and sweep. Fixed: an
+   unreadable `my-listings` payload used to read as "nothing is live" and
+   would have retired every tracked listing.
+
+Config: `src/marketplace/config.ts` defaults, overridden by the local,
+gitignored `.orchestrator/marketplace/config.json`.

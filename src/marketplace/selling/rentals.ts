@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RentalBooking, TrackerDocument } from "../types";
+import { checklistComplete } from "./rental_tree";
 
 /**
  * SELLING — rental variant (BISSELL Little Green, ADR 0024).
@@ -49,6 +50,13 @@ export function approveBooking(doc: TrackerDocument, bookingId: string, nowIso: 
   const booking = doc.bookings.find((b) => b.id === bookingId);
   if (!booking) throw new Error(`Unknown booking "${bookingId}".`);
   if (booking.status !== "pending-approval") throw new Error(`Booking "${bookingId}" is ${booking.status}, not pending-approval.`);
+  // Rental decision tree: confirmed ONLY when rate + deposit + a specific pickup time are all agreed.
+  const lead = doc.leads.find((l) => l.id === booking.leadId);
+  if (!checklistComplete(lead?.rental)) {
+    const c = lead?.rental;
+    const missing = [!c?.rateAgreed && "rate", !c?.depositCommitted && "deposit", !c?.pickupTime && "specific pickup time"].filter(Boolean).join(", ");
+    throw new Error(`Booking "${bookingId}" can't be confirmed yet — not agreed: ${missing}.`);
+  }
   const updated: RentalBooking = { ...booking, status: "booked", updatedAt: nowIso };
   return { doc: { ...doc, bookings: doc.bookings.map((b) => (b.id === bookingId ? updated : b)), updatedAt: nowIso }, booking: updated };
 }

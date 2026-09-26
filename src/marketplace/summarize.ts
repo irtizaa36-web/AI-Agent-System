@@ -1,5 +1,6 @@
 import type { ThreadSummary, TrackerDocument } from "./types";
 import type { LeadEvent } from "./channels";
+import { logParseFailure } from "./parse";
 
 /**
  * Rolling thread summaries (ADR 0024).
@@ -46,7 +47,18 @@ export async function rollSummaries(
   const summaries = { ...doc.summaries };
   for (const [threadId, messages] of byThread) {
     const prev = summaries[threadId];
-    const summary = await summarize(prev?.summary ?? "", messages);
+    // The summarizer may be a model: a throw or a non-string answer keeps the previous summary for this thread only.
+    let summary: unknown;
+    try {
+      summary = await summarize(prev?.summary ?? "", messages);
+    } catch (error) {
+      logParseFailure("summarize.thread", error, messages.join("\n"));
+      continue;
+    }
+    if (typeof summary !== "string" || summary.trim() === "") {
+      logParseFailure("summarize.thread", "summarizer returned no text", summary);
+      continue;
+    }
     summaries[threadId] = {
       threadId,
       summary: summary.slice(0, 2000),

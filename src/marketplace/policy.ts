@@ -83,7 +83,9 @@ export type EscalationReason =
   | "scam-flagged"
   | "owner-override"
   | "logistics-handoff"
-  | "deal-agreed";
+  | "deal-agreed"
+  | "negotiation-stalled"
+  | "rental-ready";
 
 export interface Escalation {
   readonly reason: EscalationReason;
