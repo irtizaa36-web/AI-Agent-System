@@ -17,7 +17,7 @@ const SUBJECT = /^new (text message|voicemail) from (.+?)\s*$/i;
 
 /** Google's footer starts at one of these lines; everything from there on is dropped. */
 const FOOTER_MARKERS = [
-  /^to respond to this text message/i,
+  /^to respond to this (text )?message/i,
   /^your account\b/i,
   /^help center\b/i,
   /^play message\b/i,
@@ -28,6 +28,16 @@ const FOOTER_MARKERS = [
 function senderAddress(from: string): string {
   const angle = from.match(/<([^>]+)>/);
   return (angle ? angle[1] : from).trim();
+}
+
+/** Google puts a bare link to voice.google.com above the message; it is chrome, not message text. */
+const CHROME_HEADER_LINE = /^<https?:\/\/[^\s<>]+>\s*$/i;
+
+function stripChromeHeader(body: string): string {
+  const lines = body.replace(/\r\n/g, "\n").split("\n");
+  let start = 0;
+  while (start < lines.length && (lines[start].trim() === "" || CHROME_HEADER_LINE.test(lines[start].trim()))) start += 1;
+  return lines.slice(start).join("\n");
 }
 
 function stripFooter(body: string): string {
@@ -44,7 +54,7 @@ export function parseVoiceEmail(email: VoiceEmailInput): VoiceInbound | undefine
   const subject = email.subject.trim().match(SUBJECT);
   if (!subject) return undefined;
   const kind = subject[1].toLowerCase() === "voicemail" ? "voicemail" : "text";
-  const text = stripFooter(email.body);
+  const text = stripChromeHeader(stripFooter(email.body));
   if (text.length === 0) return undefined;
   const replyAddress = kind === "text" ? senderAddress(email.replyTo ?? email.from) : undefined;
   return {

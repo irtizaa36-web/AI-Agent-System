@@ -9,6 +9,7 @@ import { composeReply, sha256 } from "./drafter";
 import { readIntents } from "./intent";
 import { redactCodes, SecretCode } from "./redact";
 import { classifyScam } from "./scam";
+import { servicesNamed } from "./services";
 import { InMemoryVoiceStateStore, JsonFileVoiceStateStore } from "./store";
 import { FakeVoiceReplyTransport, OutboxVoiceReplyTransport, type VoiceReplyTransport } from "./transport";
 import type { Listing, VoiceEmailInput, VoiceInbound } from "./types";
@@ -18,7 +19,9 @@ import { parseVoiceEmail, toVoiceEmailInput } from "./voice-email";
 // Every number and address here is fictional (555-01xx is reserved for fiction).
 const BUYER_REPLY = "15550100001.15550100002.aBcD1234@txt.voice.google.com";
 const T0 = new Date("2026-09-26T15:00:00Z");
-const FOOTER = "\n\nTo respond to this text message, reply to this email or visit Google Voice.\nYOUR ACCOUNT HELP CENTER HELP FORUM\nGoogle LLC 1600 Amphitheatre Pkwy";
+// The real forwarded-email shape: a bare link above the message, Google's footer below it.
+const HEADER = "<https://voice.google.com>";
+const FOOTER = "\n\nTo respond to this message, launch Google Voice (https://voice.google.com) on your mobile device or computer.\nYOUR ACCOUNT HELP CENTER HELP FORUM\nGoogle LLC 1600 Amphitheatre Pkwy";
 
 let seq = 0;
 function textEmail(body: string, overrides: Partial<VoiceEmailInput> = {}): VoiceEmailInput {
@@ -28,7 +31,7 @@ function textEmail(body: string, overrides: Partial<VoiceEmailInput> = {}): Voic
     threadId: overrides.threadId ?? `thread-${seq}`,
     from: `"(555) 010-0001" <${BUYER_REPLY}>`,
     subject: "New text message from (555) 010-0001",
-    body: body + FOOTER,
+    body: HEADER + "\n" + body + FOOTER,
     receivedAt: T0.toISOString(),
     ...overrides,
   };
@@ -108,7 +111,7 @@ test("parse: anything not from Google Voice, or with an unknown subject, is igno
 test("parse: the handed-over JSON is validated field by field", () => {
   assert.throws(() => toVoiceEmailInput({ id: "x" }), /message\.threadId/);
   assert.throws(() => toVoiceEmailInput({ ...textEmail("hi"), receivedAt: "yesterday" }), /receivedAt/);
-  assert.equal(toVoiceEmailInput(textEmail("hi")).body.startsWith("hi"), true);
+  assert.equal(toVoiceEmailInput(textEmail("hi")).body.includes("\nhi\n"), true);
 });
 
 // ── redaction and SecretCode ─────────────────────────────────────────────
@@ -471,4 +474,56 @@ test("file store: state round-trips, contains no code value, and a corrupt file 
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// ── Regressions from the real forwarded-email self-test ─────────────────
+
+test("real email: Google's header link and footer are stripped, so the chrome never names Google", () => {
+  const m = inbound("Your Retell AI verification code is: 482916");
+  assert.equal(m.text, "Your Retell AI verification code is: 482916");
+  assert.equal(servicesNamed(m.text).has("google"), false);
+});
+
+test("real email: an open google verification does not consume a Retell code", async () => {
+  const { voice } = harness();
+  const google = await voice.broker.start("google", { purpose: "Toozy asked to verify the Google profile" });
+  const outcome = await voice.broker.ingest(inbound("Your Retell AI verification code is: 482916"));
+  assert.equal(outcome.kind, "alert");
+  assert.equal(outcome.kind === "alert" && outcome.alert.reason, "service-not-named");
+  const after = (await voice.broker.list()).find((p) => p.id === google.id);
+  assert.equal(after?.status, "open");
+});
+
+test("real email: an open retell ai verification consumes the Retell code", async () => {
+  const { voice } = harness();
+  await voice.broker.start("retell ai", { purpose: "Toozy asked for a Retell account", aliases: ["retell"] });
+  const outcome = await voice.broker.ingest(inbound("Your Retell AI verification code is: 482916"));
+  assert.equal(outcome.kind, "consumed");
+  assert.equal(outcome.kind === "consumed" && outcome.code.reveal(), "482916");
+});
+
+test("services: X, banks and medical senders are named", () => {
+  assert.ok(servicesNamed("X: your code is 482916").has("x"));
+  assert.ok(servicesNamed("Chase: your verification code is 482916").has("chase"));
+  assert.ok(servicesNamed("Dr. Smith: your code is 482916").has("medical"));
+  assert.ok(servicesNamed("Your appointment is confirmed for Tuesday").has("medical"));
+});
+
+test("broker refuses banks (real mobile) and medical (never verified)", async () => {
+  const { voice } = harness();
+  await assert.rejects(voice.broker.start("chase", { purpose: "p" }), /real mobile/);
+  await assert.rejects(voice.broker.start("medical", { purpose: "p" }), /never verified/);
+  assert.equal((await voice.broker.list()).length, 0);
+});
+
+test("scam: a code relay that avoids the word 'code' is flagged; asking for a phone number is not", () => {
+  assert.ok(classifyScam("read back the number Google texts you", COUCH).includes("verification-code-request"));
+  assert.equal(classifyScam("give me your number, I'll text you about the couch", COUCH).includes("verification-code-request"), false);
+});
+
+test("intent: 'what time works Saturday?' is a pickup question, 'does it still work?' is about the item", () => {
+  const saturday = readIntents("what time works Saturday?");
+  assert.ok(saturday.routine.includes("pickup"));
+  assert.deepEqual(saturday.needsToozy, []);
+  assert.ok(readIntents("does it still work?").needsToozy.includes("question about the item itself"));
 });
