@@ -128,7 +128,7 @@ test("runCli status reports agent/provider/tool/pack counts and names", async ()
   assert.match(output, /Providers:\s+2 \(claude, fake\)/);
   assert.match(
     output,
-    /Tools:\s+28 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email, read-web-page, browser-list-form-fields, browser-fill-form-preview, browser-submit-form, read-job-board-page, graph-recall, graph-record, polymarket-find-markets, polymarket-get-quote, polymarket-preview-order, polymarket-place-order, sleeper-find-leagues, sleeper-matchup-preview, sleeper-waiver-recommendations, sleeper-preview-write, sleeper-execute-write, pickem-research-line, pickem-bankroll-status, pickem-build-slip, settlements-deadlines, settlements-review, settlements-evaluate, settlements-research-sweep\)/,
+    /Tools:\s+29 \(read-file, inkbox-search-mail, inkbox-read-thread, inkbox-save-draft, send-email, read-web-page, browser-list-form-fields, browser-fill-form-preview, browser-submit-form, read-job-board-page, x-search-sweep, graph-recall, graph-record, polymarket-find-markets, polymarket-get-quote, polymarket-preview-order, polymarket-place-order, sleeper-find-leagues, sleeper-matchup-preview, sleeper-waiver-recommendations, sleeper-preview-write, sleeper-execute-write, pickem-research-line, pickem-bankroll-status, pickem-build-slip, settlements-deadlines, settlements-review, settlements-evaluate, settlements-research-sweep\)/,
   );
   assert.match(output, /Packs:\s+10 \(core-demo, personal-assistant, dispatcher, career-advisor, ai-research, job-search, public-agent-creation, prediction-markets, sleeper, settlements\)/);
   assert.match(output, /Tests:\s+\S/);
