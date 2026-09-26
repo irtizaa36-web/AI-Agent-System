@@ -36,6 +36,33 @@ runs, PRs.
 Never touch credentials or secrets. Never merge except on green CI.
 Final approvals are Toozy's alone.
 
+## Orchestrator brief watcher
+
+`orchestrator watch-briefs poll` (ADR 0027) polls the GitHub API for new
+brief files on `claude/*` branches, roughly every 3 minutes — the same
+cadence and "a branch push is the trigger" shape as Muse's watcher below,
+so the two stay consistent.
+
+A brief is a markdown file at `docs/delegation/briefs/<task>.md` on any
+`claude/*` branch:
+
+```
+# <Task title>
+
+Target branch: `claude/<task>-<suffix>`
+
+<free-form body — instructions for the Code session picking this up>
+```
+
+The Orchestrator writes this file (directly or via its own branch) when it
+wants a Code session dispatched. On finding a new one, the watcher checks
+out (or reuses) the named target branch, writes a starter
+`trial/delegation-log.md` there with the brief's own text and empty
+Diagnosis/Delegation-table/Budget-status headings, and pushes that one
+commit. It never opens or merges a PR and never runs the brief itself —
+picking it up from there (reading the brief, doing the work, opening the
+PR) is a Code session's job, same as any other task under this protocol.
+
 ## Delegation mechanics
 
 Each session keeps `trial/delegation-log.md` on its session branch and

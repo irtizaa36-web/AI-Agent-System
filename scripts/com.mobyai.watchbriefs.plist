@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Orchestrator brief watcher (ADR 0027), polling every 180 seconds (~3
+  minutes) — the same cadence Muse's own watcher uses for
+  trial/delegation-log.md (docs/delegation/PROTOCOL.md). Runs one poll per
+  firing via `orchestrator watch-briefs poll`; it never merges, never opens
+  a PR, and never runs a brief's instructions — it only checks out the
+  branch a new brief names and pushes a starter delegation-log stub there.
+
+  Needs GITHUB_TOKEN (read-only content access) in the checkout's .env file.
+
+  Install:
+    1. Edit REPO_PATH below to the absolute path of this repository.
+    2. cp scripts/com.mobyai.watchbriefs.plist ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.mobyai.watchbriefs.plist
+    4. launchctl start com.mobyai.watchbriefs     (to test it immediately)
+
+  Check on it:
+    launchctl list | grep mobyai
+    tail -f REPO_PATH/logs/watchbriefs.out
+
+  Idempotent: a missed or repeated firing costs nothing beyond one poll —
+  every brief pickup is deduped by (branch, path, content sha).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mobyai.watchbriefs</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd REPO_PATH &amp;&amp; /usr/bin/env npm run watch-briefs -- poll</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>180</integer>
+
+  <key>StandardOutPath</key>
+  <string>REPO_PATH/logs/watchbriefs.out</string>
+  <key>StandardErrorPath</key>
+  <string>REPO_PATH/logs/watchbriefs.err</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
