@@ -33,6 +33,8 @@ import type { SleeperDeps } from "../config/load";
 import { runSettlementsCommand } from "./settlements-commands";
 import { createSettlementsDeps, type SettlementsDeps } from "../settlements/deps";
 import { JsonFileTrackerStorage } from "../settlements/storage";
+import { runVoiceCommand } from "./voice-commands";
+import { createDefaultVoiceDeps, type VoiceDeps } from "../voice/deps";
 import type { Registry } from "../registry/registry";
 import type { RunStore } from "../store/run-store";
 import type { WorkflowStore } from "../store/workflow-store";
@@ -71,6 +73,8 @@ export interface CliDeps {
   readonly sleeper?: SleeperDeps;
   /** The settlement tracker and research sources for `orchestrator settlements ...` (ADR 0022) — the same instance the Registry's settlements tools use. */
   readonly settlements?: SettlementsDeps;
+  /** The Google Voice code broker and reply drafter for `orchestrator voice ...` (ADR 0023). Every switch is off unless set to "true". */
+  readonly voice?: VoiceDeps;
 }
 
 function printUsage(stdout: (line: string) => void): void {
@@ -101,6 +105,7 @@ function printUsage(stdout: (line: string) => void): void {
       "  orchestrator sleeper pickem research|slip|log|settle|bankroll Pick'em research and bankroll; you place every entry",
       "  orchestrator settlements deadlines|alerts|review|research   Settlement claims: deadlines, nudges, eligibility, new-settlement research",
       "  orchestrator settlements add|status|verdict|action|...      Record what you did; you file every claim yourself (settlements help)",
+      "  orchestrator voice status|ingest|alerts|drafts|approve|send  Google Voice: matched verification codes, gated SMS replies (voice help)",
       '  orchestrator constraints add "<text>"                       Record a correction, applied to every future run',
       "  orchestrator constraints list                                List recorded corrections",
       "  orchestrator help                                           Show this message",
@@ -354,6 +359,10 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return runSettlementsCommand(rest, deps);
   }
 
+  if (command === "voice") {
+    return runVoiceCommand(rest, deps);
+  }
+
   deps.stderr(`Unknown command "${command}". Run "orchestrator help" for usage.`);
   return 1;
 }
@@ -391,6 +400,7 @@ async function main(): Promise<void> {
     constraintsStore,
     sleeper,
     settlements,
+    voice: createDefaultVoiceDeps(cwd),
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
   });
