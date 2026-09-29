@@ -44,6 +44,11 @@ Confidence is about how much the POSTING told you, not how good the match is:
   medium  Enough to judge, with gaps in what was stated.
   low     Vague, boilerplate-heavy, or too short to judge properly.
 
+Title vs. experience:
+- The candidate does NOT need a title from a fixed list. Judge whether the role's actual duties align with the experience on her resume, whatever the title says. A differently-named role that does the same kind of work (program, marketing, vendor/partner, GTM, operations, P&L ownership) is a fit; a role that merely shares a title word but needs a different discipline is not.
+- Read the title and description together. Ask: would she plausibly apply to this herself, given what she has actually done?
+- The "Target roles" list below is only a hint about roles she has liked before. A title missing from it is not a reason to lower the score, and a title on it is not a reason to raise it.
+
 Rules you must follow:
 - Judge only against what the resume actually says. Never assume experience that is not written there.
 - "gaps" lists requirements the posting asks for that the resume does not support. Name them plainly. An empty list means the resume genuinely covers the stated requirements.
@@ -61,7 +66,7 @@ Return one object for every posting you were given, in the same order.`;
  * character in here would invalidate it on every call.
  */
 export function buildSystemPrompt(profile: CandidateProfile, prefs: Preferences): string {
-  const targets = prefs.titles.length > 0 ? prefs.titles.join(", ") : "(not yet configured — judge on the resume alone)";
+  const targets = prefs.titles.length > 0 ? `${prefs.titles.join(", ")} (examples only, not a required list)` : "(not yet configured — judge on the resume alone)";
   const floor = prefs.salaryFloor === null ? "(not set)" : `${prefs.salaryFloor.toLocaleString()} ${prefs.salaryCurrency}`;
 
   return `${RUBRIC}

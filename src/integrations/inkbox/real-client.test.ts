@@ -146,6 +146,24 @@ test("getMessage throws InkboxAPIError for a non-404 failure", async () => {
   );
 });
 
+test("an object-valued error detail is preserved, not coerced to [object Object]", async () => {
+  await withFetch(
+    () => jsonResponse(422, { detail: [{ loc: ["body", "to"], msg: "field required" }] }),
+    async () => {
+      const client = createRealInkboxClient({ apiKey: "key", mailboxAddress: "toozy@inkboxmail.com" });
+      await assert.rejects(
+        () => client.getMessage("m1"),
+        (error: Error) => {
+          assert.match(error.message, /HTTP 422/);
+          assert.match(error.message, /field required/);
+          assert.doesNotMatch(error.message, /\[object Object\]/);
+          return true;
+        },
+      );
+    },
+  );
+});
+
 test("readThread enriches snippet-level messages with full detail, and returns undefined for a 404", async () => {
   await withFetch(
     (url) => {

@@ -54,13 +54,21 @@ export interface PipelineDeps {
   readonly politeDelay?: boolean;
 }
 
+/**
+ * Bumped whenever the deterministic title logic changes, so records filtered
+ * under an older rule are re-evaluated. v2: the title-cluster hard gate was
+ * removed; title/experience fit is judged during scoring instead. `titles` is
+ * no longer part of the hash because it no longer affects filtering.
+ */
+const TITLE_GATE_VERSION = "experience-alignment-v2";
+
 export async function runPipeline(deps: PipelineDeps): Promise<RunSummary> {
   const runId = randomUUID();
   const startedAt = new Date().toISOString();
   const ledger = new CostLedger(runId, deps.costLogPath);
   const health: SourceHealth[] = [];
   const filterVersion = createHash("sha1")
-    .update(JSON.stringify({ titles: deps.prefs.titles, titleExclusions: deps.prefs.titleExclusions }))
+    .update(JSON.stringify({ titleExclusions: deps.prefs.titleExclusions, titleGate: TITLE_GATE_VERSION }))
     .digest("hex");
 
   // Stages 1-2 — fetch, with per-source health and no source able to fail the run.

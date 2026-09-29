@@ -41,34 +41,20 @@ test("a remote role with a matching title passes", () => {
   assert.equal(applyFilters(job(), prefs).passed, true);
 });
 
-test("a title outside the cluster is rejected before any model call", () => {
-  const outcome = applyFilters(job({ title: "Staff Backend Engineer" }), prefs);
-  assert.equal(outcome.passed, false);
-  assert.match(outcome.reason ?? "", /outside the target cluster/);
-});
-
-test("a title matches a configured pattern even when the words are reordered", () => {
-  // Real Sep 14 examples that a literal substring check silently dropped:
-  // the board's title leads with a qualifier or restructures the phrase, but
-  // every word in the configured pattern is still there.
-  const outcome = applyFilters(job({ title: "Senior GTM Strategy & Operations Manager, Mid-Late Sales Funnel" }), {
-    ...prefs,
-    titles: ["strategy & operations manager"],
-  });
+test("a title outside the configured list is NOT rejected; fit is judged at scoring", () => {
+  const outcome = applyFilters(job({ title: "Partnerships Lead, Retail Media" }), prefs);
   assert.equal(outcome.passed, true);
+  assert.equal(outcome.reason, null);
 });
 
-test("a title match still requires every word in the pattern, not just some of them", () => {
-  const outcome = applyFilters(job({ title: "Operations Coordinator" }), {
-    ...prefs,
-    titles: ["strategy & operations manager"],
-  });
-  assert.equal(outcome.passed, false);
+test("titles are only a soft signal: an unrelated title still passes the deterministic filters", () => {
+  assert.equal(applyFilters(job({ title: "Staff Backend Engineer" }), prefs).passed, true);
+  assert.equal(applyFilters(job({ title: "Staff Backend Engineer" }), { ...prefs, titles: [] }).passed, true);
 });
 
-test("an empty titles list lets everything through rather than rejecting the whole market", () => {
-  const outcome = applyFilters(job({ title: "Staff Backend Engineer" }), { ...prefs, titles: [] });
-  assert.equal(outcome.passed, true);
+test("title exclusions and the other hard filters still reject", () => {
+  assert.equal(applyFilters(job({ title: "Marketing Intern" }), prefs).passed, false);
+  assert.equal(applyFilters(job({ locationClass: "onsite", rawLocation: "Chicago, IL" }), prefs).passed, false);
 });
 
 test("an onsite role is rejected under remote-only", () => {

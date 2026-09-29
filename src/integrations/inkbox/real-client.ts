@@ -33,6 +33,21 @@ export class InkboxAPIError extends Error {
   }
 }
 
+/**
+ * Turns an API error body's `detail` into readable text. FastAPI-style APIs
+ * return a string for simple errors but an object or array (e.g. validation
+ * errors) for others; String() on those yields "[object Object]".
+ */
+export function formatErrorDetail(detail: unknown, fallback: string): string {
+  if (detail === undefined || detail === null || detail === "") return fallback;
+  if (typeof detail === "string") return detail;
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return fallback;
+  }
+}
+
 // ---- raw wire shapes (snake_case), matching Inkbox's real Mail API ----
 
 interface RawMessage {
@@ -143,8 +158,8 @@ class InkboxHttp {
     if (!response.ok) {
       let detail: string;
       try {
-        const err = (await response.json()) as { detail?: string };
-        detail = err.detail ?? response.statusText;
+        const err = (await response.json()) as { detail?: unknown };
+        detail = formatErrorDetail(err.detail, response.statusText);
       } catch {
         detail = response.statusText;
       }
