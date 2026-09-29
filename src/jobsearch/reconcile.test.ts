@@ -46,11 +46,11 @@ test("a filtered record that now passes is rescued: state flips to seen, filterR
 });
 
 test("a record that still fails stays filtered, with its reason refreshed", () => {
-  const stale = job({ title: "Staff Backend Engineer", filterReason: "some stale reason" });
+  const stale = job({ title: "Marketing Intern", filterReason: "some stale reason" });
   const { rescued, stillFiltered } = reconcileFiltered([stale], prefs);
   assert.equal(rescued.length, 0);
   assert.equal(stillFiltered.length, 1);
-  assert.equal(stillFiltered[0]?.filterReason, "Title outside the target cluster");
+  assert.match(stillFiltered[0]?.filterReason ?? "", /^Title excluded/);
 });
 
 test("records not in the filtered state are left alone entirely", () => {

@@ -1,5 +1,5 @@
 import type { JobRecord, Preferences } from "./records";
-import { normalizeCompany, normalizeTitle, titleMatchesTarget } from "./normalize";
+import { normalizeCompany, normalizeTitle } from "./normalize";
 
 /**
  * Stage 6: the free filters. Everything here is a string comparison or a
@@ -39,14 +39,10 @@ export function applyFilters(record: JobRecord, prefs: Preferences, now: Date = 
     }
   }
 
-  // An empty titles list means "not configured yet" — let everything through
-  // rather than silently rejecting the entire market on a blank config file.
-  if (prefs.titles.length > 0) {
-    const matched = prefs.titles.some((target) => titleMatchesTarget(record.title, target));
-    if (!matched) {
-      return { passed: false, reason: "Title outside the target cluster" };
-    }
-  }
+  // Deliberately no title-cluster gate here. Whether a role's title and duties
+  // line up with her resume experience is a judgment, not a string match, so it
+  // is made by the scoring pass (score.ts), where the model sees the title AND
+  // the description next to her resume. `prefs.titles` is only a soft hint there.
 
   for (const industry of prefs.industryExclusions) {
     if (haystack.includes(industry.toLowerCase())) {
@@ -189,11 +185,14 @@ export interface RejectionBucket {
  * whole run: 189 distinct-looking strings can still mean "title didn't
  * match" 189 times. This buckets a run's rejections back to the check that
  * produced them, so the digest can show which gate is actually doing the
- * work — the gap this closes is that the title-cluster check silently threw
- * away 92.9% of one real run and nobody could see that from the digest.
+ * work — the gap this closes is that the (now removed) title-cluster check
+ * silently threw away 92.9% of one real run and nobody could see that from
+ * the digest. The bucket for that retired reason is kept below so old stored
+ * records still summarize sensibly.
  */
 const REJECTION_BUCKETS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^Title excluded:/, "Title excluded (level cap / intern / contractor)"],
+  [/^Title outside the target cluster/, "Title outside the old target cluster (retired gate)"],
   [/^Company excluded:/, "Company excluded"],
   [/^Industry excluded:/, "Industry excluded"],
   [/^Not remote/, "Not remote, and not in a named metro"],

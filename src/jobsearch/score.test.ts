@@ -117,3 +117,9 @@ test("the cached system prefix is byte-identical across batches, so the cache ca
   assert.equal(client.requests.length, 2);
   assert.equal(client.requests[0]?.system, client.requests[1]?.system);
 });
+
+test("the system prompt asks for experience alignment and treats titles as examples only", () => {
+  const system = buildSystemPrompt(profile, prefs);
+  assert.match(system, /does NOT need a title from a fixed list/);
+  assert.match(system, /examples only, not a required list/);
+});

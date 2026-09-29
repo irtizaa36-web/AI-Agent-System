@@ -184,7 +184,7 @@ export function buildRunContext(prefs: Preferences, latestRun?: DigestPayload): 
 
 function fieldDescription(field: AllowedPatchField): string {
   const descriptions: Record<AllowedPatchField, string> = {
-    titles: "array of strings — title patterns that must appear (any order) for a posting to be considered at all",
+    titles: "array of strings — example target roles shown to the scorer as a soft hint only; NOT a filter (postings are judged on fit with her resume experience, not on matching this list)",
     titleExclusions: "array of strings — a title containing any of these is rejected outright (e.g. \"director\", \"intern\")",
     salaryFloor: "number or null — reject a posting whose stated max pay falls below this; null means no floor",
     remoteOnly: "boolean — true means only remote roles pass, unless metros re-admits a named place",
