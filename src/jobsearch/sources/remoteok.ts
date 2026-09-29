@@ -58,7 +58,7 @@ export function parseRemoteOkJobs(
         sourceId,
         url: job.url || job.apply_url || "",
         title,
-        company: job.company?.trim() || null,
+        company: job.company?.trim() ?? "",
         location,
         body: job.description ?? "",
         postedAt,

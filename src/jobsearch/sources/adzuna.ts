@@ -60,7 +60,7 @@ export function parseAdzunaResults(body: unknown, sourceId: string, fetchedAt: s
         sourceId,
         url,
         title,
-        company: result.company?.display_name?.trim() || null,
+        company: result.company?.display_name?.trim() ?? "",
         location: result.location?.display_name?.trim() ?? "",
         body: result.description ?? "",
         postedAt: result.created ?? null,

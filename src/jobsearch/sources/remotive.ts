@@ -51,7 +51,7 @@ export function parseRemotiveJobs(
         sourceId,
         url: job.url ?? "",
         title,
-        company: job.company_name?.trim() || null,
+        company: job.company_name?.trim() ?? "",
         location,
         body: job.description ?? "",
         postedAt: job.publication_date ?? null,
