@@ -9,6 +9,7 @@ import { createScoringClientFromEnv } from "../jobsearch/scoring-client";
 import { CostLedger, readLedger } from "../jobsearch/cost";
 import { createJobsDashboardServer } from "../jobsearch/dashboard";
 import { createAlertMailSource } from "../jobsearch/sources/alert-mail";
+import { createPublicBoardSources } from "../jobsearch/sources/public-boards";
 import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
 import type { Source } from "../jobsearch/sources/source";
 import { createSmsClientFromEnv, SmsRecipientBlockedError } from "../jobsearch/sms-client";
@@ -213,8 +214,9 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
   const prefs = await loadPreferences(profile, root);
   const watchlist = await loadWatchlist(profile, root);
   const inkboxClient = createInkboxClientFromEnv();
+  const publicBoards = createPublicBoardSources(profile, prefs.titles);
 
-  if (watchlist.length === 0 && !inkboxClient) {
+  if (watchlist.length === 0 && !inkboxClient && publicBoards.sources.length === 0) {
     deps.stderr(
       `No sources configured for ${profile}: ${join(configDirFor(profile), "watchlist.json")} is empty and Inkbox (for LinkedIn/Indeed alerts) is not set up. Add at least one.`,
     );
@@ -257,6 +259,10 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
   // a half-configured source, same pattern as the scoring client above.
   const sources: Source[] = [...sourcesFromWatchlist(watchlist)];
   if (inkboxClient) sources.push(createAlertMailSource(inkboxClient));
+  sources.push(...publicBoards.sources);
+  if (publicBoards.adzunaSkipped) {
+    deps.stderr("Adzuna job board skipped: set ADZUNA_APP_ID and ADZUNA_APP_KEY to enable it.");
+  }
 
   const summary = await runPipeline({
     sources,
@@ -744,6 +750,7 @@ async function printLatestDigest(profile: string, root: string, deps: JobsComman
 }
 
 async function listSources(profile: string, root: string, deps: JobsCommandDeps): Promise<number> {
+  const prefs = await loadPreferences(profile, root);
   const watchlist = await loadWatchlist(profile, root);
   const sources: Source[] = [...sourcesFromWatchlist(watchlist)];
 
@@ -752,6 +759,12 @@ async function listSources(profile: string, root: string, deps: JobsCommandDeps)
     sources.push(createAlertMailSource(inkboxClient));
   } else {
     deps.stdout("(LinkedIn/Indeed alert-mail source not checked — INKBOX_API_KEY/INKBOX_MAILBOX_ADDRESS not set)");
+  }
+
+  const publicBoards = createPublicBoardSources(profile, prefs.titles);
+  sources.push(...publicBoards.sources);
+  if (publicBoards.adzunaSkipped) {
+    deps.stdout("(Adzuna job board not checked — ADZUNA_APP_ID/ADZUNA_APP_KEY not set)");
   }
 
   if (sources.length === 0) {
