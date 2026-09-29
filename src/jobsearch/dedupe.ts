@@ -51,7 +51,11 @@ export function mergeSighting(existing: JobRecord, incoming: JobRecord): JobReco
  * posting, the identity key catches the same role worded differently
  * elsewhere.
  */
-export function dedupe(incoming: readonly JobRecord[], known: readonly JobRecord[]): DedupeResult {
+export function dedupe(
+  incoming: readonly JobRecord[],
+  known: readonly JobRecord[],
+  filterVersion?: string,
+): DedupeResult {
   const byHash = new Map<string, JobRecord>();
   const byIdentity = new Map<string, JobRecord>();
   for (const record of known) {
@@ -85,9 +89,21 @@ export function dedupe(incoming: readonly JobRecord[], known: readonly JobRecord
 
     const existing = byHash.get(record.contentHash) ?? byIdentity.get(record.identityKey);
     if (existing) {
-      duplicateCount += 1;
       const base = mergedById.get(existing.id) ?? existing;
-      mergedById.set(existing.id, mergeSighting(base, record));
+      const combined = mergeSighting(base, record);
+      const staleFiltered =
+        existing.state === "filtered" && filterVersion !== undefined && existing.filterVersion !== filterVersion;
+      if (existing.state === "seen" || staleFiltered) {
+        // Never scored (scoring unavailable/failed that run), or filtered under
+        // an older title list: re-enter the pipeline under the stored id
+        // instead of merging away. saveJobs upserts by id, so no duplicate.
+        freshById.set(existing.id, { ...combined, id: existing.id, state: "seen", filterReason: null });
+        freshByHash.set(record.contentHash, existing.id);
+        freshByIdentity.set(record.identityKey, existing.id);
+      } else {
+        duplicateCount += 1;
+        mergedById.set(existing.id, combined);
+      }
       continue;
     }
 

@@ -4,6 +4,14 @@
   "titles": [
     "program manager",
     "marketing program manager",
+    "marketing manager",
+    "product marketing manager",
+    "brand marketing manager",
+    "demand generation manager",
+    "content marketing manager",
+    "digital marketing manager",
+    "lifecycle marketing manager",
+    "campaign manager",
     "field marketing manager",
     "business operations manager",
     "strategy & operations analyst",
@@ -56,7 +64,7 @@
   "scoreCutoff": 65,
   "unstatedSalaryRankPenalty": 3,
   "_unstatedSalaryRankPenalty": "Per Irtiza: de-prioritize roles with no stated salary, don't exclude them. Subtracted from a role's DISPLAY-ORDER rank only — never from the score shown, and never from whether it clears scoreCutoff. Weakened from an initial 8 to 3 after a live run flipped Snowflake's GTM & Enablement PM (82, unstated) below Notion's Partner Marketing Manager (78, $235k-260k stated) — a 4-point real quality gap shouldn't lose to a salary-transparency nudge. At 3, a genuine gap of 3+ points still wins on merit; only a near-tie (within ~1-2 points) now favors the pay-transparent role. 0 disables this entirely.",
-  "digestLimit": 8,
+  "digestLimit": 12,
 
   "postingTokenBudget": 600,
   "scoringBatchSize": 15,
