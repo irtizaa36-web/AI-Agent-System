@@ -244,3 +244,34 @@ test("the age limit is a no-op when not configured", () => {
   const outcome = applyFilters(job({ postedAt: "2020-01-01T00:00:00.000Z" }), prefs, now);
   assert.equal(outcome.passed, true);
 });
+
+// Shivani's hard 3-day recency window.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const shivaniNow = new Date("2026-09-29T12:00:00.000Z");
+const threeDayPrefs: Preferences = { ...prefs, maxPostingAgeDays: 3 };
+const postedDaysAgo = (days: number): string => new Date(shivaniNow.getTime() - days * DAY_MS).toISOString();
+
+test("3-day cutoff: 2.9 days old is kept", () => {
+  assert.equal(applyFilters(job({ postedAt: postedDaysAgo(2.9) }), threeDayPrefs, shivaniNow).passed, true);
+});
+
+test("3-day cutoff: 3.1 days old is dropped", () => {
+  const outcome = applyFilters(job({ postedAt: postedDaysAgo(3.1) }), threeDayPrefs, shivaniNow);
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /older than the 3-day limit/);
+});
+
+test("3-day cutoff: exactly 3.0 days old is KEPT (limit is inclusive; only strictly older is dropped)", () => {
+  assert.equal(applyFilters(job({ postedAt: postedDaysAgo(3) }), threeDayPrefs, shivaniNow).passed, true);
+});
+
+test("3-day cutoff: unknown or unparseable posted dates are not newly excluded", () => {
+  assert.equal(applyFilters(job({ postedAt: null }), threeDayPrefs, shivaniNow).passed, true);
+  assert.equal(applyFilters(job({ postedAt: "not a date" }), threeDayPrefs, shivaniNow).passed, true);
+});
+
+test("the committed shivani profile sets the recency window to 3 days", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const raw = JSON.parse(await readFile("config/job-search/shivani/preferences.json", "utf8")) as Partial<Preferences>;
+  assert.equal(raw.maxPostingAgeDays, 3);
+});

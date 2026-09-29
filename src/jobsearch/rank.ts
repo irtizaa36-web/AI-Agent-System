@@ -34,10 +34,20 @@ export function locationBonus(record: JobRecord, prefs: Preferences): number {
   return (prefs.locationPriority.length - 1 - tier) * prefs.locationPriorityStep;
 }
 
+/**
+ * Points added when a posting states an applicant count under the threshold.
+ * Unknown (null/absent) counts get zero — no boost, no penalty, no exclusion.
+ */
+export function applicantBonus(record: JobRecord, prefs: Preferences): number {
+  const count = record.applicantCount;
+  if (count === null || count === undefined || !Number.isFinite(count)) return 0;
+  return count < prefs.lowApplicantThreshold ? prefs.lowApplicantRankBonus : 0;
+}
+
 /** The key roles are sorted by. Higher sorts first. Never persisted, never shown — display order only. */
 export function rankKey(record: JobRecord, prefs: Preferences): number {
   const penalty = salaryUnknown(record) ? prefs.unstatedSalaryRankPenalty : 0;
-  return (record.score ?? 0) - penalty + locationBonus(record, prefs);
+  return (record.score ?? 0) - penalty + locationBonus(record, prefs) + applicantBonus(record, prefs);
 }
 
 /** Stable sort by rank key, highest first. Ties keep their original relative order. */

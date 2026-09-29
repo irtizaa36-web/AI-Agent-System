@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { locationBonus, rankKey, sortByRank } from "./rank";
+import { applicantBonus, locationBonus, rankKey, sortByRank } from "./rank";
 import { DEFAULT_PREFERENCES, type JobRecord, type Preferences } from "./records";
 
 function job(overrides: Partial<JobRecord> = {}): JobRecord {
@@ -152,4 +152,36 @@ test("a real location preference can flip two close scores toward the preferred 
   // asserting a specific winner.
   const [first] = sortByRank([dallasStrong, houstonWeaker], locationPrefs);
   assert.equal(first?.id, "a");
+});
+
+// Applicant-count preference: soft boost under the threshold, never a filter or penalty.
+test("applicantBonus boosts a posting with fewer than 200 applicants", () => {
+  assert.equal(applicantBonus(job({ applicantCount: 199 }), prefs), prefs.lowApplicantRankBonus);
+  assert.equal(applicantBonus(job({ applicantCount: 0 }), prefs), prefs.lowApplicantRankBonus);
+  assert.equal(rankKey(job({ score: 70, applicantCount: 50 }), prefs), rankKey(job({ score: 70 }), prefs) + prefs.lowApplicantRankBonus);
+});
+
+test("applicantBonus gives nothing at or above the threshold", () => {
+  assert.equal(applicantBonus(job({ applicantCount: 200 }), prefs), 0);
+  assert.equal(applicantBonus(job({ applicantCount: 5000 }), prefs), 0);
+});
+
+test("a missing applicant count is neutral: no boost, no penalty, no crash", () => {
+  assert.equal(applicantBonus(job({ applicantCount: null }), prefs), 0);
+  const { applicantCount: _omitted, ...legacy } = job();
+  assert.equal(applicantBonus(legacy as JobRecord, prefs), 0);
+  assert.equal(rankKey(job({ score: 70, applicantCount: null }), prefs), rankKey(job({ score: 70 }), prefs));
+});
+
+test("a low-applicant role wins a near-tie, but a big score gap still wins on merit", () => {
+  const few = job({ id: "few", score: 70, applicantCount: 40 });
+  const unknown = job({ id: "unknown", score: 71 });
+  assert.equal(sortByRank([unknown, few], prefs)[0]?.id, "few");
+  const strong = job({ id: "strong", score: 85 });
+  assert.equal(sortByRank([few, strong], prefs)[0]?.id, "strong");
+});
+
+test("the applicant preference never excludes: every record survives sorting", () => {
+  const records = [job({ id: "a", applicantCount: 900 }), job({ id: "b", applicantCount: null }), job({ id: "c", applicantCount: 5 })];
+  assert.equal(sortByRank(records, prefs).length, 3);
 });

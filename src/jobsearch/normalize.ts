@@ -328,6 +328,12 @@ export function truncateToBudget(text: string, tokenBudget: number): string {
   return (lastBreak > maxChars * 0.6 ? cut.slice(0, lastBreak) : cut).trimEnd() + "\n[truncated]";
 }
 
+/** Only a finite, non-negative whole number counts as a stated applicant count; anything else is unknown. */
+export function normalizeApplicantCount(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  return Math.floor(value);
+}
+
 /** Raw posting -> JobRecord. The one place a posting becomes a record. */
 export function toJobRecord(raw: RawPosting, options: NormalizeOptions): JobRecord {
   const text = stripBoilerplate(htmlToText(raw.body));
@@ -350,6 +356,7 @@ export function toJobRecord(raw: RawPosting, options: NormalizeOptions): JobReco
     salaryMax: salary.max,
     salaryCurrency: salary.currency,
     postedAt: raw.postedAt,
+    applicantCount: normalizeApplicantCount(raw.applicantCount),
     experienceYearsMin: experience.min,
     experienceYearsMax: experience.max,
     firstSeenAt: options.now,

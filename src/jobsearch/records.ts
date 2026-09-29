@@ -20,6 +20,11 @@ export interface RawPosting {
   readonly body: string;
   /** ISO date when the source says it was posted, when the source says at all. */
   readonly postedAt: string | null;
+  /**
+   * How many people have applied, when the source publishes it. Absent or
+   * `null` means the source does not say — never zero, never guessed.
+   */
+  readonly applicantCount?: number | null;
   readonly fetchedAt: string;
 }
 
@@ -67,6 +72,12 @@ export interface JobRecord {
   readonly salaryMax: number | null;
   readonly salaryCurrency: string | null;
   readonly postedAt: string | null;
+  /**
+   * Applicants so far, when a source publishes it. `null`/absent means unknown
+   * (optional so records stored before this field existed still type-check).
+   * Only ever used as a soft ranking boost — see `rank.ts`.
+   */
+  readonly applicantCount?: number | null;
   /** Years of experience the posting states it wants. `null` on either side means that bound was not stated — never guessed. */
   readonly experienceYearsMin: number | null;
   readonly experienceYearsMax: number | null;
@@ -190,6 +201,14 @@ export interface Preferences {
    */
   readonly maxPostingAgeDays: number | null;
   /**
+   * A posting with a known applicant count BELOW this gets `lowApplicantRankBonus`
+   * added to its display-order rank. A soft preference only: an unknown count
+   * (the usual case) is never excluded and never penalized.
+   */
+  readonly lowApplicantThreshold: number;
+  /** Points added to the display-order rank for a low-applicant posting. 0 disables. */
+  readonly lowApplicantRankBonus: number;
+  /**
    * When true, a `remote` posting is rejected if it names a specific
    * non-US country and no US option (`RemoteRegion` `"non-us"`) — e.g.
    * "Remote - India" or "Remote - Netherlands". A posting naming no country
@@ -234,6 +253,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   experienceYearsFloor: null,
   experienceYearsCeiling: null,
   maxPostingAgeDays: null,
+  lowApplicantThreshold: 200,
+  lowApplicantRankBonus: 3,
   usRemoteOnly: false,
   industryExclusions: [],
   companyExclusions: [],

@@ -1,4 +1,5 @@
 import type { RunSummary } from "./digest";
+import { applicantLine } from "./digest";
 import { salaryUnknown } from "./filter";
 
 /**
@@ -27,7 +28,8 @@ export function formatDigestSms(summary: RunSummary, maxRoles: number): string {
     const pay = salaryUnknown(record)
       ? ""
       : ` (${record.salaryMin === record.salaryMax ? record.salaryMin?.toLocaleString() : `${record.salaryMin?.toLocaleString()}-${record.salaryMax?.toLocaleString()}`})`;
-    lines.push(`${index + 1}. ${record.title} @ ${record.company}${pay} [${record.score}] ${record.applyUrl}`);
+    const applicants = applicantLine(record);
+    lines.push(`${index + 1}. ${record.title} @ ${record.company}${pay}${applicants ? ` (${applicants})` : ""} [${record.score}] ${record.applyUrl}`);
   });
 
   if (omitted > 0) {
