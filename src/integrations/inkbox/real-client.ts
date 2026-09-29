@@ -15,6 +15,12 @@ const API_ROOT_SUFFIX = "/api/v1/mail";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_PAGE_LIMIT = 50;
 
+/** INKBOX_TIMEOUT_MS overrides the default; anything non-positive or non-numeric is ignored. */
+function envTimeoutMs(): number {
+  const value = Number(process.env["INKBOX_TIMEOUT_MS"] ?? DEFAULT_TIMEOUT_MS);
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_TIMEOUT_MS;
+}
+
 export class InkboxAPIError extends Error {
   readonly statusCode: number;
   readonly detail: string;
@@ -167,7 +173,7 @@ export interface RealInkboxClientOptions {
  * real credentials from the environment.
  */
 export function createRealInkboxClient(options: RealInkboxClientOptions): InkboxClient {
-  const http = new InkboxHttp(options.apiKey, options.baseUrl, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const http = new InkboxHttp(options.apiKey, options.baseUrl, options.timeoutMs ?? envTimeoutMs());
   const draftStore = options.draftStore ?? new InMemoryDraftStore();
   const mailboxAddress = options.mailboxAddress;
   const mailboxPath = `/mailboxes/${encodeURIComponent(mailboxAddress)}`;

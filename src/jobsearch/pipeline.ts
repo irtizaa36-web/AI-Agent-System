@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { JobRecord, Preferences } from "./records";
 import type { Source } from "./sources/source";
 import { jitter, mapWithConcurrency } from "./sources/source";
@@ -59,6 +59,9 @@ export async function runPipeline(deps: PipelineDeps): Promise<RunSummary> {
   const startedAt = new Date().toISOString();
   const ledger = new CostLedger(runId, deps.costLogPath);
   const health: SourceHealth[] = [];
+  const filterVersion = createHash("sha1")
+    .update(JSON.stringify({ titles: deps.prefs.titles, titleExclusions: deps.prefs.titleExclusions }))
+    .digest("hex");
 
   // Stages 1-2 — fetch, with per-source health and no source able to fail the run.
   const fetched = await mapWithConcurrency(deps.sources, deps.concurrency ?? 4, async (source) => {
@@ -89,7 +92,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<RunSummary> {
   // Stages 4-5 — the delta. Everything already known is dropped here, before
   // anything expensive happens.
   const known = await deps.store.listJobs();
-  const { fresh, merged, duplicateCount } = dedupe(normalized, known);
+  const { fresh, merged, duplicateCount } = dedupe(normalized, known, filterVersion);
 
   // Stage 6 — the free filters. One `now` shared across the whole batch, so
   // recency comparisons are consistent within a single run.
@@ -101,7 +104,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<RunSummary> {
     if (outcome.passed) {
       passed.push(record);
     } else {
-      rejected.push({ ...record, state: "filtered", filterReason: outcome.reason });
+      rejected.push({ ...record, state: "filtered", filterReason: outcome.reason, filterVersion });
     }
   }
 

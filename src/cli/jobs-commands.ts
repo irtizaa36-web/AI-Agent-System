@@ -928,16 +928,27 @@ async function sendDigestEmailIfConfigured(summary: RunSummary, deps: JobsComman
     return;
   }
 
-  try {
-    const draft = await client.saveDraft({
-      to: [{ address: to }],
-      subject: formatDigestEmailSubject(summary),
-      body: formatDigestEmailBody(summary),
-    });
-    await client.send({ draftId: draft.id, revision: draft.revision });
-    deps.stdout(`Digest emailed to ${to}.`);
-  } catch (error) {
-    deps.stderr(`Could not email the digest: ${error instanceof Error ? error.message : String(error)}`);
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const draft = await client.saveDraft({
+        to: [{ address: to }],
+        subject: formatDigestEmailSubject(summary),
+        body: formatDigestEmailBody(summary),
+      });
+      await client.send({ draftId: draft.id, revision: draft.revision });
+      deps.stdout(`Digest emailed to ${to}.`);
+      return;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      const retryable = /abort|503|429|timeout|econnreset/i.test(msg);
+      deps.stderr(`Digest email attempt ${attempt}/${maxAttempts} failed: ${msg}`);
+      if (!retryable || attempt === maxAttempts) {
+        deps.stderr(`Could not email the digest after ${attempt} attempt(s).`);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+    }
   }
 }
 

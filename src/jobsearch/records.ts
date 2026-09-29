@@ -82,6 +82,12 @@ export interface JobRecord {
   readonly state: JobState;
   /** Which deterministic rule rejected it, when one did. */
   readonly filterReason: string | null;
+  /**
+   * Hash of the title rules in force when this record was filtered. A stored
+   * `filtered` record whose version differs from the current one is
+   * re-processed, so broadening the title list rescues old rejections.
+   */
+  readonly filterVersion?: string;
   readonly score: number | null;
   readonly confidence: Confidence | null;
   readonly rationale: string | null;

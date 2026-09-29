@@ -42,7 +42,7 @@ test("dedupe treats an unseen posting as fresh", () => {
 });
 
 test("dedupe drops a posting whose content hash is already known", () => {
-  const result = dedupe([job()], [job()]);
+  const result = dedupe([job()], [job({ state: "scored", score: 80 })]);
   assert.equal(result.fresh.length, 0);
   assert.equal(result.duplicateCount, 1);
 });
@@ -77,4 +77,39 @@ test("mergeSighting fills in a salary that a later sighting stated, but never er
 
   assert.equal(mergeSighting(withoutPay, withPay).salaryMax, 150000);
   assert.equal(mergeSighting(withPay, withoutPay).salaryMax, 150000);
+});
+
+test("dedupe re-enters a re-sighted `seen` record as fresh under its stored id", () => {
+  const stored = job({ id: "stored-1", state: "seen" });
+  const result = dedupe([job({ id: "new-id" })], [stored]);
+  assert.equal(result.fresh.length, 1);
+  assert.equal(result.fresh[0]?.id, "stored-1");
+  assert.equal(result.merged.length, 0);
+  assert.equal(result.duplicateCount, 0);
+});
+
+test("dedupe still merges away a scored record", () => {
+  const result = dedupe([job()], [job({ state: "scored", score: 80 })]);
+  assert.equal(result.fresh.length, 0);
+  assert.equal(result.merged.length, 1);
+  assert.equal(result.duplicateCount, 1);
+});
+
+test("dedupe re-enters a filtered record whose filterVersion is stale", () => {
+  const stored = job({ id: "stored-1", state: "filtered", filterReason: "Title outside the target cluster", filterVersion: "old" });
+  const result = dedupe([job({ id: "new-id" })], [stored], "new");
+  assert.equal(result.fresh.length, 1);
+  assert.equal(result.fresh[0]?.id, "stored-1");
+  assert.equal(result.fresh[0]?.state, "seen");
+  assert.equal(result.fresh[0]?.filterReason, null);
+  assert.equal(result.merged.length, 0);
+});
+
+test("dedupe keeps a filtered record merged when its filterVersion is current", () => {
+  const stored = job({ state: "filtered", filterReason: "Title outside the target cluster", filterVersion: "v1" });
+  const result = dedupe([job()], [stored], "v1");
+  assert.equal(result.fresh.length, 0);
+  assert.equal(result.merged.length, 1);
+  assert.equal(result.merged[0]?.state, "filtered");
+  assert.equal(result.duplicateCount, 1);
 });

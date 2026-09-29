@@ -49,6 +49,21 @@ function scored(ids: readonly string[], score: number): FakeScoringClient {
   return new FakeScoringClient([]);
 }
 
+/** Scores whatever ids the batch prompt actually contained. */
+function scoringEveryId(): FakeScoringClient {
+  return new (class extends FakeScoringClient {
+    constructor() {
+      super([]);
+    }
+    async complete(request: Parameters<FakeScoringClient["complete"]>[0]) {
+      this.requests.push(request);
+      const ids = [...request.user.matchAll(/"id": "([^"]+)"/g)].map((match) => match[1]);
+      const body = ids.map((id) => `{"id":"${id}","score":90,"confidence":"high","rationale":"Strong fit.","gaps":[]}`);
+      return { text: `[${body.join(",")}]`, usage: { inputTokens: 1200, outputTokens: 200 } };
+    }
+  })();
+}
+
 test("a full run discovers, filters, scores and shortlists a matching role", async () => {
   const store = new InMemoryJobStore();
 
@@ -90,7 +105,7 @@ test("re-running finds nothing new and spends nothing — the run is idempotent"
     store,
     prefs,
     profile,
-    scoringClient: new FakeScoringClient(['[]', '[]']),
+    scoringClient: scoringEveryId(),
     costLogPath: LEDGER,
     politeDelay: false,
   };
@@ -102,6 +117,20 @@ test("re-running finds nothing new and spends nothing — the run is idempotent"
   assert.equal(second.newCount, 0, "but nothing was new");
   assert.equal(second.duplicateCount, 1);
   assert.equal(second.costUsd, 0, "and so it cost nothing");
+});
+
+test("a posting left unscored (no scoring client) re-enters the pipeline and is scored on the next run", async () => {
+  const store = new InMemoryJobStore();
+  const base = { sources: [source("greenhouse:acme", [posting()])], store, prefs, profile, costLogPath: LEDGER, politeDelay: false };
+
+  const first = await runPipeline(base);
+  assert.equal(first.newCount, 1);
+  assert.equal(first.shortlisted.length, 0, "nothing scored without a client");
+
+  const second = await runPipeline({ ...base, scoringClient: scoringEveryId() });
+  assert.equal(second.newCount, 1, "the still-`seen` posting re-entered instead of being parked");
+  assert.equal(second.shortlisted.length, 1);
+  assert.equal((await store.listJobs()).length, 1, "same stored id, no duplicate record");
 });
 
 test("a broken source degrades and is reported; the rest of the run completes", async () => {
