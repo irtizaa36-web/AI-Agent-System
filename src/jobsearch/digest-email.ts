@@ -1,4 +1,5 @@
 import type { RunSummary } from "./digest";
+import { applicantLine } from "./digest";
 import { salaryUnknown } from "./filter";
 import type { JobRecord } from "./records";
 
@@ -48,7 +49,7 @@ export function formatDigestEmailBody(summary: RunSummary): string {
     summary.shortlisted.forEach((record, index) => {
       lines.push(
         `${index + 1}. ${record.title} — ${record.company}`,
-        `   Score ${record.score ?? "?"}/100 · confidence ${record.confidence ?? "unknown"} · ${record.locationClass} · ${payLine(record)}`,
+        `   Score ${record.score ?? "?"}/100 · confidence ${record.confidence ?? "unknown"} · ${record.locationClass} · ${payLine(record)}${applicantLine(record) ? ` · ${applicantLine(record)}` : ""}`,
         "",
         `   ${record.rationale || "No rationale returned."}`,
       );

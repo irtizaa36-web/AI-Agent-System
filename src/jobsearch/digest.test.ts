@@ -131,3 +131,15 @@ test("the dashboard payload reports whether pay was stated, without inventing a 
   assert.equal(payload.shortlisted[0]?.salaryStated, false);
   assert.equal(payload.shortlisted[0]?.salaryMin, null);
 });
+
+test("the digest shows the applicant count next to the role when known", () => {
+  const markdown = renderDigest(summary({ shortlisted: [job({ applicantCount: 42 })] }));
+  assert.match(markdown, /42 applicants/);
+  assert.equal(digestPayload(summary({ shortlisted: [job({ applicantCount: 42 })] })).shortlisted[0]?.applicantCount, 42);
+});
+
+test("the digest omits applicant text when the count is missing", () => {
+  const markdown = renderDigest(summary({ shortlisted: [job({ applicantCount: null }), job({ id: "job-2" })] }));
+  assert.doesNotMatch(markdown, /applicant/);
+  assert.equal(digestPayload(summary()).shortlisted[0]?.applicantCount, null);
+});

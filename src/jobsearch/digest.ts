@@ -44,11 +44,23 @@ function salaryLine(record: JobRecord): string {
   return `${record.salaryMin?.toLocaleString()}–${record.salaryMax?.toLocaleString()} ${currency}`.trim();
 }
 
+/** "N applicants" when a source stated a count; null otherwise so callers can omit it silently. */
+export function applicantLine(record: JobRecord): string | null {
+  const count = record.applicantCount;
+  if (count === null || count === undefined) return null;
+  return `${count.toLocaleString()} applicant${count === 1 ? "" : "s"}`;
+}
+
+function applicantSuffix(record: JobRecord): string {
+  const line = applicantLine(record);
+  return line ? ` · ${line}` : "";
+}
+
 function roleBlock(record: JobRecord, index: number): string {
   const lines = [
     `### ${index}. ${record.title} — ${record.company}`,
     "",
-    `**Score ${record.score ?? "?"}/100** · confidence ${record.confidence ?? "unknown"} · ${record.locationClass} · ${salaryLine(record)}`,
+    `**Score ${record.score ?? "?"}/100** · confidence ${record.confidence ?? "unknown"} · ${record.locationClass} · ${salaryLine(record)}${applicantSuffix(record)}`,
     "",
     record.rationale || "_No rationale returned._",
   ];
@@ -142,6 +154,8 @@ export interface DigestPayloadRole {
   readonly salaryStated: boolean;
   readonly salaryMin: number | null;
   readonly salaryMax: number | null;
+  /** Optional so digests stored before this field existed still type-check. `null` means the source did not say. */
+  readonly applicantCount?: number | null;
   readonly score: number | null;
   readonly confidence: string | null;
   readonly rationale: string | null;
@@ -198,6 +212,7 @@ export function digestPayload(summary: RunSummary): DigestPayload {
       salaryStated: !salaryUnknown(record),
       salaryMin: record.salaryMin,
       salaryMax: record.salaryMax,
+      applicantCount: record.applicantCount ?? null,
       score: record.score,
       confidence: record.confidence,
       rationale: record.rationale,

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  normalizeApplicantCount,
   classifyLocation,
   classifyRemoteRegion,
   contentHashFor,
@@ -242,4 +243,13 @@ test("toJobRecord produces a seen record with the raw body kept out of the summa
   assert.equal(record.salaryMax, 160000);
   assert.equal(record.sources.length, 1);
   assert.doesNotMatch(record.summary, /<p>/);
+});
+
+test("normalizeApplicantCount keeps real counts and maps everything else to null", () => {
+  assert.equal(normalizeApplicantCount(37), 37);
+  assert.equal(normalizeApplicantCount(0), 0);
+  assert.equal(normalizeApplicantCount(null), null);
+  assert.equal(normalizeApplicantCount(undefined), null);
+  assert.equal(normalizeApplicantCount(-5), null);
+  assert.equal(normalizeApplicantCount(Number.NaN), null);
 });

@@ -41,6 +41,8 @@ export function mergeSighting(existing: JobRecord, incoming: JobRecord): JobReco
     salaryMax: existing.salaryMax ?? incoming.salaryMax,
     salaryCurrency: existing.salaryCurrency ?? incoming.salaryCurrency,
     postedAt: existing.postedAt ?? incoming.postedAt,
+    // Applicant counts only grow, so the newer sighting's figure wins; a null never overwrites a known one.
+    applicantCount: incoming.applicantCount ?? existing.applicantCount ?? null,
   };
 }
 

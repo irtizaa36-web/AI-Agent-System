@@ -139,6 +139,10 @@ function checkExperience(record: JobRecord, prefs: Preferences): FilterOutcome {
  * Rejects a posting only when a post date is actually stated and it's past
  * the age limit. A posting with no stated date passes — the same "don't
  * guess" rule as the salary floor: silence is not evidence of staleness.
+ *
+ * Boundary: the limit is inclusive. A posting exactly `maxPostingAgeDays`
+ * old is kept; anything strictly older is dropped. Shivani's profile sets 3,
+ * so 2.9 days is kept, exactly 3.0 is kept, and 3.1 is dropped.
  */
 function checkRecency(record: JobRecord, prefs: Preferences, now: Date): FilterOutcome {
   if (prefs.maxPostingAgeDays === null) return PASSED;
