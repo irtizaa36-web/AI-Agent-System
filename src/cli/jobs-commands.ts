@@ -6,6 +6,12 @@ import { renderDigest, digestPayload, type DigestPayload, type RunSummary } from
 import { sourcesFromWatchlist } from "../jobsearch/sources/registry";
 import { JsonFileJobStore } from "../store/job-store";
 import { createScoringClientFromEnv } from "../jobsearch/scoring-client";
+import {
+  draftTailoredResume,
+  estimateTailorCost,
+  TAILORED_DIR,
+  tailorCompletionRequest,
+} from "../jobsearch/tailor";
 import { CostLedger, readLedger } from "../jobsearch/cost";
 import { createJobsDashboardServer } from "../jobsearch/dashboard";
 import { createAlertMailSource } from "../jobsearch/sources/alert-mail";
@@ -30,6 +36,7 @@ import {
   loadProfile,
   loadWatchlist,
   MissingProfileError,
+  profileDirFor,
   savePreferences,
 } from "../jobsearch/config";
 import type { CandidateProfile } from "../jobsearch/score";
@@ -68,6 +75,7 @@ const USAGE = [
   "  run --profile <name>|--all   Fetch, dedupe, filter, score, and write today's digest",
   "  reconcile --profile <name>   Re-check already-filtered postings against today's rules (after a prefs/filter change) and score any that now pass",
   "  check-feedback --profile <name>|--all   Read new direct replies from the candidate (email and, if DIGEST_IMESSAGE_TO is set, iMessage), answer questions, and auto-apply any preference changes (FEEDBACK_LOOP_ENABLED=true required)",
+  "  tailor --profile <name> --job <record-id> [--dry-run]   Draft a tailored resume variant for one job (draft-only; never sends, never submits)",
   "  enrich-contact --profile <name>|--all   Link DIGEST_IMESSAGE_TO's phone to the candidate's Inkbox contact record (found via DIGEST_EMAIL_TO) and tag it with this profile. Idempotent; safe to re-run.",
   "  digest --profile <name>      Print the most recent digest without running the pipeline",
   "  sources --profile <name>     List the configured sources and check each one's health",
@@ -82,6 +90,14 @@ const USAGE = [
 /** Reads `--profile <name>` out of an argument list. Absent is a real answer (undefined), not a guess. */
 export function parseProfileFlag(args: readonly string[]): string | undefined {
   const index = args.indexOf("--profile");
+  if (index === -1) return undefined;
+  const value = args[index + 1];
+  return value && !value.startsWith("--") ? value : undefined;
+}
+
+/** Reads `--job <record-id>` out of an argument list. Same shape as the profile flag: absent is undefined, not a guess. */
+export function parseJobFlag(args: readonly string[]): string | undefined {
+  const index = args.indexOf("--job");
   if (index === -1) return undefined;
   const value = args[index + 1];
   return value && !value.startsWith("--") ? value : undefined;
@@ -169,6 +185,11 @@ export async function runJobsCommand(args: readonly string[], deps: JobsCommandD
         worst = Math.max(worst, await runJobsCheckFeedback(profile, root, deps));
       }
       return worst;
+    }
+    case "tailor": {
+      const profiles = await resolveProfiles(rest, root, deps, false);
+      if (!profiles) return 1;
+      return runJobsTailor(profiles[0] as string, root, deps, rest);
     }
     case "enrich-contact": {
       const profiles = await resolveProfiles(rest, root, deps, true);
@@ -295,6 +316,110 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
   // scheduled job surfaces it rather than looking like a quiet success.
   const allBroken = summary.health.length > 0 && summary.health.every((entry) => entry.state === "degraded");
   return allBroken ? 1 : 0;
+}
+
+/**
+ * Drafts a tailored resume variant for one job record and writes it to
+ * `profile/<name>/tailored/<job-id>.md`. Draft-only: nothing here sends,
+ * submits, or applies anywhere — the ApplicationRecord it creates or updates
+ * starts at "queued" and can only advance by a human action (records.ts).
+ *
+ * `--dry-run` prints the prompt and a cost estimate without touching the
+ * API, so the prompt itself can be reviewed (and the spend sanity-checked)
+ * before any money moves.
+ */
+async function runJobsTailor(
+  profile: string,
+  root: string,
+  deps: JobsCommandDeps,
+  args: readonly string[],
+): Promise<number> {
+  const jobId = parseJobFlag(args);
+  if (!jobId) {
+    deps.stderr("Which job? Pass --job <record-id> — the id of a job record under .orchestrator/jobs/<profile>/jobs/.");
+    return 1;
+  }
+  const dryRun = args.includes("--dry-run");
+
+  const store = new JsonFileJobStore(join(root, dataDirFor(profile)));
+  const job = (await store.listJobs()).find((record) => record.id === jobId);
+  if (!job) {
+    deps.stderr(`No job record with id "${jobId}" under ${join(dataDirFor(profile), "jobs")}/.`);
+    return 1;
+  }
+
+  let resume: string;
+  try {
+    resume = (await loadProfile(profile, root)).resume;
+  } catch (error) {
+    if (error instanceof MissingProfileError) {
+      deps.stderr(error.message);
+      return 1;
+    }
+    throw error;
+  }
+
+  const request = tailorCompletionRequest(job, resume);
+
+  if (dryRun) {
+    deps.stdout("--- system prompt ---");
+    deps.stdout(request.system);
+    deps.stdout("--- user prompt ---");
+    deps.stdout(request.user);
+    deps.stdout(
+      `--- estimate: ~$${estimateTailorCost(request).toFixed(4)} ` +
+        `(input tokens estimated from character count, typical resume-length output assumed; no API call made)`,
+    );
+    return 0;
+  }
+
+  // Never a half-configured client: no key means no draft, not a quiet no-op.
+  const client = createScoringClientFromEnv();
+  if (!client) {
+    deps.stderr("ANTHROPIC_API_KEY is not set — tailoring needs a model to draft with.");
+    return 1;
+  }
+
+  const draft = await draftTailoredResume(job, resume, client);
+
+  // Record ids are machine-generated, but treat them as filenames with
+  // suspicion anyway — one unsanitized id must not escape the tailored dir.
+  const safeId = jobId.replace(/[^a-zA-Z0-9-_.]/g, "_");
+  const tailoredDir = join(root, profileDirFor(profile), TAILORED_DIR);
+  await mkdir(tailoredDir, { recursive: true });
+  const variantPath = join(tailoredDir, `${safeId}.md`);
+  await writeFile(variantPath, draft.markdown, "utf8");
+
+  // Fills the records.ts slot this command exists for. An existing
+  // application record keeps its status; a new one starts at "queued" and
+  // only ever moves forward by a human action.
+  const existing = (await store.listApplications()).find((record) => record.jobId === job.id);
+  if (existing) {
+    await store.saveApplication({ ...existing, resumeVariantPath: variantPath });
+  } else {
+    await store.saveApplication({
+      id: randomUUID(),
+      jobId: job.id,
+      status: "queued",
+      appliedAt: null,
+      resumeVariantPath: variantPath,
+      coverLetterPath: null,
+      followUpDueAt: null,
+      outcome: null,
+      rejectionReason: null,
+      notes: [],
+    });
+  }
+
+  const ledger = new CostLedger(`tailor-${job.id}`, join(root, COST_LOG_PATH));
+  await ledger.record("tailor", draft.model, {
+    inputTokens: draft.inputTokens,
+    outputTokens: draft.outputTokens,
+  });
+
+  deps.stdout(`Wrote tailored draft to ${variantPath}`);
+  deps.stdout(`Cost: $${draft.costUsd.toFixed(4)} (${draft.inputTokens} input / ${draft.outputTokens} output tokens)`);
+  return 0;
 }
 
 /**
