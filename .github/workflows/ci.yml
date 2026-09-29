@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, claude/polar-job-search-agent-n8d0kn]
 
 permissions:
   contents: read
