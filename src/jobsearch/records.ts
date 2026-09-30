@@ -108,6 +108,7 @@ export interface JobRecord {
 
 export type ApplicationStatus =
   | "queued"
+  | "pending-approval"
   | "materials_ready"
   | "prefilled"
   | "submitted_by_human"
@@ -244,6 +245,8 @@ export interface Preferences {
   readonly scoringBatchSize: number;
   /** Model used for batch scoring. */
   readonly scoringModel: string;
+  /** Round 2 of `jobs tailor` uses Sonnet when true, Haiku (default) when false. Round 1 is always Haiku. */
+  readonly tailorSonnetExecution: boolean;
   /** Days to keep raw posting bodies on disk before pruning. The JobRecord is kept forever. */
   readonly rawRetentionDays: number;
 }
@@ -272,5 +275,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
   postingTokenBudget: 600,
   scoringBatchSize: 15,
   scoringModel: "claude-haiku-4-5",
+  tailorSonnetExecution: false,
   rawRetentionDays: 90,
 };
