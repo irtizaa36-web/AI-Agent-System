@@ -6,6 +6,23 @@ import { renderDigest, digestPayload, type DigestPayload, type RunSummary } from
 import { sourcesFromWatchlist } from "../jobsearch/sources/registry";
 import { JsonFileJobStore } from "../store/job-store";
 import { createScoringClientFromEnv } from "../jobsearch/scoring-client";
+import {
+  draftTailoredResume,
+  estimateTailorCost,
+  gapAnalysisCompletionRequest,
+  TAILORED_DIR,
+  TAILOR_MODEL,
+  TAILOR_SONNET_MODEL,
+  tailorCompletionRequest,
+} from "../jobsearch/tailor";
+import {
+  approveLedger,
+  buildLedger,
+  ledgerPathFor,
+  readLedger as readTailorLedger,
+  renderResumeDiff,
+  writeLedger as writeTailorLedger,
+} from "../jobsearch/tailor-ledger";
 import { CostLedger, readLedger } from "../jobsearch/cost";
 import { createJobsDashboardServer } from "../jobsearch/dashboard";
 import { createAlertMailSource } from "../jobsearch/sources/alert-mail";
@@ -32,6 +49,7 @@ import {
   loadProfile,
   loadWatchlist,
   MissingProfileError,
+  profileDirFor,
   savePreferences,
 } from "../jobsearch/config";
 import type { CandidateProfile } from "../jobsearch/score";
@@ -71,6 +89,9 @@ const USAGE = [
   "  reconcile --profile <name>   Re-check already-filtered postings against today's rules (after a prefs/filter change) and score any that now pass",
   "  check-feedback --profile <name>|--all   Read new direct replies from the candidate (email and, if DIGEST_IMESSAGE_TO is set, iMessage), answer questions, and auto-apply any preference changes (FEEDBACK_LOOP_ENABLED=true required)",
   "  enrich-contact --profile <name>|--all   Link DIGEST_IMESSAGE_TO's phone to the candidate's Inkbox contact record (found via DIGEST_EMAIL_TO) and tag it with this profile. Idempotent; safe to re-run.",
+  "  tailor --profile <name> --job <record-id> [--dry-run]   Draft a tailored resume variant for one job (draft-only; never sends, never submits)",
+  "  tailor --profile <name> --job <record-id> --approve [--confirm]",
+  "                                                     Review a tailored draft (diff + claim check); --confirm marks it ready",
   "  digest --profile <name>      Print the most recent digest without running the pipeline",
   "  sources --profile <name>     List the configured sources and check each one's health",
   "  costs                        Show what recent runs have cost (shared ledger)",
@@ -84,6 +105,13 @@ const USAGE = [
 /** Reads `--profile <name>` out of an argument list. Absent is a real answer (undefined), not a guess. */
 export function parseProfileFlag(args: readonly string[]): string | undefined {
   const index = args.indexOf("--profile");
+  if (index === -1) return undefined;
+  const value = args[index + 1];
+  return value && !value.startsWith("--") ? value : undefined;
+}
+
+export function parseJobFlag(args: readonly string[]): string | undefined {
+  const index = args.indexOf("--job");
   if (index === -1) return undefined;
   const value = args[index + 1];
   return value && !value.startsWith("--") ? value : undefined;
@@ -171,6 +199,11 @@ export async function runJobsCommand(args: readonly string[], deps: JobsCommandD
         worst = Math.max(worst, await runJobsCheckFeedback(profile, root, deps));
       }
       return worst;
+    }
+    case "tailor": {
+      const profiles = await resolveProfiles(rest, root, deps, false);
+      if (!profiles) return 1;
+      return runJobsTailor(profiles[0] as string, root, deps, rest);
     }
     case "enrich-contact": {
       const profiles = await resolveProfiles(rest, root, deps, true);
@@ -970,6 +1003,256 @@ async function sendDigestEmailIfConfigured(summary: RunSummary, deps: JobsComman
       await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
     }
   }
+}
+
+/**
+ * Drafts a tailored resume variant for one job record and writes it to
+ * `profile/<name>/tailored/<job-id>.md`. Draft-only: nothing here sends,
+ * submits, or applies anywhere.
+ *
+ * Stage 11: every draft is born with an evidence ledger
+ * (`profile/<name>/tailored/<job-id>.ledger.json`, status `pending-approval`)
+ * that classifies each draft claim against the base resume
+ * (confirmed / supportable / unsupported), and the application record starts
+ * at `pending-approval`. Nothing becomes exportable/ready before
+ * `jobs tailor --approve --job <id> --confirm`.
+ *
+ * `--approve --job <id>` renders the base-vs-tailored diff and flags the
+ * unsupported claims for review; without `--confirm` it only renders.
+ * `--confirm` is the explicit tap that marks the ledger (and the
+ * application) ready.
+ *
+ * `--dry-run` prints the prompt and a cost estimate without touching the
+ * API, so the prompt itself can be reviewed (and the spend sanity-checked)
+ * before any money moves.
+ */
+async function runJobsTailor(
+  profile: string,
+  root: string,
+  deps: JobsCommandDeps,
+  args: readonly string[],
+): Promise<number> {
+  const jobId = parseJobFlag(args);
+  if (!jobId) {
+    deps.stderr("Which job? Pass --job <record-id> — the id of a job record under .orchestrator/jobs/<profile>/jobs/.");
+    return 1;
+  }
+
+  if (args.includes("--approve")) {
+    return runJobsTailorApprove(profile, root, deps, jobId, args.includes("--confirm"));
+  }
+
+  const dryRun = args.includes("--dry-run");
+
+  const store = new JsonFileJobStore(join(root, dataDirFor(profile)));
+  const job = (await store.listJobs()).find((record) => record.id === jobId);
+  if (!job) {
+    deps.stderr(`No job record with id "${jobId}" under ${join(dataDirFor(profile), "jobs")}/.`);
+    return 1;
+  }
+
+  let resume: string;
+  try {
+    resume = (await loadProfile(profile, root)).resume;
+  } catch (error) {
+    if (error instanceof MissingProfileError) {
+      deps.stderr(error.message);
+      return 1;
+    }
+    throw error;
+  }
+
+  const prefs = await loadPreferences(profile, root);
+  const executionModel = prefs.tailorSonnetExecution ? TAILOR_SONNET_MODEL : TAILOR_MODEL;
+
+  if (dryRun) {
+    // Round 1 (gap analysis) can be shown without a plan; round 2 needs one,
+    // so the dry run shows its shape with a placeholder plan.
+    const planRequest = gapAnalysisCompletionRequest(job, resume);
+    deps.stdout("--- round 1 (gap analysis) system prompt ---");
+    deps.stdout(planRequest.system);
+    deps.stdout("--- round 1 user prompt ---");
+    deps.stdout(planRequest.user);
+    deps.stdout(
+      `--- round 1 estimate: ~$${estimateTailorCost(planRequest, 400).toFixed(4)} ` +
+        `(input tokens estimated from character count; no API call made)`,
+    );
+    const placeholderPlan = { gaps: ["<from round 1>"], plan: ["<from round 1>"] };
+    const executeRequest = tailorCompletionRequest(job, resume, placeholderPlan, executionModel);
+    deps.stdout("--- round 2 (execute plan) system prompt ---");
+    deps.stdout(executeRequest.system);
+    deps.stdout("--- round 2 user prompt ---");
+    deps.stdout(executeRequest.user);
+    deps.stdout(
+      `--- round 2 estimate: ~$${estimateTailorCost(executeRequest).toFixed(4)} ` +
+        `(input tokens estimated from character count, typical resume-length output assumed; no API call made)`,
+    );
+    deps.stdout(`--- execution model: ${executionModel}${prefs.tailorSonnetExecution ? " (tailorSonnetExecution is on)" : " (Haiku default; set tailorSonnetExecution to use Sonnet)"}`);
+    return 0;
+  }
+
+  // Never a half-configured client: no key means no draft, not a quiet no-op.
+  const client = createScoringClientFromEnv();
+  if (!client) {
+    deps.stderr("ANTHROPIC_API_KEY is not set — tailoring needs a model to draft with.");
+    return 1;
+  }
+
+  const draft = await draftTailoredResume(job, resume, client, { tailorSonnetExecution: prefs.tailorSonnetExecution });
+
+  // Record ids are machine-generated, but treat them as filenames with
+  // suspicion anyway — one unsanitized id must not escape the tailored dir.
+  const safeId = jobId.replace(/[^a-zA-Z0-9-_.]/g, "_");
+  const tailoredDir = join(root, profileDirFor(profile), TAILORED_DIR);
+  await mkdir(tailoredDir, { recursive: true });
+  const variantPath = join(tailoredDir, `${safeId}.md`);
+  await writeFile(variantPath, draft.markdown, "utf8");
+
+  // Stage 11: the evidence ledger is written with the draft and is born
+  // pending-approval. Every claim in the draft is classified against the
+  // exact base resume text the draft was made from — deterministically, no
+  // model, no cost.
+  const tailorLedger = buildLedger({
+    jobId: job.id,
+    jobTitle: job.title,
+    company: job.company,
+    resume,
+    draftMarkdown: draft.markdown,
+    draftPath: variantPath,
+  });
+  await writeTailorLedger(ledgerPathFor(tailoredDir, safeId), tailorLedger);
+  if (tailorLedger.unsupportedCount > 0) {
+    deps.stderr(
+      `Heads up: ${tailorLedger.unsupportedCount} draft claim(s) could not be traced to the base resume — ` +
+        `review them with \`jobs tailor --approve --job ${jobId}\` before approving.`,
+    );
+  }
+
+  // Fills the records.ts slot this command exists for. A fresh draft always
+  // (re)sets the application to pending-approval — fail closed: a new,
+  // unreviewed draft must never inherit a previous approval.
+  const existing = (await store.listApplications()).find((record) => record.jobId === job.id);
+  if (existing) {
+    await store.saveApplication({ ...existing, status: "pending-approval", resumeVariantPath: variantPath });
+  } else {
+    await store.saveApplication({
+      id: randomUUID(),
+      jobId: job.id,
+      status: "pending-approval",
+      appliedAt: null,
+      resumeVariantPath: variantPath,
+      coverLetterPath: null,
+      followUpDueAt: null,
+      outcome: null,
+      rejectionReason: null,
+      notes: [],
+    });
+  }
+
+  const costLedger = new CostLedger(`tailor-${job.id}`, join(root, COST_LOG_PATH));
+  for (const round of draft.rounds) {
+    await costLedger.record(`tailor-${round.stage}`, round.model, {
+      inputTokens: round.inputTokens,
+      outputTokens: round.outputTokens,
+    });
+  }
+
+  deps.stdout(`Wrote tailored draft to ${variantPath}`);
+  deps.stdout(`Cost: $${draft.costUsd.toFixed(4)} (${draft.inputTokens} input / ${draft.outputTokens} output tokens)`);
+  return 0;
+}
+
+/**
+ * Stage 11 approval: renders the base-vs-tailored diff, flags every
+ * unsupported claim from the evidence ledger, and — only with the explicit
+ * `--confirm` tap — marks the ledger and the application ready. Without
+ * `--confirm` this is review-only and changes nothing.
+ */
+export async function runJobsTailorApprove(
+  profile: string,
+  root: string,
+  deps: JobsCommandDeps,
+  jobId: string,
+  confirm: boolean,
+): Promise<number> {
+  const safeId = jobId.replace(/[^a-zA-Z0-9-_.]/g, "_");
+  const tailoredDir = join(root, profileDirFor(profile), TAILORED_DIR);
+  const ledgerPath = ledgerPathFor(tailoredDir, safeId);
+
+  let ledger;
+  try {
+    ledger = await readTailorLedger(ledgerPath);
+  } catch {
+    deps.stderr(`No evidence ledger at ${ledgerPath} — run \`jobs tailor --job ${jobId}\` first.`);
+    return 1;
+  }
+
+  let resume: string;
+  try {
+    resume = (await loadProfile(profile, root)).resume;
+  } catch (error) {
+    if (error instanceof MissingProfileError) {
+      deps.stderr(error.message);
+      return 1;
+    }
+    throw error;
+  }
+
+  let draftMarkdown: string;
+  try {
+    draftMarkdown = await readFile(join(tailoredDir, `${safeId}.md`), "utf8");
+  } catch {
+    deps.stderr(`No draft at ${join(tailoredDir, `${safeId}.md`)} — run \`jobs tailor --job ${jobId}\` first.`);
+    return 1;
+  }
+
+  deps.stdout(`## Review: tailored draft for "${ledger.jobTitle}" at ${ledger.company}`);
+  deps.stdout(`Ledger: ${ledger.status}${ledger.approvedAt ? ` (approved ${ledger.approvedAt})` : ""}`);
+  deps.stdout("");
+  deps.stdout("### Base resume vs tailored draft");
+  deps.stdout(renderResumeDiff(resume, draftMarkdown));
+  deps.stdout("");
+
+  const unsupported = ledger.claims.filter((claim) => claim.verdict === "unsupported");
+  const supportable = ledger.claims.filter((claim) => claim.verdict === "supportable");
+  deps.stdout(`### Claim check: ${ledger.claims.length} claims — ${ledger.claims.length - unsupported.length - supportable.length} confirmed, ${supportable.length} supportable, ${unsupported.length} unsupported`);
+  if (unsupported.length > 0) {
+    deps.stdout("");
+    deps.stdout("⚠ UNSUPPORTED — these draft claims could not be traced to the base resume:");
+    for (const claim of unsupported) {
+      deps.stdout(`- "${claim.text}"${claim.evidence.length > 0 ? ` (${claim.evidence.join("; ")})` : ""}`);
+    }
+    deps.stdout("Fix or remove them before approving — an unsupported claim in a submitted resume is a fabrication.");
+  } else {
+    deps.stdout("Every claim traced to the base resume. Nothing unsupported.");
+  }
+
+  if (!confirm) {
+    deps.stdout("");
+    deps.stdout(`Review above. Re-run with \`--confirm\` to mark this draft ready — nothing changes until then.`);
+    return 0;
+  }
+
+  if (ledger.status !== "pending-approval") {
+    deps.stdout(`Already ${ledger.status}${ledger.approvedAt ? ` (approved ${ledger.approvedAt})` : ""} — nothing to do.`);
+    return 0;
+  }
+
+  await writeTailorLedger(ledgerPath, approveLedger(ledger));
+
+  const store = new JsonFileJobStore(join(root, dataDirFor(profile)));
+  const application = (await store.listApplications()).find((record) => record.jobId === ledger.jobId);
+  if (application && application.status === "pending-approval") {
+    await store.saveApplication({ ...application, status: "materials_ready" });
+    deps.stdout(`Application for "${ledger.jobTitle}" marked materials_ready.`);
+  } else if (application) {
+    deps.stdout(`Application status left at "${application.status}" — only a pending-approval application advances on this tap.`);
+  } else {
+    deps.stdout("No application record found; ledger marked ready, nothing else to advance.");
+  }
+
+  deps.stdout("Draft approved and marked ready.");
+  return 0;
 }
 
 /** Serves the review queue. Read-only: no endpoint here can act on the outside world. */
