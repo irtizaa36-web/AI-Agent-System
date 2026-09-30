@@ -253,3 +253,14 @@ test("normalizeApplicantCount keeps real counts and maps everything else to null
   assert.equal(normalizeApplicantCount(-5), null);
   assert.equal(normalizeApplicantCount(Number.NaN), null);
 });
+
+test("parseExperienceYears minimum across the phrasings the max-years filter relies on", () => {
+  assert.equal(parseExperienceYears("8+ years of experience").min, 8);
+  assert.equal(parseExperienceYears("5+ years in marketing").min, 5);
+  assert.equal(parseExperienceYears("3-5 years").min, 3);
+  assert.equal(parseExperienceYears("minimum 6 years").min, 6);
+  assert.equal(parseExperienceYears("Minimum of 6 years").min, 6);
+  assert.equal(parseExperienceYears("6-8 years experience").min, 6);
+  assert.equal(parseExperienceYears("6 years of experience").min, 6);
+  assert.equal(parseExperienceYears("No years stated here").min, null);
+});

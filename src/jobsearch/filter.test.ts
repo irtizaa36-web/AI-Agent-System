@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyFilters, salaryUnknown } from "./filter";
+import { applyFilters, salaryUnknown, summarizeRejections } from "./filter";
+import { parseExperienceYears } from "./normalize";
 import { DEFAULT_PREFERENCES, type JobRecord, type Preferences } from "./records";
 
 function job(overrides: Partial<JobRecord> = {}): JobRecord {
@@ -274,4 +275,39 @@ test("the committed shivani profile sets the recency window to 3 days", async ()
   const { readFile } = await import("node:fs/promises");
   const raw = JSON.parse(await readFile("config/job-search/shivani/preferences.json", "utf8")) as Partial<Preferences>;
   assert.equal(raw.maxPostingAgeDays, 3);
+});
+
+const maxYearsPrefs: Preferences = { ...prefs, maxRequiredYearsExperience: 5 };
+
+test("maxRequiredYearsExperience: 8+ and 6+ years are dropped, 5+ and 3-5 are kept", () => {
+  const cases: Array<[string, boolean]> = [
+    ["8+ years of marketing experience", false],
+    ["6+ years of marketing experience", false],
+    ["5+ years of marketing experience", true],
+    ["3-5 years of marketing experience", true],
+    ["minimum 6 years in program management", false],
+    ["6-8 years experience", false],
+    ["Own demand generation for the growth team.", true],
+  ];
+  for (const [text, expected] of cases) {
+    const parsed = parseExperienceYears(text);
+    const outcome = applyFilters(
+      job({ summary: text, experienceYearsMin: parsed.min, experienceYearsMax: parsed.max }),
+      maxYearsPrefs,
+    );
+    assert.equal(outcome.passed, expected, text);
+  }
+});
+
+test("maxRequiredYearsExperience: rejection reason names the cap and buckets cleanly", () => {
+  const outcome = applyFilters(job({ experienceYearsMin: 6 }), maxYearsPrefs);
+  assert.equal(outcome.passed, false);
+  assert.match(outcome.reason ?? "", /Requires 6\+ years of experience, above the 5-year maximum/);
+  const [bucket] = summarizeRejections([job({ filterReason: outcome.reason })]);
+  assert.equal(bucket?.reason, "Requires more years of experience than her maximum");
+});
+
+test("maxRequiredYearsExperience: null disables the cap and unstated years always pass", () => {
+  assert.equal(applyFilters(job({ experienceYearsMin: 12 }), prefs).passed, true);
+  assert.equal(applyFilters(job({ experienceYearsMin: null }), maxYearsPrefs).passed, true);
 });

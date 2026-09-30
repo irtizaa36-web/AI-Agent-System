@@ -111,6 +111,15 @@ function checkRemoteRegion(record: JobRecord, prefs: Preferences): FilterOutcome
  * NEVER rejected: same "don't guess" rule as the salary floor.
  */
 function checkExperience(record: JobRecord, prefs: Preferences): FilterOutcome {
+  if (prefs.maxRequiredYearsExperience !== null && record.experienceYearsMin !== null) {
+    if (record.experienceYearsMin > prefs.maxRequiredYearsExperience) {
+      return {
+        passed: false,
+        reason: `Requires ${record.experienceYearsMin}+ years of experience, above the ${prefs.maxRequiredYearsExperience}-year maximum`,
+      };
+    }
+  }
+
   if (prefs.experienceYearsFloor === null && prefs.experienceYearsCeiling === null) return PASSED;
   if (record.experienceYearsMin === null && record.experienceYearsMax === null) return PASSED;
 
@@ -202,6 +211,7 @@ const REJECTION_BUCKETS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^Not remote/, "Not remote, and not in a named metro"],
   [/^Location not stated/, "Location not stated"],
   [/^Remote, but not eligible from the US/, "Remote, but not US-eligible"],
+  [/^Requires .* above the .* maximum/, "Requires more years of experience than her maximum"],
   [/^Wants .* above the .* ceiling/, "Wants more experience than her ceiling"],
   [/^Wants at most .* below the .* floor/, "Wants less experience than her floor"],
   [/^Posted .* older than/, "Posting older than the age limit"],

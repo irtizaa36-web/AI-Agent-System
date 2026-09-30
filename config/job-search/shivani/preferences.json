@@ -55,6 +55,9 @@
   "experienceYearsCeiling": 6,
   "_experienceYears": "Per Shivani's direct feedback: her resume shows 5 years since graduating, and she wants roles asking for 3-6 years — not a step up in required seniority, and not a step down into entry-level. This is an OVERLAP check against a posting's stated range, not an exact match (a posting asking for '3-8 years' still overlaps this band). A posting stating no years requirement at all is never rejected by it — same 'don't guess' rule as the salary floor.",
 
+  "maxRequiredYearsExperience": 5,
+  "_maxRequiredYearsExperience": "Hard cap on a posting's stated MINIMUM years of experience: a posting whose minimum is greater than 5 is dropped (so '5+ years' and '3-5 years' are kept; '6+ years', 'minimum 6 years' and '6-8 years' are dropped). A posting that states no years is never dropped. Runs alongside the 3-6 band above.",
+
   "maxPostingAgeDays": 3,
   "_maxPostingAgeDays": "HARD recency filter, now 3 days (was 30): a posting whose stated post date is MORE than 3 days before the run is excluded; exactly 3.0 days is kept; an unknown post date is never excluded. History of the old 30-day value: Bumped 14 -> 21 -> 30. The 21 step (Sep 14) was to recover postings discovered late by scrapers (Vanta batch discovered Sep 14 but posted Aug 24-28). The second bump, same day, came from measuring the word-order title-matching fix below: of the title-good roles it rescued, 13 were still being lost to this window alone, clustered at 26-33 days old — i.e. real, on-profile roles a scraper just hadn't surfaced fast enough. A posting with no stated post date is never rejected by this — same 'don't guess' rule as everywhere else.",
 
