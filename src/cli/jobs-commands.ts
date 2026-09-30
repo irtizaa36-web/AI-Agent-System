@@ -10,6 +10,7 @@ import { CostLedger, readLedger } from "../jobsearch/cost";
 import { createJobsDashboardServer } from "../jobsearch/dashboard";
 import { createAlertMailSource } from "../jobsearch/sources/alert-mail";
 import { createPublicBoardSources } from "../jobsearch/sources/public-boards";
+import { LINKEDIN_GUEST_SOURCE_ID } from "../jobsearch/sources/linkedin-guest";
 import { createInkboxClientFromEnv } from "../integrations/inkbox/real-client";
 import type { Source } from "../jobsearch/sources/source";
 import { createSmsClientFromEnv, SmsRecipientBlockedError } from "../jobsearch/sms-client";
@@ -214,7 +215,7 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
   const prefs = await loadPreferences(profile, root);
   const watchlist = await loadWatchlist(profile, root);
   const inkboxClient = createInkboxClientFromEnv();
-  const publicBoards = createPublicBoardSources(profile, prefs.titles);
+  const publicBoards = createPublicBoardSources(profile, prefs.titles, { onWarning: deps.stderr });
 
   if (watchlist.length === 0 && !inkboxClient && publicBoards.sources.length === 0) {
     deps.stderr(
@@ -761,8 +762,14 @@ async function listSources(profile: string, root: string, deps: JobsCommandDeps)
     deps.stdout("(LinkedIn/Indeed alert-mail source not checked — INKBOX_API_KEY/INKBOX_MAILBOX_ADDRESS not set)");
   }
 
-  const publicBoards = createPublicBoardSources(profile, prefs.titles);
-  sources.push(...publicBoards.sources);
+  const publicBoards = createPublicBoardSources(profile, prefs.titles, { onWarning: deps.stdout });
+  // ADR 0028: the LinkedIn guest source only ever runs inside the single daily
+  // pipeline run. This diagnostic fetches every source, so it must not include it.
+  const checkable = publicBoards.sources.filter((source) => source.id !== LINKEDIN_GUEST_SOURCE_ID);
+  if (checkable.length !== publicBoards.sources.length) {
+    deps.stdout("(LinkedIn guest source not checked — it only runs inside the daily pipeline run, ADR 0028)");
+  }
+  sources.push(...checkable);
   if (publicBoards.adzunaSkipped) {
     deps.stdout("(Adzuna job board not checked — ADZUNA_APP_ID/ADZUNA_APP_KEY not set)");
   }
