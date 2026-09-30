@@ -195,6 +195,13 @@ export interface Preferences {
   readonly experienceYearsFloor: number | null;
   readonly experienceYearsCeiling: number | null;
   /**
+   * Hard cap on a posting's stated MINIMUM years of experience: a posting
+   * whose minimum is strictly greater than this is dropped. `null` disables
+   * the cap. A posting that states no years requirement is never dropped.
+   * Independent of (and applied alongside) the floor/ceiling overlap band.
+   */
+  readonly maxRequiredYearsExperience: number | null;
+  /**
    * Reject a posting whose stated post date is older than this many days.
    * `null` disables the check. A posting with no stated date at all is
    * never rejected by this — same "don't guess" rule as everywhere else.
@@ -252,6 +259,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   locationPriorityStep: 2,
   experienceYearsFloor: null,
   experienceYearsCeiling: null,
+  maxRequiredYearsExperience: null,
   maxPostingAgeDays: null,
   lowApplicantThreshold: 200,
   lowApplicantRankBonus: 3,
