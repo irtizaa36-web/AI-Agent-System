@@ -34,3 +34,24 @@ These are the pages LinkedIn serves to any logged-out visitor. It is attached to
 ## Superseded 2026-09-30
 
 **The carve-out in this ADR is REVOKED** per the user's explicit instruction of 2026-09-30: no automated LinkedIn access of any kind, effective immediately. The guest source (`src/jobsearch/sources/linkedin-guest.ts`) and its test were deleted and it is no longer registered in the pipeline. ADR 0013's original position — LinkedIn coverage only via forwarded Job Alert emails, no automation against linkedin.com — applies in full. This document is retained for history only.
+
+## Reinstated 2026-09-30 (later)
+
+*(The revocation above is kept as written. The revert that restored the source also removed that note from the tree, so it is reproduced here from the history of PR #67.)*
+
+**The revocation above is itself withdrawn, and the carve-out is back in force**, per the owner's explicit instruction. The guest source, its test, its registry entry and its `jobs-commands.ts` handling were restored by reverting the removal (merge commit `de7f590`, PR #67). Nothing about the authorization changed from the original decision: the guarantees above apply exactly as written, and they are restated here so this note stands on its own.
+
+**Safety case, restated.**
+
+- **Anonymous jobs-guest endpoints only.** The two URLs under "What is authorized" are the only ones the source can call.
+- **No login, no credentials, no cookies.** There is no configuration surface that can hold a credential: no environment variable, no token, no session, no `Cookie` or `Authorization` header, and `credentials: "omit"` on every request. The source cannot sign in and never follows or fills in a sign-in or apply flow. A login or authwall response ends the run and is never worked around.
+- **Zero exposure to any LinkedIn account.** No automation ever touches the owner's or Shivani's LinkedIn account. No browser-based or login-based access to LinkedIn is added or permitted by this reinstatement.
+- **Politeness caps unchanged.** At most 8 search and 30 detail requests per run, sequential, 2.5–5 s random gaps, no retries, honest `User-Agent`, once a day inside the existing pipeline run, and an immediate stop on HTTP 401/403/429/999, an authwall/login redirect, or a CAPTCHA page.
+
+**New: persistent circuit breaker.** The stop-on-block rule used to last for one run; the next day's run tried again. That is no longer enough once LinkedIn has refused us.
+
+- If a run hits a throttle or access block (HTTP 429 or 999, an authwall or redirect to login, a CAPTCHA page, or HTTP 401/403), the source writes a flag file, `.orchestrator/jobs/<profile>/linkedin-guest.disabled`, with the time and the cause. The file sits in the profile's data directory, which is not committed.
+- While that file exists, the source makes **no requests at all**. Each run only logs a warning that names the cause, the time it tripped, and the file to delete.
+- Re-enabling is deliberate and manual: delete the file. Nothing in the code removes it, no timer or retry expires it, and there is no flag or configuration toggle that bypasses it. An unreadable or malformed flag file is treated as tripped (fail closed).
+- Ordinary failures (HTTP 500, timeouts) and per-job 404/410 responses do not trip it. They keep the earlier behavior: end the run, keep what was gathered, try again next run.
+- No feature flag was enabled by this reinstatement.

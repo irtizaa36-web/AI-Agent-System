@@ -15,3 +15,5 @@ ADR 0012 built job-board reading for public, crawler-tolerant pages (RemoteOK, G
 **Update 2026-09-30:** ADR 0028 carves out one narrow, owner-authorized exception — an anonymous, guest-only, once-daily source reading LinkedIn's public jobs-guest pages. Everything above otherwise stands unchanged, including "no login, no account, no browser automation".
 
 **Update 2026-09-30 (later):** the ADR 0028 carve-out above was REVOKED the same day; no automated LinkedIn access of any kind is permitted, so this ADR's original boundary stands in full again.
+
+**Update 2026-09-30 (later still):** the revocation was itself withdrawn at the owner's explicit instruction, and the ADR 0028 carve-out is reinstated: anonymous jobs-guest endpoints only, no login, credentials or cookies, no exposure to any LinkedIn account, and now with a persistent circuit breaker that disables the source after any throttle or block until a person re-enables it. Everything else in this ADR still stands, including "no login, no account, no browser automation" and the forwarded-alert-email source.
