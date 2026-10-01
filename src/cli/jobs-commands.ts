@@ -248,7 +248,7 @@ async function runJobsRun(profile: string, root: string, deps: JobsCommandDeps):
   const prefs = await loadPreferences(profile, root);
   const watchlist = await loadWatchlist(profile, root);
   const inkboxClient = createInkboxClientFromEnv();
-  const publicBoards = createPublicBoardSources(profile, prefs.titles, { onWarning: deps.stderr });
+  const publicBoards = createPublicBoardSources(profile, prefs.titles, { onWarning: deps.stderr, root });
 
   if (watchlist.length === 0 && !inkboxClient && publicBoards.sources.length === 0) {
     deps.stderr(
@@ -795,7 +795,7 @@ async function listSources(profile: string, root: string, deps: JobsCommandDeps)
     deps.stdout("(LinkedIn/Indeed alert-mail source not checked — INKBOX_API_KEY/INKBOX_MAILBOX_ADDRESS not set)");
   }
 
-  const publicBoards = createPublicBoardSources(profile, prefs.titles, { onWarning: deps.stdout });
+  const publicBoards = createPublicBoardSources(profile, prefs.titles, { onWarning: deps.stdout, root });
   // ADR 0028: the LinkedIn guest source only ever runs inside the single daily
   // pipeline run. This diagnostic fetches every source, so it must not include it.
   const checkable = publicBoards.sources.filter((source) => source.id !== LINKEDIN_GUEST_SOURCE_ID);

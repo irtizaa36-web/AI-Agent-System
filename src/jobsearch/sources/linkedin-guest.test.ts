@@ -2,10 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import {
   buildPosting,
   createLinkedInGuestSource,
   DEFAULT_SEARCH_PLANS,
+  LINKEDIN_GUEST_BREAKER_FILE,
   LINKEDIN_GUEST_SOURCE_ID,
   linkedinDetailUrl,
   linkedinSearchUrl,
@@ -23,6 +25,7 @@ import {
 import { parseSalary } from "../normalize";
 import { loadPreferences } from "../config";
 import { runPipeline } from "../pipeline";
+import { createPublicBoardSources } from "./public-boards";
 import { InMemoryJobStore } from "../../store/job-store";
 
 const NOW = Date.parse("2026-09-30T12:00:00Z");
@@ -566,6 +569,104 @@ describe("createLinkedInGuestSource", () => {
     const { impl, calls } = fakeFetch(() => ({ body: "" }));
     sourceWith(impl);
     assert.equal(calls.length, 0);
+  });
+});
+
+// --- Persistent circuit breaker ---
+
+describe("circuit breaker", () => {
+  async function withBreaker(run: (breakerPath: string) => Promise<void>): Promise<void> {
+    const dir = await mkdtemp(join(tmpdir(), "linkedin-breaker-"));
+    try {
+      await run(join(dir, "nested", LINKEDIN_GUEST_BREAKER_FILE));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+  const exists = (path: string): Promise<boolean> => stat(path).then(() => true, () => false);
+
+  const blocks: readonly (readonly [string, Parameters<typeof fakeFetch>[0], RegExp])[] = [
+    ["HTTP 429", () => ({ status: 429 }), /HTTP 429/],
+    ["HTTP 999", () => ({ status: 999 }), /HTTP 999/],
+    ["HTTP 403", () => ({ status: 403 }), /HTTP 403/],
+    ["an authwall redirect", () => ({ body: "<html>Sign in</html>", finalUrl: "https://www.linkedin.com/authwall?trk=x" }), /login wall or CAPTCHA/],
+  ];
+
+  for (const [label, respond, cause] of blocks) {
+    it(`trips on ${label}: writes the flag, names the cause, and the next run makes no request`, async () => {
+      await withBreaker(async (breakerPath) => {
+        const first = fakeFetch(respond);
+        const a = sourceWith(first.impl, { breakerPath });
+        await assert.rejects(() => a.source.fetch(), cause);
+        assert.equal(first.calls.length, 1);
+        assert.ok(a.warnings.some((w) => /DISABLED for all later runs/.test(w) && cause.test(w)), a.warnings.join("\n"));
+
+        const saved = JSON.parse(await readFile(breakerPath, "utf8")) as { disabledAt: string; cause: string };
+        assert.match(saved.cause, cause);
+        assert.equal(saved.disabledAt, new Date(NOW).toISOString());
+
+        // A brand-new source instance (a later scheduled run) must stay off.
+        const second = fakeFetch(() => ({ body: searchPage([card("11", "A", "Acme", "United States", "2026-09-29")]) }));
+        const b = sourceWith(second.impl, { breakerPath });
+        assert.deepEqual(await b.source.fetch(), []);
+        assert.equal(second.calls.length, 0, "a tripped breaker means zero requests");
+        assert.equal(b.warnings.length, 1);
+        assert.match(b.warnings[0] ?? "", /DISABLED/);
+        assert.match(b.warnings[0] ?? "", cause);
+        assert.ok((b.warnings[0] ?? "").includes(breakerPath), "tells the owner which file to delete");
+      });
+    });
+  }
+
+  it("trips when the block arrives mid-run, and keeps the postings gathered before it", async () => {
+    await withBreaker(async (breakerPath) => {
+      let detailCalls = 0;
+      const { impl } = fakeFetch((url) => {
+        if (url.includes("seeMoreJobPostings")) {
+          return { body: searchPage([card("11", "A", "Acme", "United States", "2026-09-29"), card("12", "B", "Acme", "United States", "2026-09-29")]) };
+        }
+        detailCalls += 1;
+        return detailCalls === 1 ? { body: detailPage() } : { status: 429 };
+      });
+      const postings = await sourceWith(impl, { breakerPath }).source.fetch();
+      assert.equal(postings.length, 1);
+      assert.ok(await exists(breakerPath));
+    });
+  });
+
+  it("re-enables only when the flag file is deleted by a person", async () => {
+    await withBreaker(async (breakerPath) => {
+      await assert.rejects(() => sourceWith(fakeFetch(() => ({ status: 429 })).impl, { breakerPath }).source.fetch());
+      await rm(breakerPath);
+      const { impl, calls } = fakeFetch((url) =>
+        url.includes("seeMoreJobPostings") ? { body: searchPage([card("11", "A", "Acme", "United States", "2026-09-29")]) } : { body: detailPage() },
+      );
+      const postings = await sourceWith(impl, { breakerPath }).source.fetch();
+      assert.equal(postings.length, 1);
+      assert.equal(calls.length, 2);
+    });
+  });
+
+  it("does not trip on an ordinary failure (HTTP 500) or on a 404", async () => {
+    await withBreaker(async (breakerPath) => {
+      await assert.rejects(() => sourceWith(fakeFetch(() => ({ status: 500 })).impl, { breakerPath }).source.fetch(), /HTTP 500/);
+      assert.equal(await exists(breakerPath), false);
+    });
+  });
+
+  it("fails closed when the flag file is unreadable as JSON", async () => {
+    await withBreaker(async (breakerPath) => {
+      await sourceWith(fakeFetch(() => ({ status: 429 })).impl, { breakerPath }).source.fetch().catch(() => undefined);
+      await writeFile(breakerPath, "not json", "utf8");
+      const { impl, calls } = fakeFetch(() => ({ body: "<!DOCTYPE html>" }));
+      assert.deepEqual(await sourceWith(impl, { breakerPath }).source.fetch(), []);
+      assert.equal(calls.length, 0);
+    });
+  });
+
+  it("is wired by createPublicBoardSources into the profile's data directory", async () => {
+    const boards = createPublicBoardSources("shivani", [], { root: "/tmp/never-written" });
+    assert.ok(boards.sources.some((s) => s.id === LINKEDIN_GUEST_SOURCE_ID));
   });
 });
 

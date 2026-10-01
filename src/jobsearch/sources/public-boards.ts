@@ -2,7 +2,9 @@ import type { Source } from "./source";
 import { createRemotiveSource } from "./remotive";
 import { createRemoteOkSource } from "./remoteok";
 import { createAdzunaSource } from "./adzuna";
-import { createLinkedInGuestSource } from "./linkedin-guest";
+import { join } from "node:path";
+import { dataDirFor } from "../config";
+import { createLinkedInGuestSource, LINKEDIN_GUEST_BREAKER_FILE } from "./linkedin-guest";
 
 /**
  * The public job boards (Remotive, RemoteOK, Adzuna, and LinkedIn's anonymous
@@ -31,7 +33,7 @@ export interface PublicBoardSources {
 export function createPublicBoardSources(
   profile: string,
   profileTitles: readonly string[] | undefined,
-  options: { readonly onWarning?: (message: string) => void } = {},
+  options: { readonly onWarning?: (message: string) => void; readonly root?: string } = {},
 ): PublicBoardSources {
   if (!PUBLIC_BOARD_PROFILE_IDS.includes(profile)) {
     return { sources: [], adzunaSkipped: false };
@@ -39,7 +41,13 @@ export function createPublicBoardSources(
   const titles = profileTitles ?? [];
   const sources: Source[] = [createRemotiveSource(titles), createRemoteOkSource(titles)];
   // Anonymous guest pages only, once per daily run, capped and never retried (ADR 0028).
-  sources.push(createLinkedInGuestSource({ onWarning: options.onWarning }));
+  // Its circuit-breaker flag lives in the profile's data directory, next to the run history.
+  sources.push(
+    createLinkedInGuestSource({
+      onWarning: options.onWarning,
+      breakerPath: join(options.root ?? ".", dataDirFor(profile), LINKEDIN_GUEST_BREAKER_FILE),
+    }),
+  );
   const adzuna = createAdzunaSource();
   if (adzuna) sources.push(adzuna);
   return { sources, adzunaSkipped: !adzuna };

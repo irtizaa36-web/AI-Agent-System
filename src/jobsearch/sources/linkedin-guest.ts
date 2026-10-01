@@ -1,3 +1,5 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { RawPosting } from "../records";
 import { htmlToText } from "../normalize";
 import { postedWithinDays } from "./marketing-queries";
@@ -19,6 +21,12 @@ import { USER_AGENT, type Source } from "./source";
  * existing scheduled pipeline run and has no timer of its own; each run is
  * capped at MAX_SEARCH_REQUESTS + MAX_DETAIL_REQUESTS requests, made
  * sequentially with a human-scale gap, and nothing is ever retried.
+ *
+ * Persistent circuit breaker. If a run is throttled or blocked (HTTP
+ * 401/403/429/999, an authwall/login redirect, or a CAPTCHA page) the source
+ * writes a flag file and refuses to make any request on later runs until a
+ * person deletes it. "The next scheduled run tries again" is not good enough
+ * once LinkedIn has said no.
  */
 
 export const LINKEDIN_GUEST_SOURCE_ID = "linkedin:guest";
@@ -106,10 +114,45 @@ export interface LinkedInDetail {
 
 /** Thrown when LinkedIn signals throttling, a login wall or a CAPTCHA. The run stops; nothing retries. */
 export class LinkedInBlockedError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** The HTTP status when the block was a status code; null for an authwall/CAPTCHA page. */
+    readonly status: number | null = null,
+  ) {
     super(message);
     this.name = "LinkedInBlockedError";
   }
+}
+
+/** File name of the circuit-breaker flag, kept in the profile's job-search data directory. */
+export const LINKEDIN_GUEST_BREAKER_FILE = "linkedin-guest.disabled";
+
+export interface LinkedInBreakerState {
+  readonly disabledAt: string;
+  readonly cause: string;
+}
+
+/** The persisted flag. Deleting the file is the one and only way to re-enable the source. */
+async function readBreaker(path: string): Promise<LinkedInBreakerState | null> {
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    // Unreadable flag: fail closed. A broken breaker must not become a way to keep hitting LinkedIn.
+    return { disabledAt: "unknown", cause: `breaker file unreadable (${error instanceof Error ? error.message : String(error)})` };
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<LinkedInBreakerState>;
+    return { disabledAt: parsed.disabledAt ?? "unknown", cause: parsed.cause ?? "unspecified" };
+  } catch {
+    return { disabledAt: "unknown", cause: "breaker file present but not readable as JSON" };
+  }
+}
+
+async function writeBreaker(path: string, state: LinkedInBreakerState): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
 const text = (html: string | undefined): string => (html ? htmlToText(html).replace(/\s+/g, " ").trim() : "");
@@ -311,6 +354,12 @@ export interface LinkedInGuestOptions {
   readonly now?: () => number;
   /** Called once if the run was cut short by throttling, a login wall or an error. */
   readonly onWarning?: (message: string) => void;
+  /**
+   * Path of the persistent circuit-breaker flag file. When set, a throttle or
+   * block writes it and its presence disables the source until it is deleted.
+   * Left unset (e.g. in unit tests), the source is stateless.
+   */
+  readonly breakerPath?: string;
 }
 
 const realPause = async (): Promise<void> => {
@@ -337,7 +386,7 @@ export function createLinkedInGuestSource(options: LinkedInGuestOptions = {}): S
         credentials: "omit",
       });
       if (BLOCKED_STATUSES.has(response.status)) {
-        throw new LinkedInBlockedError(`LinkedIn answered HTTP ${response.status} (throttled or blocked)`);
+        throw new LinkedInBlockedError(`LinkedIn answered HTTP ${response.status} (throttled or blocked)`, response.status);
       }
       if (response.status === 404 || response.status === 410) return null;
       if (!response.ok) throw new Error(`LinkedIn answered HTTP ${response.status}`);
@@ -355,9 +404,20 @@ export function createLinkedInGuestSource(options: LinkedInGuestOptions = {}): S
     id: LINKEDIN_GUEST_SOURCE_ID,
     company: null,
     async fetch() {
+      if (options.breakerPath) {
+        const tripped = await readBreaker(options.breakerPath);
+        if (tripped) {
+          options.onWarning?.(
+            `LinkedIn guest source is DISABLED — circuit breaker tripped ${tripped.disabledAt}: ${tripped.cause}. ` +
+              `No requests were made. To re-enable it, delete ${options.breakerPath}.`,
+          );
+          return [];
+        }
+      }
       const fetchedAt = new Date(nowMs()).toISOString();
       const postings: RawPosting[] = [];
       let stopped: string | null = null;
+      let blocked: LinkedInBlockedError | null = null;
       let requests = 0;
 
       // Stage 1: search cards, sequential, capped.
@@ -380,6 +440,7 @@ export function createLinkedInGuestSource(options: LinkedInGuestOptions = {}): S
         }
       } catch (error) {
         stopped = error instanceof Error ? error.message : String(error);
+        if (error instanceof LinkedInBlockedError) blocked = error;
       }
 
       // Stage 2: details, newest cards first, only inside the age window and the cap.
@@ -401,6 +462,22 @@ export function createLinkedInGuestSource(options: LinkedInGuestOptions = {}): S
           }
         } catch (error) {
           stopped = error instanceof Error ? error.message : String(error);
+        if (error instanceof LinkedInBlockedError) blocked = error;
+        }
+      }
+
+      if (blocked !== null && options.breakerPath) {
+        const state = { disabledAt: new Date(nowMs()).toISOString(), cause: blocked.message };
+        try {
+          await writeBreaker(options.breakerPath, state);
+          options.onWarning?.(
+            `LinkedIn guest source DISABLED for all later runs — cause: ${blocked.message}. ` +
+              `Re-enable only on purpose by deleting ${options.breakerPath}.`,
+          );
+        } catch (error) {
+          options.onWarning?.(
+            `LinkedIn guest source hit a block (${blocked.message}) but could not persist the circuit breaker (${error instanceof Error ? error.message : String(error)}).`,
+          );
         }
       }
 
