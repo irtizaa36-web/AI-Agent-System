@@ -2,11 +2,9 @@ import type { Source } from "./source";
 import { createRemotiveSource } from "./remotive";
 import { createRemoteOkSource } from "./remoteok";
 import { createAdzunaSource } from "./adzuna";
-import { createLinkedInGuestSource } from "./linkedin-guest";
 
 /**
- * The public job boards (Remotive, RemoteOK, Adzuna, and LinkedIn's anonymous
- * guest pages — ADR 0028) are marketing-role
+ * The public job boards (Remotive, RemoteOK, Adzuna) are marketing-role
  * discovery for Shivani's profile only. The repo's other profile is
  * unrelated gig-platform work (ADR 0017 keeps the two searches' data from
  * ever mixing), so these sources are never attached to it.
@@ -31,15 +29,13 @@ export interface PublicBoardSources {
 export function createPublicBoardSources(
   profile: string,
   profileTitles: readonly string[] | undefined,
-  options: { readonly onWarning?: (message: string) => void } = {},
+  _options: { readonly onWarning?: (message: string) => void } = {},
 ): PublicBoardSources {
   if (!PUBLIC_BOARD_PROFILE_IDS.includes(profile)) {
     return { sources: [], adzunaSkipped: false };
   }
   const titles = profileTitles ?? [];
   const sources: Source[] = [createRemotiveSource(titles), createRemoteOkSource(titles)];
-  // Anonymous guest pages only, once per daily run, capped and never retried (ADR 0028).
-  sources.push(createLinkedInGuestSource({ onWarning: options.onWarning }));
   const adzuna = createAdzunaSource();
   if (adzuna) sources.push(adzuna);
   return { sources, adzunaSkipped: !adzuna };

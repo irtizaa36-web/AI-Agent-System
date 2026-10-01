@@ -10,7 +10,6 @@ import { parseRemotiveJobs, REMOTIVE_API_URL, REMOTIVE_SOURCE_ID } from "./remot
 import { parseRemoteOkJobs, REMOTEOK_SOURCE_ID } from "./remoteok";
 import { adzunaSearchUrl, ADZUNA_SOURCE_ID, createAdzunaSource, parseAdzunaResults } from "./adzuna";
 import { createPublicBoardSources } from "./public-boards";
-import { LINKEDIN_GUEST_SOURCE_ID } from "./linkedin-guest";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-09-29T12:00:00Z").getTime();
@@ -280,7 +279,7 @@ describe("createPublicBoardSources", () => {
     const shivani = createPublicBoardSources("shivani", []);
     assert.deepEqual(
       shivani.sources.map((s) => s.id),
-      [REMOTIVE_SOURCE_ID, REMOTEOK_SOURCE_ID, LINKEDIN_GUEST_SOURCE_ID],
+      [REMOTIVE_SOURCE_ID, REMOTEOK_SOURCE_ID],
     );
     assert.equal(shivani.adzunaSkipped, true);
 
