@@ -30,7 +30,3 @@ These are the pages LinkedIn serves to any logged-out visitor. It is attached to
 - The apply URL is only ever a URL that appears on the page LinkedIn served. It is never constructed or guessed. No code path applies to anything: submitting an application is always Shivani's own step.
 - ADR 0013's alert-email source (ADR 0015) stays in place. The two are additive and are deduplicated by the pipeline's existing cross-source identity key.
 - If LinkedIn changes these endpoints, blocks the source, or the owner withdraws the authorization, the fix is to remove the source. The pipeline degrades gracefully without it, as it does for any failed source.
-
-## Superseded 2026-09-30
-
-**The carve-out in this ADR is REVOKED** per the user's explicit instruction of 2026-09-30: no automated LinkedIn access of any kind, effective immediately. The guest source (`src/jobsearch/sources/linkedin-guest.ts`) and its test were deleted and it is no longer registered in the pipeline. ADR 0013's original position — LinkedIn coverage only via forwarded Job Alert emails, no automation against linkedin.com — applies in full. This document is retained for history only.
